@@ -24,3 +24,71 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+@theme {
+  /* Blueprint set — listings & projects pages */
+  --color-blueprint-navy: #0F1B2D;
+  --color-paper: #F5F3ED;
+  --color-paper-card: #FCFBF7;
+  --color-blueprint-blue: #2B4C7E;
+  --color-brass: #C9922E;
+  --color-ink: #2B2B26;
+  --color-faded-line: #8FA3BD;
+  --color-muted: #6B6B5F;
+
+  /* Service-line accent — reserved for landing/marketing pages only */
+  --color-brick-clay: #B5502E;
+
+  --font-display: var(--font-space-grotesk), sans-serif;
+  --font-body: var(--font-inter), sans-serif;
+  --font-data: var(--font-plex-mono), monospace;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+
+
+
+
+@theme {
+  /* Existing blueprint tokens — stay until /properties and /projects are rebuilt */
+  --color-blueprint-navy: #0F1B2D;
+  --color-paper: #F5F3ED;
+  --color-paper-card: #FCFBF7;
+  --color-blueprint-blue: #2B4C7E;
+  --color-brass: #C9922E;
+  --color-ink: #2B2B26;
+  --color-faded-line: #8FA3BD;
+  --color-muted: #6B6B5F;
+
+  /* Locked system — cocoa/cream/brick-clay */
+  --color-cocoa: #3A2A22;
+  --color-cream: #F3ECDD;
+  --color-brick-clay: #B5502E;
+  /* brass (#C9922E) reused as-is: text-safe accent on cocoa only, 4.98:1 contrast */
+
+  --font-display: var(--font-space-grotesk), sans-serif;
+  --font-body: var(--font-inter), sans-serif;
+  --font-data: var(--font-plex-mono), monospace;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-cocoa);
+  font-family: var(--font-body);
+}
+
+.scribble-path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition: stroke-dashoffset 0.2s ease-out;
+}
+.group:hover .scribble-path,
+.group:focus-visible .scribble-path {
+  stroke-dashoffset: 0;
+}
