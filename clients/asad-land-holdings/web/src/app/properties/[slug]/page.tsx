@@ -1,25 +1,21 @@
 import { notFound } from 'next/navigation'
+import { PageTheme } from '@/components/shared/PageTheme'
+import { Nav } from '@/components/shared/Nav'
+import { PropertyGallery } from '@/components/properties/PropertyGallery'
 import { getPropertyBySlug } from '@/lib/properties'
 import { getPropertyMedia } from '@/lib/property-media'
-import { PropertyGallery } from '@/components/properties/PropertyGallery'
 
-function formatPrice(price: number | null) {
+function formatPrice(price: number | null): string {
   if (price === null) return 'Price on request'
-  if (price >= 10000000) return `PKR ${(price / 10000000).toFixed(2)} Cr`
-  if (price >= 100000) return `PKR ${(price / 100000).toFixed(1)} Lac`
-  return `PKR ${price.toLocaleString()}`
+  if (price >= 10000000) return 'PKR ' + (price / 10000000).toFixed(2) + ' Cr'
+  if (price >= 100000) return 'PKR ' + (price / 100000).toFixed(1) + ' Lac'
+  return 'PKR ' + price.toLocaleString()
 }
 
-export default async function PropertyDetailPage(
-  props: PageProps<'/properties/[slug]'>
-) {
+export default async function PropertyDetailPage(props: PageProps<'/properties/[slug]'>) {
   const { slug } = await props.params
-
   const { data: property, error } = await getPropertyBySlug(slug)
-
-  if (error || !property) {
-    notFound()
-  }
+  if (error || !property) notFound()
 
   const { data: media } = await getPropertyMedia(property.id)
 
@@ -27,63 +23,44 @@ export default async function PropertyDetailPage(
     ['Location', property.location],
     ['Type', property.property_type],
     ['Size', property.size],
+    ['Bedrooms', property.bedrooms],
+    ['Bathrooms', property.bathrooms],
     ['Plot shape', property.plot_shape],
     ['Facing', property.facing_direction],
-    ['Constructed', property.is_constructed ? `Yes, ${property.construction_age_years ?? '?'} yrs` : 'No'],
     ['Corner plot', property.is_corner_plot ? 'Yes' : 'No'],
     ['Near main road', property.near_main_road ? 'Yes' : 'No'],
-    ['Proximity to markaz', property.proximity_markaz],
-    ['Proximity to park', property.proximity_park],
   ]
 
   return (
-    <main
-      className="min-h-screen px-4 py-10 sm:px-6 lg:px-8"
-      style={{
-        backgroundColor: 'var(--color-paper)',
-        backgroundImage:
-          'linear-gradient(rgba(43,76,126,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(43,76,126,0.06) 1px, transparent 1px)',
-        backgroundSize: '24px 24px',
-      }}
-    >
-      <div className="mx-auto max-w-4xl">
-        <p className="font-display text-xs uppercase tracking-wide text-blueprint-blue">
-          {property.property_type}
-        </p>
-        <h1 className="font-display text-2xl text-ink">{property.location}</h1>
-        <p className="mt-1 font-data text-2xl font-medium text-brass">{formatPrice(property.price_pkr)}</p>
+    <PageTheme value="light">
+      <Nav />
+      <main className="min-h-screen bg-cream px-6 pt-28 text-cocoa sm:px-10">
+        <div className="mx-auto max-w-4xl">
+          <p className="font-display text-xs uppercase tracking-wide">{property.property_type}</p>
+          <h1 className="mt-1 font-display text-2xl">{property.location}</h1>
+          <p className="mt-2 font-data text-2xl text-brick-clay">{formatPrice(property.price_pkr)}</p>
 
-        <div className="mt-6">
-          <PropertyGallery media={media ?? []} />
-        </div>
+          {property.description && <p className="mt-6 font-body text-base opacity-80">{property.description}</p>}
 
-        <dl className="mt-8 grid grid-cols-1 gap-x-8 gap-y-3 border-t border-blueprint-blue/20 pt-6 sm:grid-cols-2">
-          {specs
-            .filter(([, value]) => value !== null && value !== undefined)
-            .map(([label, value]) => (
-              <div key={label} className="flex justify-between border-b border-blueprint-blue/10 pb-2">
-                <dt className="font-body text-sm text-muted">{label}</dt>
-                <dd className="font-data text-sm text-ink">{value}</dd>
+          <div className="mt-8">
+            <PropertyGallery propertyId={property.id} media={media ?? []} />
+          </div>
+
+          <dl className="mt-10 grid grid-cols-1 gap-x-8 gap-y-3 border-t border-cocoa/20 pt-6 sm:grid-cols-2">
+            {specs.filter(([, v]) => v !== null && v !== undefined).map(([label, value]) => (
+              <div key={label} className="flex justify-between border-b border-cocoa/10 pb-2">
+                <dt className="font-body text-sm opacity-60">{label}</dt>
+                <dd className="font-data text-sm">{value}</dd>
               </div>
             ))}
-        </dl>
+          </dl>
 
-        <div className="mt-8 flex flex-wrap gap-3">
-          <a
-            href={`/api/properties/${property.slug}/brochure`}
-            className="bg-blueprint-blue px-6 py-3 font-display text-sm text-paper-card"
-          >
-            Download brochure
-          </a>
-
-          <a
-            href="/contact"
-            className="border border-ink/30 px-6 py-3 font-display text-sm text-ink"
-          >
-            Enquire about this property
-          </a>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a href={'/api/properties/' + property.slug + '/brochure'} className="bg-cocoa px-6 py-3 font-display text-sm text-cream">Download brochure</a>
+            <a href={'/contact?property=' + property.id} className="border border-cocoa/30 px-6 py-3 font-display text-sm">Enquire about this property</a>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </PageTheme>
   )
 }

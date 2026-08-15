@@ -1,126 +1,78 @@
 import Link from 'next/link'
+import { Logo } from './logo'
 import { getSiteSettings } from '@/lib/site-settings'
 
-const quickLinks = [
-  { label: 'Properties', href: '/properties' },
-  { label: 'Projects', href: '/projects' },
-  { label: 'Services', href: '/services' },
-  { label: 'Calculators', href: '/calculators' },
-  { label: 'Contact', href: '/contact' },
+const QUICK_LINKS = [
+  { href: '/properties', label: 'Properties' },
+  { href: '/projects', label: 'Projects' },
+  { href: '/services', label: 'Services' },
+  { href: '/calculators', label: 'Calculators' },
+  { href: '/contact', label: 'Contact' },
 ]
 
-export default async function Footer() {
+function FacebookIcon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5 3.66 9.16 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.51 1.49-3.9 3.78-3.9 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.89h2.78l-.44 2.91h-2.34V22c4.78-.78 8.44-4.94 8.44-9.94Z"/></svg>
+}
+function InstagramIcon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2.72 0 3.06.01 4.12.06 1.06.05 1.79.22 2.43.47.66.26 1.21.6 1.76 1.15.5.5.9 1.1 1.15 1.76.25.64.42 1.37.47 2.43.05 1.06.06 1.4.06 4.12s-.01 3.06-.06 4.12c-.05 1.06-.22 1.79-.47 2.43a4.9 4.9 0 0 1-1.15 1.76 4.9 4.9 0 0 1-1.76 1.15c-.64.25-1.37.42-2.43.47-1.06.05-1.4.06-4.12.06s-3.06-.01-4.12-.06c-1.06-.05-1.79-.22-2.43-.47a4.9 4.9 0 0 1-1.76-1.15 4.9 4.9 0 0 1-1.15-1.76c-.25-.64-.42-1.37-.47-2.43C2.01 15.06 2 14.72 2 12s.01-3.06.06-4.12c.05-1.06.22-1.79.47-2.43.26-.66.6-1.21 1.15-1.76a4.9 4.9 0 0 1 1.76-1.15c.64-.25 1.37-.42 2.43-.47C8.94 2.01 9.28 2 12 2Zm0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 8.2a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4ZM17.4 6.6a1.17 1.17 0 1 1-2.34 0 1.17 1.17 0 0 1 2.34 0Z"/></svg>
+}
+function YoutubeIcon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.8 8.2s-.2-1.4-.8-2c-.8-.8-1.7-.8-2.1-.9C16 5 12 5 12 5s-4 0-6.9.3c-.4 0-1.3.1-2.1.9-.6.6-.8 2-.8 2S2 9.9 2 11.6v1.2C2 14.5 2.2 16.2 2.2 16.2s.2 1.4.8 2c.8.8 1.9.8 2.3.9C6.9 19.3 12 19.3 12 19.3s4 0 6.9-.3c.4 0 1.3-.1 2.1-.9.6-.6.8-2 .8-2s.2-1.7.2-3.4v-1.2c0-1.7-.2-3.4-.2-3.4ZM9.9 14.9V8.7l5.4 3.1-5.4 3.1Z"/></svg>
+}
+function TiktokIcon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 2h-3.3v13.6a2.7 2.7 0 1 1-2.3-2.7v-3.3a6 6 0 1 0 5.6 6V8.8a7.8 7.8 0 0 0 4.5 1.4V6.9a4.5 4.5 0 0 1-4.5-4.5V2Z"/></svg>
+}
+
+export async function Footer() {
   const settings = await getSiteSettings()
 
-  const hasSocials =
-    settings.social_facebook || settings.social_instagram || settings.social_youtube
-  const hasContact = settings.office_phone || settings.office_location
+  const socials = [
+    { key: 'social_facebook', Icon: FacebookIcon, label: 'Facebook' },
+    { key: 'social_instagram', Icon: InstagramIcon, label: 'Instagram' },
+    { key: 'social_youtube', Icon: YoutubeIcon, label: 'YouTube' },
+    { key: 'social_tiktok', Icon: TiktokIcon, label: 'TikTok' },
+  ]
 
   return (
-    <footer className="bg-cocoa text-cream px-6 py-12 sm:px-12">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 sm:flex-row sm:justify-between">
-        <div className="flex flex-col gap-3">
-          {/* TODO: replace with real logo SVG once available */}
-          <span className="font-display text-2xl text-cream">LAND HOLDINGS</span>
-          <p className="font-body text-sm text-cream/80">Real estate on real rates.</p>
+    <footer className="bg-cocoa px-6 py-16 text-cream sm:px-10">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex flex-col justify-between gap-12 sm:flex-row">
+          <div>
+            <Logo className="h-16 w-auto sm:h-20" />
+            <p className="mt-4 font-body text-sm opacity-70">Real estate on real rates.</p>
 
-          {hasSocials && (
-            <div className="flex gap-4 pt-2">
-              {settings.social_facebook && (
-                <a
-                  href={settings.social_facebook}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Facebook"
-                  className="text-cream/80 transition-colors hover:text-cream"
-                >
-                  <FacebookIcon />
-                </a>
-              )}
-              {settings.social_instagram && (
-                <a
-                  href={settings.social_instagram}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Instagram"
-                  className="text-cream/80 transition-colors hover:text-cream"
-                >
-                  <InstagramIcon />
-                </a>
-              )}
-              {settings.social_youtube && (
-                <a
-                  href={settings.social_youtube}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="YouTube"
-                  className="text-cream/80 transition-colors hover:text-cream"
-                >
-                  <YoutubeIcon />
-                </a>
-              )}
-            </div>
-          )}
-        </div>
-
-        <nav aria-label="Quick links" className="flex flex-col gap-2">
-          <span className="font-display text-sm uppercase tracking-wide text-cream/60">
-            Quick links
-          </span>
-          <ul className="flex flex-col gap-2">
-            {quickLinks.map((link) => (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  className="font-body text-sm text-cream/90 hover:text-cream"
-                >
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        {hasContact && (
-          <div className="flex flex-col gap-2">
-            <span className="font-display text-sm uppercase tracking-wide text-cream/60">
-              Contact
-            </span>
             {settings.office_phone && (
-              <span className="font-body text-sm text-cream/90">{settings.office_phone}</span>
+              <p className="mt-6 font-data text-sm opacity-80">{settings.office_phone}</p>
             )}
             {settings.office_location && (
-              <span className="font-body text-sm text-cream/90">
-                {settings.office_location}
-              </span>
+              <p className="mt-1 font-body text-sm opacity-70">{settings.office_location}</p>
             )}
+
+            <div className="mt-6 flex gap-4">
+              {socials.map(({ key, Icon, label }) =>
+                settings[key] ? (
+                  <a key={key} href={settings[key] as string} target="_blank" rel="noopener noreferrer" aria-label={label} className="opacity-70 transition-opacity hover:opacity-100">
+                    <Icon />
+                  </a>
+                ) : null
+              )}
+            </div>
           </div>
-        )}
+
+          <div>
+            <p className="font-data text-xs uppercase tracking-wide opacity-60">Quick links</p>
+            <div className="mt-4 space-y-2">
+              {QUICK_LINKS.map((link) => (
+                <Link key={link.href} href={link.href} className="block font-body text-sm opacity-80 hover:opacity-100">
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-16 font-data text-xs opacity-40">&copy; {new Date().getFullYear()} Land Holdings. All rights reserved.</p>
       </div>
     </footer>
-  )
-}
-
-function FacebookIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.4v7A10 10 0 0 0 22 12Z" />
-    </svg>
-  )
-}
-
-function InstagramIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2c2.7 0 3.1 0 4.1.1 1.1 0 1.8.2 2.5.5.6.3 1.1.6 1.6 1.1.5.5.9 1 1.1 1.6.3.7.5 1.4.5 2.5.1 1 .1 1.4.1 4.1s0 3.1-.1 4.1c0 1.1-.2 1.8-.5 2.5-.3.6-.6 1.1-1.1 1.6-.5.5-1 .9-1.6 1.1-.7.3-1.4.5-2.5.5-1 .1-1.4.1-4.1.1s-3.1 0-4.1-.1c-1.1 0-1.8-.2-2.5-.5-.6-.3-1.1-.6-1.6-1.1-.5-.5-.9-1-1.1-1.6-.3-.7-.5-1.4-.5-2.5C2 15.1 2 14.7 2 12s0-3.1.1-4.1c0-1.1.2-1.8.5-2.5.3-.6.6-1.1 1.1-1.6.5-.5 1-.9 1.6-1.1.7-.3 1.4-.5 2.5-.5C8.9 2 9.3 2 12 2Zm0 1.8c-2.6 0-3 0-4 .1-.9 0-1.4.2-1.7.3-.4.2-.7.4-1 .7-.3.3-.5.6-.7 1-.1.3-.3.8-.3 1.7-.1 1-.1 1.4-.1 4s0 3 .1 4c0 .9.2 1.4.3 1.7.2.4.4.7.7 1 .3.3.6.5 1 .7.3.1.8.3 1.7.3 1 .1 1.4.1 4 .1s3 0 4-.1c.9 0 1.4-.2 1.7-.3.4-.2.7-.4 1-.7.3-.3.5-.6.7-1 .1-.3.3-.8.3-1.7.1-1 .1-1.4.1-4s0-3-.1-4c0-.9-.2-1.4-.3-1.7-.2-.4-.4-.7-.7-1-.3-.3-.6-.5-1-.7-.3-.1-.8-.3-1.7-.3-1-.1-1.4-.1-4-.1Zm0 3.5a4.7 4.7 0 1 1 0 9.4 4.7 4.7 0 0 1 0-9.4Zm0 1.8a2.9 2.9 0 1 0 0 5.8 2.9 2.9 0 0 0 0-5.8Zm4.9-2a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Z" />
-    </svg>
-  )
-}
-
-function YoutubeIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M21.6 7.2s-.2-1.5-.8-2.1c-.8-.8-1.7-.8-2.1-.9C15.9 4 12 4 12 4h0s-3.9 0-6.7.2c-.4.1-1.3.1-2.1.9-.6.6-.8 2.1-.8 2.1S2.2 9 2.2 10.7v1.6C2.2 14 2.4 15.8 2.4 15.8s.2 1.5.8 2.1c.8.8 1.8.8 2.3.9 1.7.1 7.1.2 7.1.2s3.9 0 6.7-.2c.4-.1 1.3-.1 2.1-.9.6-.6.8-2.1.8-2.1s.2-1.8.2-3.5v-1.6c0-1.7-.2-3.5-.2-3.5ZM9.9 14.3V8.9l5.4 2.7-5.4 2.7Z" />
-    </svg>
   )
 }

@@ -82,11 +82,17 @@ body {
   color: var(--color-cocoa);
   font-family: var(--font-body);
 }
-
 .scribble-path {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
-  transition: stroke-dashoffset 0.2s ease-out;
+  opacity: 0;
+  transition: stroke-dashoffset 0.2s ease-out, opacity 0.2s ease-out;
+}
+.group:hover .scribble-path,
+.group:focus-visible .scribble-path,
+.scribble-drawn {
+  stroke-dashoffset: 0;
+  opacity: 1;
 }
 .group:hover .scribble-path,
 .group:focus-visible .scribble-path {
