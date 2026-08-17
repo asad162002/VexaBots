@@ -33,7 +33,7 @@ export function Select({
   const selected = options.find((o) => o.value === value);
 
   return (
-<div ref={ref} className="relative z-20">      {name && <input type="hidden" name={name} value={value} />}
+<div ref={ref} className={`relative ${open ? "z-30" : ""}`}>      {name && <input type="hidden" name={name} value={value} />}
       <button
         type="button"
         onClick={() => setOpen(!open)}
