@@ -10,11 +10,15 @@ import {
   Settings,
   LogOut,
   Landmark,
+  Plus,
+  Upload,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Leads', icon: LayoutDashboard },
+  { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
   { href: '/dashboard/leads', label: 'All Leads', icon: Users },
+  { href: '/dashboard/import', label: 'Import CSV', icon: Upload },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
