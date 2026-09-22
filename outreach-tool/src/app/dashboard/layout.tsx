@@ -15,9 +15,8 @@ import {
 } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Leads', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true },
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
-  { href: '/dashboard/leads', label: 'All Leads', icon: Users },
   { href: '/dashboard/import', label: 'Import CSV', icon: Upload },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
@@ -68,7 +67,9 @@ export default function DashboardLayout({
         <nav className="flex-1 py-4 px-3 space-y-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname.startsWith(item.href);
+            const isActive = item.exact
+              ? pathname === item.href
+              : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
