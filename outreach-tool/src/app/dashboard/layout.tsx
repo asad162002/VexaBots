@@ -9,7 +9,7 @@ import {
   Users,
   Settings,
   LogOut,
-  Landmark,
+  Clipboard,
   Plus,
   Upload,
 } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true },
   { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users },
+  { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard },
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
   { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
@@ -56,7 +57,7 @@ export default function DashboardLayout({
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 h-16 border-b border-[#27272a]">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <Landmark className="w-5 h-5 text-white" />
+            <LayoutDashboard className="w-5 h-5 text-white" />
           </div>
           <div>
             <h1 className="text-base font-bold text-white leading-tight">Vexabots</h1>

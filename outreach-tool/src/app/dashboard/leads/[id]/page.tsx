@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { supabase } from '@/lib/supabase';
-import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus } from '@/lib/types';
+import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus, type Profile } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
@@ -25,14 +25,28 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [profiles, setProfiles] = useState<Profile[]>([]);
 
   const [status, setStatus] = useState<LeadStatus>('new');
   const [notes, setNotes] = useState('');
   const [nextFollowUp, setNextFollowUp] = useState('');
+  const [assignedTo, setAssignedTo] = useState<string>('');
 
   useEffect(() => {
     fetchLead();
-  }, [id]);
+    if (user) {
+      fetchProfiles();
+    }
+  }, [id, user]);
+
+  const fetchProfiles = async () => {
+    const { data, error: profilesError } = await supabase.from('profiles').select('*');
+    if (profilesError) {
+      console.error('Error fetching profiles:', profilesError);
+    } else {
+      setProfiles(data ?? []);
+    }
+  };
 
   const fetchLead = async () => {
     const { data, error: fetchError } = await supabase
@@ -52,6 +66,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     setStatus(data.status);
     setNotes(data.notes ?? '');
     setNextFollowUp(data.next_follow_up_at ? new Date(data.next_follow_up_at).toISOString().split('T')[0] : '');
+    setAssignedTo(data.assigned_to ?? '');
     setLoading(false);
   };
 
@@ -79,6 +94,17 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
     if (status !== 'new') {
       updates.last_contacted_at = new Date().toISOString();
+    }
+
+    if (assignedTo) {
+      updates.assigned_to = assignedTo;
+      // Only set assigned_at if this is a new assignment (wasn't assigned before)
+      if (!lead.assigned_to) {
+        updates.assigned_at = new Date().toISOString();
+      }
+    } else {
+      updates.assigned_to = null;
+      updates.assigned_at = null;
     }
 
     const { error: updateError } = await supabase
@@ -165,6 +191,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {STATUS_LABELS[lead.status]}
                 </span>
               </div>
+              {lead.assigned_to && (
+                <div className="shrink-0">
+                  <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                    Assigned
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Action buttons */}
@@ -432,6 +465,26 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 ))}
               </select>
             </div>
+
+            {profiles.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
+                  Assign To
+                </label>
+                <select
+                  value={assignedTo}
+                  onChange={(e) => setAssignedTo(e.target.value)}
+                  className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                >
+                  <option value="" className="bg-[#1a1a1a]">Unassigned</option>
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id} className="bg-[#1a1a1a]">
+                      {profile.full_name || profile.email || 'Unnamed'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="mb-4">
               <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
