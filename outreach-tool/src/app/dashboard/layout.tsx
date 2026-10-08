@@ -16,8 +16,9 @@ import {
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true },
+  { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users },
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
-  { href: '/dashboard/import', label: 'Import CSV', icon: Upload },
+  { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 

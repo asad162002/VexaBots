@@ -4,23 +4,11 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { LeadSource } from '@/lib/types';
+import { FileJson, FileText, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ColumnMapping {
   csvColumn: string | null;
-  leadField: keyof {
-    title: never;
-    website: never;
-    phone: never;
-    city: never;
-    country_code: never;
-    owner_name: never;
-    owner_role: never;
-    owner_linkedin_url: never;
-    company_size_estimate: never;
-    source: never;
-    notes: never;
-    place_id: never;
-  };
+  leadField: string | null;
 }
 
 const LEAD_FIELDS = [
@@ -46,103 +34,21 @@ const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+type FileType = 'csv' | 'json';
+
 export default function ImportPage() {
   const router = useRouter();
 
   const [file, setFile] = useState<File | null>(null);
+  const [fileType, setFileType] = useState<FileType>('csv');
   const [headers, setHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<Record<string, string>[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [source, setSource] = useState<LeadSource>('csv_import');
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState<{ total: number; inserted: number; skipped: number } | null>(null);
+  const [success, setSuccess] = useState<{ total: number; inserted: number; skipped: number; enriched?: number } | null>(null);
 
-  // Called when a file is selected
-  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
-    if (!selectedFile.name.endsWith('.csv')) {
-      setError('Please upload a CSV file.');
-      return;
-    }
-
-    if (selectedFile.size > 5 * 1024 * 1024) {
-      setError('File is too large. Max 5MB.');
-      return;
-    }
-
-    setError('');
-    setFile(selectedFile);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-
-      if (lines.length < 2) {
-        setError('CSV file is empty or has only a header row.');
-        setHeaders([]);
-        setPreviewRows([]);
-        return;
-      }
-
-      // Parse header
-      const headerLine = lines[0];
-      const parsedHeaders = parseCSVLine(headerLine);
-
-      setHeaders(parsedHeaders);
-
-      // Initialize mappings: first few columns auto-mapped to likely fields
-      const initialMappings: ColumnMapping[] = parsedHeaders.map((col) => {
-        const lower = col.toLowerCase().trim();
-        let leadField: ColumnMapping['leadField'] = 'title';
-
-        if (lower.includes('name') && (lower.includes('business') || lower.includes('company') || lower.includes('title'))) {
-          leadField = 'title';
-        } else if (lower.includes('website') || lower.includes('url') || lower.includes('site') || lower.includes('web')) {
-          leadField = 'website';
-        } else if (lower.includes('phone') || lower.includes('mobile') || lower.includes('tel')) {
-          leadField = 'phone';
-        } else if (lower.includes('city') || lower.includes('town') || lower.includes('location')) {
-          leadField = 'city';
-        } else if (lower.includes('country')) {
-          leadField = 'country_code';
-        } else if (lower.includes('owner') && lower.includes('name')) {
-          leadField = 'owner_name';
-        } else if (lower.includes('owner') && lower.includes('role')) {
-          leadField = 'owner_role';
-        } else if (lower.includes('linkedin')) {
-          leadField = 'owner_linkedin_url';
-        } else if (lower.includes('size') || lower.includes('employees')) {
-          leadField = 'company_size_estimate';
-        } else if (lower.includes('note') || lower.includes('comment') || lower.includes('description')) {
-          leadField = 'notes';
-        }
-
-        return { csvColumn: col, leadField };
-      });
-
-      setMappings(initialMappings);
-
-      // Parse a few preview rows
-      const previewLines = lines.slice(1, 6);
-      const preview: Record<string, string>[] = [];
-      for (const line of previewLines) {
-        const values = parseCSVLine(line);
-        const row: Record<string, string> = {};
-        parsedHeaders.forEach((h, i) => {
-          row[h] = values[i] ?? '';
-        });
-        preview.push(row);
-      }
-      setPreviewRows(preview);
-    };
-    reader.readAsText(selectedFile);
-  }, []);
-
-  // Parse a single CSV line handling quoted values
   const parseCSVLine = (line: string): string[] => {
     const result: string[] = [];
     let current = '';
@@ -168,7 +74,123 @@ export default function ImportPage() {
     return result;
   };
 
-  const updateMapping = (index: number, field: ColumnMapping['leadField']) => {
+  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    const isJson = selectedFile.name.toLowerCase().endsWith('.json');
+    const isCsv = selectedFile.name.toLowerCase().endsWith('.csv');
+
+    if (!isJson && !isCsv) {
+      setError('Please upload a CSV or JSON file.');
+      return;
+    }
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setError('File is too large. Max 5MB.');
+      return;
+    }
+
+    setError('');
+    setFile(selectedFile);
+    setFileType(isJson ? 'json' : 'csv');
+    setSuccess(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+
+      if (isJson) {
+        try {
+          const jsonData = JSON.parse(text);
+          const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+
+          // For JSON files, we auto-map google-maps-scraper format
+          const preview = dataArray.slice(0, 3).map((item: Record<string, unknown>) => {
+            const row: Record<string, string> = {};
+            const simpleItem: Record<string, string> = {};
+            for (const [key, value] of Object.entries(item)) {
+              if (typeof value === 'object' && value !== null) {
+                simpleItem[key] = JSON.stringify(value);
+              } else {
+                simpleItem[key] = String(value ?? '');
+              }
+              row[key] = typeof value === 'object' && value !== null
+                ? JSON.stringify(value).substring(0, 50)
+                : String(value ?? '');
+            }
+            return row;
+          });
+
+          setHeaders(Object.keys(preview[0] || {}));
+          setPreviewRows(preview);
+          setMappings([]);
+          return;
+        } catch {
+          setError('Invalid JSON file.');
+          return;
+        }
+      }
+
+      // CSV parsing
+      const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+      if (lines.length < 2) {
+        setError('CSV file is empty or has only a header row.');
+        setHeaders([]);
+        setPreviewRows([]);
+        return;
+      }
+
+      const parsedHeaders = parseCSVLine(lines[0]);
+      setHeaders(parsedHeaders);
+
+      const initialMappings: ColumnMapping[] = parsedHeaders.map((col) => {
+        const lower = col.toLowerCase().trim();
+        let field: string | null = null;
+
+        if (lower.includes('name') && (lower.includes('business') || lower.includes('company') || lower.includes('title'))) {
+          field = 'title';
+        } else if (lower.includes('website') || lower.includes('url') || lower.includes('site')) {
+          field = 'website';
+        } else if (lower.includes('phone') || lower.includes('mobile')) {
+          field = 'phone';
+        } else if (lower.includes('city')) {
+          field = 'city';
+        } else if (lower.includes('country')) {
+          field = 'country_code';
+        } else if (lower.includes('owner') && lower.includes('name')) {
+          field = 'owner_name';
+        } else if (lower.includes('owner') && lower.includes('role')) {
+          field = 'owner_role';
+        } else if (lower.includes('linkedin')) {
+          field = 'owner_linkedin_url';
+        } else if (lower.includes('size') || lower.includes('employees')) {
+          field = 'company_size_estimate';
+        } else if (lower.includes('note') || lower.includes('comment')) {
+          field = 'notes';
+        }
+
+        return { csvColumn: col, leadField: field };
+      });
+
+      setMappings(initialMappings);
+
+      const previewLines = lines.slice(1, 6);
+      const preview: Record<string, string>[] = [];
+      for (const line of previewLines) {
+        const values = parseCSVLine(line);
+        const row: Record<string, string> = {};
+        parsedHeaders.forEach((h, i) => {
+          row[h] = values[i] ?? '';
+        });
+        preview.push(row);
+      }
+      setPreviewRows(preview);
+    };
+    reader.readAsText(selectedFile);
+  }, []);
+
+  const updateMapping = (index: number, field: string | null) => {
     setMappings((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], leadField: field };
@@ -176,132 +198,265 @@ export default function ImportPage() {
     });
   };
 
-  const clearMapping = (index: number) => {
-    setMappings((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], leadField: 'title' };
-      return updated;
-    });
+  // ─── JSON Import (google-maps-scraper format) ──────────────────────
+  const handleJsonImport = async (jsonData: unknown[]) => {
+    const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+
+    let inserted = 0;
+    let skipped = 0;
+    let enriched = 0;
+
+    for (const item of dataArray as Record<string, unknown>[]) {
+      const detailed_address = item.detailed_address as Record<string, string> | undefined;
+      const city = detailed_address?.city || '';
+      const owner = item.owner as Record<string, string> | undefined;
+      const leads_array = item.leads as Record<string, unknown>[] | undefined;
+      const tech_stack = item.tech_stack as Record<string, unknown> | undefined;
+
+      // Map to leads table
+      const lead: Record<string, unknown> = {
+        title: item.name || '',
+        category_name: item.main_category || '',
+        categories: Array.isArray(item.categories) ? item.categories.join(', ') : null,
+        phone: item.phone || '',
+        address: item.address || '',
+        city: city,
+        postal_code: detailed_address?.postal_code || '',
+        country_code: detailed_address?.country_code || '',
+        website: item.website || '',
+        total_score: item.rating || 0,
+        reviews_count: item.reviews || 0,
+        place_id: item.place_id || '',
+        is_advertisement: item.is_spending_on_ads || false,
+        search_string: item.query || '',
+        url: (item.link as string) || '',
+        domain: (item.website as string) ? new URL(item.website as string).hostname : '',
+        source: 'google_maps',
+        status: 'new',
+        ad_running: item.is_spending_on_ads || false,
+        source_details: JSON.stringify({
+          rating: item.rating,
+          reviews: item.reviews,
+          coordinates: item.coordinates,
+        }),
+        // Owner enrichment
+        owner_name: owner?.name || null,
+        owner_role: owner?.title || owner?.role || null,
+        owner_linkedin_url: owner?.linkedin_url || null,
+        owner_snippet: owner?.snippet || null,
+        owner_found: !!owner?.name,
+      };
+
+      // Clean empty strings
+      for (const key of Object.keys(lead)) {
+        if (lead[key] === '') lead[key] = null;
+      }
+
+      // Upsert to leads table
+      const { error: upsertError } = await supabase
+        .from('leads')
+        .upsert(lead, { onConflict: 'place_id' });
+
+      if (upsertError) {
+        // Try PATCH as fallback
+        const { error: patchError } = await supabase
+          .from('leads')
+          .update(lead)
+          .eq('place_id', lead.place_id);
+        if (patchError) {
+          skipped++;
+          continue;
+        }
+      }
+      inserted++;
+
+      // Upload enriched leads to linkedin_leads
+      if (owner?.name) {
+        const enriched_record = {
+          place_id: lead.place_id,
+          lead_name: owner.name,
+          title: owner.title || owner.role || null,
+          email: owner.email || null,
+          email_status: owner.email ? 'verified' : 'not_found',
+          linkedin_url: owner.linkedin_url || null,
+          source: 'linkedin_owner_search',
+        };
+
+        const { error: enrichedError } = await supabase
+          .from('linkedin_leads')
+          .insert(enriched_record);
+
+        if (!enrichedError) enriched++;
+      }
+
+      if (Array.isArray(leads_array)) {
+        for (const lead_item of leads_array as Record<string, unknown>[]) {
+          const record = {
+            place_id: lead.place_id,
+            lead_name: lead_item.name || '',
+            title: lead_item.title || null,
+            email: lead_item.email || null,
+            email_status: lead_item.email ? 'verified' : 'not_found',
+            linkedin_url: (lead_item.linkedin_url as string) || (lead_item.linkedin as string) || null,
+            source: 'apollo_enrichment',
+          };
+
+          const { error: apolloError } = await supabase
+            .from('linkedin_leads')
+            .insert(record);
+
+          if (!apolloError) enriched++;
+        }
+      }
+
+      // Upload tech stack
+      if (tech_stack) {
+        const ts_record = {
+          place_id: lead.place_id,
+          running_google_ads: !!(tech_stack.google_ads),
+          running_fb_ads: !!(tech_stack.facebook_ads),
+          tech_stack: Array.isArray(tech_stack.tech_stack)
+            ? tech_stack.tech_stack.join(', ')
+            : (tech_stack.tech_stack as string) || null,
+        };
+
+        await supabase.from('tech_stack').upsert(ts_record, { onConflict: 'place_id' });
+      }
+    }
+
+    return { total: dataArray.length, inserted, skipped, enriched };
   };
 
-  const handleImport = async () => {
+  // ─── CSV Import ────────────────────────────────────────────────────
+  const handleCsvImport = async () => {
     if (!file || headers.length === 0) return;
 
     setImporting(true);
     setError('');
-    setSuccess(null);
 
-    try {
-      // Read file content
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+    const rows = lines.slice(1);
 
-      // Build field mapping index
-      const fieldMap: Record<string, string> = {};
-      mappings.forEach((m) => {
-        if (m.csvColumn && m.leadField !== 'title') {
-          fieldMap[m.csvColumn] = m.leadField;
-        }
-      });
+    // Build field mapping
+    const fieldMap: Record<string, string> = {};
+    mappings.forEach((m) => {
+      if (m.csvColumn && m.leadField) {
+        fieldMap[m.csvColumn] = m.leadField;
+      }
+    });
 
-      // Process rows
-      const rows = lines.slice(1); // skip header
-      let inserted = 0;
-      let skipped = 0;
+    let inserted = 0;
+    let skipped = 0;
 
-      // Process in batches of 50
-      const batchSize = 50;
-      for (let i = 0; i < rows.length; i += batchSize) {
-        const batch = rows.slice(i, i + batchSize);
-        const leads: Record<string, unknown>[] = [];
+    const batchSize = 50;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      const leads: Record<string, unknown>[] = [];
 
-        for (const line of batch) {
-          const values = parseCSVLine(line);
-          const row: Record<string, string> = {};
-          headers.forEach((h, idx) => {
-            row[h] = values[idx] ?? '';
-          });
+      for (const line of batch) {
+        const values = parseCSVLine(line);
+        const row: Record<string, string> = {};
+        headers.forEach((h, idx) => {
+          row[h] = values[idx] ?? '';
+        });
 
-          const lead: Record<string, unknown> = {
-            source,
-            status: 'new',
-          };
+        const lead: Record<string, unknown> = {
+          source,
+          status: 'new',
+        };
 
-          // Map CSV columns to lead fields
-          for (const [csvCol, leadField] of Object.entries(fieldMap)) {
-            if (row[csvCol] && row[csvCol].trim()) {
-              // Special handling for company_size_estimate
-              if (leadField === 'company_size_estimate') {
-                const val = row[csvCol].toLowerCase().trim();
-                if (['solo', 'small', 'medium', 'large'].includes(val)) {
-                  lead[leadField] = val;
-                }
-              } else {
-                lead[leadField] = row[csvCol].trim();
+        for (const [csvCol, leadField] of Object.entries(fieldMap)) {
+          if (row[csvCol] && row[csvCol].trim()) {
+            if (leadField === 'company_size_estimate') {
+              const val = row[csvCol].toLowerCase().trim();
+              if (['solo', 'small', 'medium', 'large'].includes(val)) {
+                lead[leadField] = val;
               }
-            }
-          }
-
-          // If no title mapped, skip this row
-          if (!lead.title) continue;
-
-          leads.push(lead);
-        }
-
-        if (leads.length === 0) continue;
-
-        const { error: insertError } = await supabase.from('leads').insert(leads);
-
-        if (insertError) {
-          console.error('Batch insert error:', insertError);
-          // Count individual errors
-          for (const lead of leads) {
-            const { error: singleError } = await supabase.from('leads').insert([lead]);
-            if (singleError) {
-              skipped++;
             } else {
-              inserted++;
+              lead[leadField] = row[csvCol].trim();
             }
           }
-        } else {
-          inserted += leads.length;
         }
+
+        if (!lead.title) continue;
+        leads.push(lead);
       }
 
-      setSuccess({ total: rows.length, inserted, skipped: rows.length - inserted });
-    } catch (err) {
-      setError('Import failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      if (leads.length === 0) continue;
+
+      const { error: insertError } = await supabase.from('leads').insert(leads);
+      if (insertError) {
+        for (const lead of leads) {
+          const { error: singleError } = await supabase.from('leads').insert([lead]);
+          if (singleError) {
+            skipped++;
+          } else {
+            inserted++;
+          }
+        }
+      } else {
+        inserted += leads.length;
+      }
     }
 
+    setSuccess({ total: rows.length, inserted, skipped });
     setImporting(false);
   };
 
+  const handleImport = async () => {
+    if (!file) return;
+
+    if (fileType === 'json') {
+      // Parse JSON
+      const text = await file.text();
+      try {
+        const jsonData = JSON.parse(text);
+        setImporting(true);
+        setError('');
+        const result = await handleJsonImport(jsonData);
+        if (result) {
+          setSuccess({
+            total: result.total,
+            inserted: result.inserted,
+            skipped: result.skipped,
+            enriched: result.enriched,
+          });
+        }
+        setImporting(false);
+      } catch (e) {
+        setError('Invalid JSON file: ' + (e instanceof Error ? e.message : 'Unknown error'));
+        setImporting(false);
+      }
+    } else {
+      await handleCsvImport();
+    }
+  };
+
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Import CSV</h1>
+        <h1 className="text-2xl font-bold text-white">Import Leads</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Upload a CSV file and map its columns to lead fields.
+          Upload a CSV or JSON file (google-maps-scraper format) to import leads.
         </p>
       </div>
 
       <div className="space-y-6">
         {/* File upload step */}
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">1. Upload CSV File</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">1. Upload File</h2>
 
           {!file ? (
             <label className="flex flex-col items-center justify-center border-2 border-dashed border-[#3f3f46] rounded-xl p-8 cursor-pointer hover:border-blue-500/50 transition">
-              <svg className="w-8 h-8 text-gray-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
+              <Upload className="w-8 h-8 text-gray-500 mb-3" />
               <p className="text-sm text-gray-400 mb-1">
                 <span className="text-blue-400 font-medium">Click to upload</span> or drag and drop
               </p>
-              <p className="text-xs text-gray-600">CSV file, max 5MB</p>
+              <p className="text-xs text-gray-600">CSV or JSON file, max 5MB</p>
               <input
                 type="file"
-                accept=".csv"
+                accept=".csv,.json"
                 onChange={handleFile}
                 className="hidden"
               />
@@ -309,33 +464,52 @@ export default function ImportPage() {
           ) : (
             <div className="flex items-center justify-between bg-[#27272a] rounded-lg px-4 py-3">
               <div className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                {fileType === 'json' ? (
+                  <FileJson className="w-5 h-5 text-blue-400" />
+                ) : (
+                  <FileText className="w-5 h-5 text-green-400" />
+                )}
                 <div>
                   <p className="text-sm text-white font-medium">{file.name}</p>
                   <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
                 </div>
               </div>
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFile}
-                  className="hidden"
-                />
-                <span className="text-xs text-blue-400 hover:text-blue-300 transition">Change file</span>
-              </label>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded ${
+                  fileType === 'json'
+                    ? 'bg-blue-500/20 text-blue-300'
+                    : 'bg-green-500/20 text-green-300'
+                }`}>
+                  {fileType.toUpperCase()}
+                </span>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".csv,.json"
+                    onChange={handleFile}
+                    className="hidden"
+                  />
+                  <span className="text-xs text-blue-400 hover:text-blue-300">Change</span>
+                </label>
+              </div>
             </div>
           )}
 
-          {error && !file && (
-            <p className="mt-3 text-sm text-red-400">{error}</p>
-          )}
+          {error && !file && <p className="mt-3 text-sm text-red-400">{error}</p>}
         </div>
 
+        {/* JSON detection message */}
+        {file && fileType === 'json' && (
+          <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
+            <p className="text-sm text-blue-200">
+              <strong>JSON file detected.</strong> This will auto-map google-maps-scraper format
+              and import owner enrichment data (LinkedIn profiles, Apollo emails) into separate tables.
+            </p>
+          </div>
+        )}
+
         {/* Preview + mapping step */}
-        {headers.length > 0 && (
+        {headers.length > 0 && fileType === 'csv' && (
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">2. Map Columns</h2>
 
@@ -356,7 +530,6 @@ export default function ImportPage() {
               </select>
             </div>
 
-            {/* Preview table */}
             {previewRows.length > 0 && (
               <div className="mb-4">
                 <p className="text-xs text-gray-500 mb-2">Preview (first {previewRows.length} rows):</p>
@@ -390,11 +563,10 @@ export default function ImportPage() {
               </div>
             )}
 
-            {/* Column mapping grid */}
-            <p className="text-xs text-gray-500 mb-3">Map each CSV column to a lead field. Leave unmapped if not needed.</p>
+            <p className="text-xs text-gray-500 mb-3">Map each CSV column to a lead field. Leave unmapped to skip.</p>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {headers.map((col, index) => {
-                const mapping = mappings[index] || { csvColumn: col, leadField: 'title' };
+                const mapping = mappings[index] || { csvColumn: col, leadField: null };
                 return (
                   <div
                     key={index}
@@ -404,8 +576,8 @@ export default function ImportPage() {
                       {col}
                     </span>
                     <select
-                      value={mapping.leadField}
-                      onChange={(e) => updateMapping(index, e.target.value as ColumnMapping['leadField'])}
+                      value={mapping.leadField ?? ''}
+                      onChange={(e) => updateMapping(index, e.target.value || null)}
                       className="bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
                     >
                       <option value="" className="bg-[#1a1a1a]">— Skip —</option>
@@ -424,20 +596,19 @@ export default function ImportPage() {
         )}
 
         {/* Import button */}
-        {headers.length > 0 && (
+        {file && (
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
             <h2 className="text-lg font-semibold text-white mb-4">3. Import</h2>
 
             {success ? (
               <div className="text-center py-4">
                 <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  <CheckCircle className="w-6 h-6 text-green-400" />
                 </div>
                 <p className="text-white font-medium">Import complete</p>
                 <p className="text-sm text-gray-400 mt-1">
                   {success.total} rows processed — {success.inserted} added, {success.skipped} skipped
+                  {success.enriched ? ` (${success.enriched} enriched leads added)` : ''}
                 </p>
                 <button
                   onClick={() => router.push('/dashboard')}
@@ -463,10 +634,8 @@ export default function ImportPage() {
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
-                      Import {previewRows.length > 0 ? `(${previewRows.length}+ rows)` : ''}
+                      <Upload className="w-4 h-4" />
+                      Import {file.name}
                     </>
                   )}
                 </button>
@@ -486,9 +655,22 @@ export default function ImportPage() {
               </div>
             )}
 
-            {error && (
-              <p className="mt-3 text-sm text-red-400">{error}</p>
-            )}
+            {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+          </div>
+        )}
+
+        {/* Status message */}
+        {fileType === 'json' && previewRows.length > 0 && (
+          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-2">Data Preview</h2>
+            <p className="text-sm text-gray-400 mb-3">
+              {previewRows.length} rows detected. The script will auto-map all fields:
+            </p>
+            <ul className="text-xs text-gray-400 space-y-1">
+              <li>• Basic business info → <span className="text-white">leads</span> table</li>
+              <li>• Owner/LinkedIn/Apollo contacts → <span className="text-white">linkedin_leads</span> table</li>
+              <li>• Tech stack data → <span className="text-white">tech_stack</span> table</li>
+            </ul>
           </div>
         )}
       </div>

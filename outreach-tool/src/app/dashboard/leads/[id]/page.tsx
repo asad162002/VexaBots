@@ -201,11 +201,28 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Quick Info</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-gray-500 mb-1">ICP Score</p>
-                <p className="text-xl font-bold text-white">
-                  {lead.icp_score !== null ? lead.icp_score : '-'}
-                </p>
+              <p className="text-xs text-gray-500 mb-1">ICP Score</p>
+              <p className="text-xl font-bold text-white">
+                {lead.icp_score !== null ? lead.icp_score : '-'}
+              </p>
+            </div>
+            {lead.phone && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Phone</p>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(lead.phone!)}
+                  className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 font-medium"
+                  title="Click to copy phone number"
+                >
+                  {lead.phone}
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
+            )}
               <div>
                 <p className="text-xs text-gray-500 mb-1">Source</p>
                 <p className="text-sm font-medium text-gray-200 capitalize">
@@ -224,6 +241,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   <p className="text-sm font-medium text-gray-200">{lead.country_code}</p>
                 </div>
               )}
+              {lead.postal_code && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Postal Code</p>
+                  <p className="text-sm font-medium text-gray-200">{lead.postal_code}</p>
+                </div>
+              )}
               {lead.company_size_estimate && (
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Size</p>
@@ -236,8 +259,79 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   <p className="text-sm font-medium text-green-400">Yes</p>
                 </div>
               )}
+              {lead.total_score && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Rating</p>
+                  <p className="text-sm font-medium text-gray-200">{lead.total_score}</p>
+                </div>
+              )}
+              {lead.reviews_count && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Reviews</p>
+                  <p className="text-sm font-medium text-gray-200">{lead.reviews_count}</p>
+                </div>
+              )}
+              {lead.place_id && (
+                <div className="sm:col-span-2">
+                  <p className="text-xs text-gray-500 mb-1">Google Maps</p>
+                  <a
+                    href={`https://www.google.com/maps/place/?q=place_id:${lead.place_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 text-sm break-all flex items-center gap-1"
+                  >
+                    {lead.url || `https://www.google.com/maps/place/?q=place_id:${lead.place_id}`}
+                  </a>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Address */}
+          {lead.address && (
+            <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Address</h2>
+              <p className="text-sm text-gray-200 break-all">{lead.address}</p>
+            </div>
+          )}
+
+          {/* Opening Hours */}
+          {lead.opening_hours && (
+            <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Opening Hours</h2>
+              <p className="text-sm text-gray-300 whitespace-pre-line">{lead.opening_hours}</p>
+            </div>
+          )}
+
+          {/* Competitors */}
+          {lead.source_details && (
+            (() => {
+              const details = typeof lead.source_details === 'string' ? JSON.parse(lead.source_details) : lead.source_details;
+              const competitors = details?.competitors;
+              if (competitors && Array.isArray(competitors) && competitors.length > 0) {
+                return (
+                  <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Competitors</h2>
+                    <div className="space-y-2">
+                      {competitors.map((c: Record<string, unknown>, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between">
+                          <span className="text-sm text-gray-200">
+                            {(c.name as string) ?? 'Unknown'}
+                          </span>
+                          {c.reviews != null && (
+                            <span className="text-xs text-gray-500">
+                              {String(c.reviews)} reviews{c.rating != null && c.reviews != null && ` | ${String(c.rating)}★`}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()
+          )}
 
           {/* Owner info */}
           {lead.owner_name && (
