@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus, type LeadSource, type Profile } from '@/lib/types';
+import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus, type LeadSource } from '@/lib/types';
+import type { Profile } from '@/lib/types';
 import Link from 'next/link';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import BulkActions from '@/components/bulk-actions';
@@ -35,6 +36,8 @@ export default function DashboardPage() {
   const [sourceFilter, setSourceFilter] = useState<LeadSource | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'icp_high' | 'follow_up'>('newest');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
   const bulk = useBulkSelection(leads);
@@ -43,7 +46,22 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchLeads();
     fetchProfiles();
-  }, [statusFilter, sourceFilter, searchQuery, sortBy]);
+    fetchCategories();
+  }, [statusFilter, sourceFilter, searchQuery, sortBy, categoryFilter]);
+
+  const fetchCategories = async () => {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('category_name')
+      .not('category_name', 'is', null);
+
+    if (error) {
+      console.error('Error fetching categories:', error);
+    } else {
+      const cats = [...new Set(data?.map((d) => d.category_name) || [])];
+      setAvailableCategories(cats);
+    }
+  };
 
   const fetchProfiles = async () => {
     const { data, error } = await supabase.from('profiles').select('*');
@@ -54,17 +72,21 @@ export default function DashboardPage() {
     }
   };
 
-  const handleBulkAssign = async (userId: string, notes: string) => {
+  const handleBulkAssign = async (userId: string, notes: string, quantity?: number) => {
     const selectedIdsArray = Array.from(selectedIds);
 
-    for (const id of selectedIdsArray) {
+    // If quantity is specified, only assign that many leads
+    const idsToAssign = quantity && quantity > 0 && quantity < selectedIdsArray.length
+      ? selectedIdsArray.slice(0, quantity)
+      : selectedIdsArray;
+
+    for (const id of idsToAssign) {
       const updateData: Record<string, unknown> = {
         assigned_to: userId,
         assigned_at: new Date().toISOString(),
       };
 
       if (notes) {
-        // Append to existing notes
         const resp = await supabase.from('leads').select('notes').eq('id', id).single();
         const existingNotes = resp.data?.notes || '';
         updateData.notes = existingNotes
@@ -105,6 +127,10 @@ export default function DashboardPage() {
 
     if (sourceFilter !== 'all') {
       query = query.eq('source', sourceFilter);
+    }
+
+    if (categoryFilter !== 'all') {
+      query = query.eq('category_name', categoryFilter);
     }
 
     if (searchQuery.trim()) {
@@ -241,6 +267,27 @@ export default function DashboardPage() {
               {SOURCE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
                   {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+              Category
+            </label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full sm:w-[150px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+            >
+              <option value="all" className="bg-[#1a1a1a]">
+                All Categories
+              </option>
+              {availableCategories.map((cat) => (
+                <option key={cat} value={cat} className="bg-[#1a1a1a]">
+                  {cat}
                 </option>
               ))}
             </select>
@@ -397,6 +444,11 @@ export default function DashboardPage() {
                         ICP {lead.icp_score}
                       </span>
                     )}
+                    {lead.category_name && (
+                      <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                        {lead.category_name}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                     {lead.owner_name && (
@@ -503,6 +555,7 @@ export default function DashboardPage() {
       {/* Bulk Actions Component */}
       <BulkActions
         selectedCount={selectedIds.size}
+        selectedIds={Array.from(selectedIds)}
         onAssign={handleBulkAssign}
         onClear={handleBulkClear}
         profiles={profiles}

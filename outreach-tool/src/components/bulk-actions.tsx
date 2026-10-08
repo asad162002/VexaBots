@@ -2,41 +2,37 @@
 
 import { useState } from 'react';
 import { UserPlus, X } from 'lucide-react';
-
-interface Profile {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  role: string | null;
-  avatar_url: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import { Profile } from '@/lib/types';
 
 interface BulkActionsProps {
   selectedCount: number;
-  onAssign: (userId: string, notes: string) => Promise<void>;
+  selectedIds: string[];
+  onAssign: (userId: string, notes: string, quantity?: number) => Promise<void>;
   onClear: () => void;
   profiles: Profile[];
 }
 
 export default function BulkActions({
   selectedCount,
+  selectedIds,
   onAssign,
   onClear,
   profiles,
 }: BulkActionsProps) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignNotes, setAssignNotes] = useState('');
+  const [assignQuantity, setAssignQuantity] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleAssign = async (userId: string) => {
     if (!userId) return;
     setSubmitting(true);
-    await onAssign(userId, assignNotes);
+    const quantity = assignQuantity ? parseInt(assignQuantity, 10) : undefined;
+    await onAssign(userId, assignNotes, quantity);
     setSubmitting(false);
     setShowAssignModal(false);
     setAssignNotes('');
+    setAssignQuantity('');
   };
 
   if (selectedCount === 0) return null;
@@ -97,6 +93,21 @@ export default function BulkActions({
                   </div>
                 </button>
               ))}
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                How many? (leave empty for all)
+              </label>
+              <input
+                type="number"
+                value={assignQuantity}
+                onChange={(e) => setAssignQuantity(e.target.value)}
+                placeholder="e.g. 50"
+                min="1"
+                max={selectedCount}
+                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              />
             </div>
 
             <div className="mt-4">
