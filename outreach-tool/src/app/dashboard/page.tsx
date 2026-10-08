@@ -47,7 +47,11 @@ export default function DashboardPage() {
     fetchLeads();
     fetchProfiles();
     fetchCategories();
-  }, [statusFilter, sourceFilter, searchQuery, sortBy, categoryFilter]);
+  }, [statusFilter, sourceFilter, searchQuery, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchLeads();
+  }, [categoryFilter]);
 
   const fetchCategories = async () => {
     const { data, error } = await supabase
