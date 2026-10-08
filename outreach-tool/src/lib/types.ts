@@ -62,6 +62,8 @@ export type Lead = {
   source_details: Record<string, unknown> | null;
   last_contacted_at: string | null;
   next_follow_up_at: string | null;
+  assigned_to: string | null;
+  assigned_at: string | null;
   created_at: string;
   updated_at: string;
 };

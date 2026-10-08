@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus, type LeadSource } from '@/lib/types';
+import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus, type LeadSource, type Profile } from '@/lib/types';
 import Link from 'next/link';
+import { useBulkSelection } from '@/hooks/use-bulk-selection';
+import BulkActions from '@/components/bulk-actions';
 
 const STATUS_OPTIONS: { value: LeadStatus | 'all'; label: string; color: string }[] = [
   { value: 'all', label: 'All', color: 'text-gray-400' },
@@ -33,10 +35,54 @@ export default function DashboardPage() {
   const [sourceFilter, setSourceFilter] = useState<LeadSource | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'icp_high' | 'follow_up'>('newest');
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+
+  const bulk = useBulkSelection(leads);
+  const { selectedIds, toggleItem, selectAllOnPage, deselectAll, isSelected, isAllSelected, isPartiallySelected } = bulk;
 
   useEffect(() => {
     fetchLeads();
+    fetchProfiles();
   }, [statusFilter, sourceFilter, searchQuery, sortBy]);
+
+  const fetchProfiles = async () => {
+    const { data, error } = await supabase.from('profiles').select('*');
+    if (error) {
+      console.error('Error fetching profiles:', error);
+    } else {
+      setProfiles(data ?? []);
+    }
+  };
+
+  const handleBulkAssign = async (userId: string, notes: string) => {
+    const selectedIdsArray = Array.from(selectedIds);
+
+    for (const id of selectedIdsArray) {
+      const updateData: Record<string, unknown> = {
+        assigned_to: userId,
+        assigned_at: new Date().toISOString(),
+      };
+
+      if (notes) {
+        // Append to existing notes
+        const resp = await supabase.from('leads').select('notes').eq('id', id).single();
+        const existingNotes = resp.data?.notes || '';
+        updateData.notes = existingNotes
+          ? `${existingNotes}\n\n[${new Date().toISOString().split('T')[0]}] ${notes}`
+          : notes;
+      }
+
+      await supabase.from('leads').update(updateData).eq('id', id);
+    }
+
+    await fetchLeads();
+    deselectAll();
+  };
+
+  const handleBulkClear = () => {
+    deselectAll();
+    fetchLeads();
+  };
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -44,9 +90,14 @@ export default function DashboardPage() {
     let query = supabase
       .from('leads')
       .select('*')
-      .order(sortBy === 'icp_high' ? 'icp_score' : sortBy === 'follow_up' ? 'next_follow_up_at' : 'created_at', {
-        ascending: sortBy === 'follow_up',
-      });
+      .order(
+        sortBy === 'icp_high'
+          ? 'icp_score'
+          : sortBy === 'follow_up'
+            ? 'next_follow_up_at'
+            : 'created_at',
+        { ascending: sortBy === 'follow_up' }
+      );
 
     if (statusFilter !== 'all') {
       query = query.eq('status', statusFilter);
@@ -58,7 +109,9 @@ export default function DashboardPage() {
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      query = query.or(`title.ilike.%${q},owner_name.ilike.%${q},phone.ilike.%${q},city.ilike.%${q},website.ilike.%${q}`);
+      query = query.or(
+        `title.ilike.%${q},owner_name.ilike.%${q},phone.ilike.%${q},city.ilike.%${q},website.ilike.%${q}`
+      );
     }
 
     const { data, error } = await query.limit(100);
@@ -92,11 +145,17 @@ export default function DashboardPage() {
       return (b.icp_score ?? 0) - (a.icp_score ?? 0);
     }
     if (sortBy === 'follow_up') {
-      const aDate = a.next_follow_up_at ? new Date(a.next_follow_up_at).getTime() : Infinity;
-      const bDate = b.next_follow_up_at ? new Date(b.next_follow_up_at).getTime() : Infinity;
+      const aDate = a.next_follow_up_at
+        ? new Date(a.next_follow_up_at).getTime()
+        : Infinity;
+      const bDate = b.next_follow_up_at
+        ? new Date(b.next_follow_up_at).getTime()
+        : Infinity;
       return aDate - bDate;
     }
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    return (
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
   });
 
   return (
@@ -113,8 +172,18 @@ export default function DashboardPage() {
           onClick={fetchLeads}
           className="bg-[#3f3f46] hover:bg-[#52525b] text-white text-sm font-medium rounded-lg px-4 py-2 transition flex items-center gap-2"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           Refresh
         </button>
@@ -125,7 +194,9 @@ export default function DashboardPage() {
         <div className="flex flex-wrap gap-3 items-end">
           {/* Search */}
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Search</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+              Search
+            </label>
             <input
               type="text"
               value={searchQuery}
@@ -137,10 +208,14 @@ export default function DashboardPage() {
 
           {/* Status */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Status</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+              Status
+            </label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as LeadStatus | 'all')}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as LeadStatus | 'all')
+              }
               className="w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
             >
               {STATUS_OPTIONS.map((opt) => (
@@ -153,10 +228,14 @@ export default function DashboardPage() {
 
           {/* Source */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Source</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+              Source
+            </label>
             <select
               value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value as LeadSource | 'all')}
+              onChange={(e) =>
+                setSourceFilter(e.target.value as LeadSource | 'all')
+              }
               className="w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
             >
               {SOURCE_OPTIONS.map((opt) => (
@@ -169,19 +248,71 @@ export default function DashboardPage() {
 
           {/* Sort */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Sort</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+              Sort
+            </label>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              onChange={(e) =>
+                setSortBy(e.target.value as typeof sortBy)
+              }
               className="w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
             >
-              <option value="newest" className="bg-[#1a1a1a]">Newest First</option>
-              <option value="icp_high" className="bg-[#1a1a1a]">ICP Score (High)</option>
-              <option value="follow_up" className="bg-[#1a1a1a]">Follow-up Due</option>
+              <option value="newest" className="bg-[#1a1a1a]">
+                Newest First
+              </option>
+              <option value="icp_high" className="bg-[#1a1a1a]">
+                ICP Score (High)
+              </option>
+              <option value="follow_up" className="bg-[#1a1a1a]">
+                Follow-up Due
+              </option>
             </select>
           </div>
         </div>
       </div>
+
+      {/* Bulk select all checkbox */}
+      {sortedLeads.length > 0 && (
+        <div className="mb-3 flex items-center gap-2">
+          <div
+            className={`w-5 h-5 flex items-center justify-center cursor-pointer rounded border transition-colors
+              ${
+                isAllSelected()
+                  ? 'bg-blue-600 border-blue-600'
+                  : isPartiallySelected()
+                    ? 'bg-blue-600/30 border-blue-600'
+                    : 'border-[#3f3f46] hover:border-[#52525b]'
+              }`}
+            onClick={() => {
+              if (isAllSelected()) {
+                deselectAll();
+              } else {
+                selectAllOnPage();
+              }
+            }}
+          >
+            {isAllSelected() || isPartiallySelected() ? (
+              <svg
+                className="w-3 h-3 text-white"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            ) : null}
+          </div>
+          <span className="text-xs text-gray-500">
+            {selectedIds.size > 0
+              ? `${selectedIds.size} selected on this page`
+              : 'Select all on page'}
+          </span>
+        </div>
+      )}
 
       {/* Lead list */}
       {loading ? (
@@ -192,11 +323,23 @@ export default function DashboardPage() {
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
           <div className="text-center">
             <div className="w-12 h-12 rounded-full bg-[#27272a] flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              <svg
+                className="w-6 h-6 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
               </svg>
             </div>
-            <p className="text-gray-300 font-medium mb-1">No leads found</p>
+            <p className="text-gray-300 font-medium mb-1">
+              No leads found
+            </p>
             <p className="text-gray-500 text-sm">
               Try adjusting your filters or search query.
             </p>
@@ -210,13 +353,43 @@ export default function DashboardPage() {
               href={`/dashboard/leads/${lead.id}`}
               className="block bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 transition cursor-pointer group"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                {/* Checkbox */}
+                <div
+                  className="mt-0.5 w-5 h-5 flex items-center justify-center cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleItem(lead.id);
+                  }}
+                >
+                  {isSelected(lead.id) ? (
+                    <div className="w-4 h-4 bg-blue-600 rounded flex items-center justify-center">
+                      <svg
+                        className="w-3 h-3 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="w-4 h-4 border border-[#3f3f46] rounded" />
+                  )}
+                </div>
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
                     <h3 className="font-semibold text-white text-base truncate">
                       {lead.title || 'Untitled Business'}
                     </h3>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${STATUS_COLORS[lead.status]} border ${STATUS_COLORS[lead.status].replace('text-', 'border-').replace('-400', '-500').replace('-500', '-400')}`}>
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${STATUS_COLORS[lead.status]} border ${STATUS_COLORS[lead.status].replace('text-', 'border-').replace('-400', '-500').replace('-500', '-400')}`}
+                    >
                       {STATUS_LABELS[lead.status]}
                     </span>
                     {lead.icp_score !== null && (
@@ -228,20 +401,34 @@ export default function DashboardPage() {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                     {lead.owner_name && (
                       <span className="text-gray-400">
-                        Owner: <span className="text-gray-200 font-medium">{lead.owner_name}</span>
+                        Owner:{" "}
+                        <span className="text-gray-200 font-medium">
+                          {lead.owner_name}
+                        </span>
                       </span>
                     )}
                     {lead.phone && (
                       <button
                         type="button"
                         onClick={(e) => {
-                          e.stopPropagation()
-                          window.location.href = `tel:${lead.phone}`
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(lead.phone!);
                         }}
                         className="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 text-left"
+                        title="Click to copy phone"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                          />
                         </svg>
                         {lead.phone}
                       </button>
@@ -251,20 +438,60 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                    {lead.total_score && (
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500/50" />
+                        {lead.total_score}★ ({lead.reviews_count || 0}{' '}
+                        reviews)
+                      </span>
+                    )}
                     {lead.source && (
                       <span className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
                         {lead.source.replace('_', ' ')}
                       </span>
                     )}
+                    {lead.assigned_to && (
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500/50" />
+                        Assigned
+                      </span>
+                    )}
                     {lead.created_at && (
-                      <span>Added {new Date(lead.created_at).toLocaleDateString()}</span>
+                      <span>
+                        Added {new Date(lead.created_at).toLocaleDateString()}
+                      </span>
                     )}
                   </div>
                 </div>
                 <div className="shrink-0 flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  {lead.website && (
+                    <svg
+                      className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                      />
+                    </svg>
+                  )}
+                  <svg
+                    className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
                   </svg>
                 </div>
               </div>
@@ -272,6 +499,14 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Bulk Actions Component */}
+      <BulkActions
+        selectedCount={selectedIds.size}
+        onAssign={handleBulkAssign}
+        onClear={handleBulkClear}
+        profiles={profiles}
+      />
     </div>
   );
 }
