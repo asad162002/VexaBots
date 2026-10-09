@@ -19,9 +19,10 @@
 - Upload a JSON file via the /dashboard/import page
 - Verify it splits data correctly into 3 tables
 
-### 3. Fix RLS Policies (for anon key reads)
+### RLS Policies
 - The leads table shows data correctly via anon key
 - But LinkedIn leads were initially failing - fixed by adding RLS policies
+- **Assignment update failing**: The `leads_update_own` policy only allowed `auth.uid() = owner_id`, but leads with NULL owner_id were blocked. Fixed by adding `(owner_id IS NULL)` condition to update policy.
 
 ## Key Supabase Lessons (Don't Forget!)
 
