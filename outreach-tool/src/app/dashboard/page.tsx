@@ -38,6 +38,7 @@ export default function DashboardPage() {
   const [searchDebounce, setSearchDebounce] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'icp_high' | 'follow_up'>('newest');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [assignedFilter, setAssignedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
@@ -56,7 +57,7 @@ export default function DashboardPage() {
     fetchLeads();
     fetchProfiles();
     fetchCategories();
-  }, [statusFilter, sourceFilter, searchDebounce, sortBy, categoryFilter]);
+  }, [statusFilter, sourceFilter, searchDebounce, sortBy, categoryFilter, assignedFilter]);
 
   const fetchCategories = async () => {
     const { data, error } = await supabase
@@ -152,6 +153,12 @@ export default function DashboardPage() {
       query = query.eq('category_name', categoryFilter);
     }
 
+    if (assignedFilter === 'assigned') {
+      query = query.not('assigned_to', 'is', null);
+    } else if (assignedFilter === 'unassigned') {
+      query = query.is('assigned_to', null);
+    }
+
     if (searchDebounce.trim()) {
       const q = searchDebounce.toLowerCase().trim();
       query = query.or(
@@ -172,6 +179,11 @@ export default function DashboardPage() {
   const filteredLeads = leads.filter((lead) => {
     if (statusFilter !== 'all' && lead.status !== statusFilter) return false;
     if (sourceFilter !== 'all' && lead.source !== sourceFilter) return false;
+    if (assignedFilter !== 'all') {
+      const isAssigned = !!lead.assigned_to;
+      if (assignedFilter === 'assigned' && !isAssigned) return false;
+      if (assignedFilter === 'unassigned' && isAssigned) return false;
+    }
     return true;
   });
 
@@ -299,6 +311,22 @@ export default function DashboardPage() {
                   {cat}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Assignment Status */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+              Assignment
+            </label>
+            <select
+              value={assignedFilter}
+              onChange={(e) => setAssignedFilter(e.target.value as 'all' | 'assigned' | 'unassigned')}
+              className="w-full sm:w-[140px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+            >
+              <option value="all" className="bg-[#1a1a1a]">All</option>
+              <option value="assigned" className="bg-[#1a1a1a]">Assigned</option>
+              <option value="unassigned" className="bg-[#1a1a1a]">Unassigned</option>
             </select>
           </div>
 
