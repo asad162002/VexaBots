@@ -165,7 +165,7 @@ export default function DashboardPage() {
     if (searchDebounce.trim()) {
       const q = searchDebounce.toLowerCase().trim();
       query = query.or(
-        `title.ilike.%${q},owner_name.ilike.%${q},phone.ilike.%${q},city.ilike.%${q},website.ilike.%${q}`
+        `title.ilike.*${q}*,owner_name.ilike.*${q}*,phone.ilike.*${q}*,city.ilike.*${q}*,website.ilike.*${q}*`
       );
     }
 
