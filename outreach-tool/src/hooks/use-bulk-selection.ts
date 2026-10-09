@@ -46,6 +46,7 @@ export function useBulkSelection<T extends { id: string }>(
 
   return {
     selectedIds,
+    setSelectedIds,
     count: selectedIds.size,
     toggleItem,
     selectAllOnPage,

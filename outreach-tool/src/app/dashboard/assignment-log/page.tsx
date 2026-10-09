@@ -2,26 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { type Profile, type Lead } from '@/lib/types';
+import { type Profile } from '@/lib/types';
 import Link from 'next/link';
 
-interface AssignmentLogEntry {
-  id: string;
-  lead_id: string;
-  lead_title: string;
-  assigned_by_name: string | null;
-  assigned_by_email: string | null;
-  assigned_to_name: string | null;
-  assigned_to_email: string | null;
-  assigned_at: string;
+interface AssigneeGroup {
+  assigneeId: string;
+  assigneeName: string | null;
+  assigneeEmail: string | null;
+  leadCount: number;
+  latestAssignment: string;
   notes: string | null;
 }
 
 export default function AssignmentLogPage() {
-  const [logEntries, setLogEntries] = useState<AssignmentLogEntry[]>([]);
+  const [assigneeGroups, setAssigneeGroups] = useState<AssigneeGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+  const [selectedGroup, setSelectedGroup] = useState<AssigneeGroup | null>(null);
 
   useEffect(() => {
     fetchAssignmentLog();
@@ -34,9 +32,7 @@ export default function AssignmentLogPage() {
       console.error('Error fetching profiles:', profilesError);
     } else if (data) {
       const profileMap: Record<string, Profile> = {};
-      data.forEach((p) => {
-        profileMap[p.id] = p;
-      });
+      data.forEach((p) => { profileMap[p.id] = p; });
       setProfiles(profileMap);
     }
   };
@@ -45,13 +41,13 @@ export default function AssignmentLogPage() {
     setLoading(true);
     setError(null);
 
-    // Fetch leads with assignment data, ordered by assigned_at descending
+    // Fetch leads with assignment data
     const { data: leads, error: leadsError } = await supabase
       .from('leads')
-      .select('id, title, assigned_to, assigned_at, notes, owner_id')
+      .select('id, title, assigned_to, assigned_at, notes')
       .not('assigned_to', 'is', null)
       .order('assigned_at', { ascending: false })
-      .limit(200);
+      .limit(500);
 
     if (leadsError) {
       console.error('Error fetching assignment log:', leadsError);
@@ -61,51 +57,84 @@ export default function AssignmentLogPage() {
     }
 
     if (!leads) {
-      setLogEntries([]);
+      setAssigneeGroups([]);
       setLoading(false);
       return;
     }
 
-    // Transform into log entries
-    const entries: AssignmentLogEntry[] = leads.map((lead) => ({
-      id: lead.id,
-      lead_id: lead.id,
-      lead_title: lead.title || 'Untitled Business',
-      assigned_by_name: null, // Will be enriched below
-      assigned_by_email: null,
-      assigned_to_name: null,
-      assigned_to_email: null,
-      assigned_at: lead.assigned_at || '',
-      notes: lead.notes || null,
-    }));
-
-    // Enrich with assigned_to profile data
-    const assignedToIds = [...new Set(leads.map((l) => l.assigned_to).filter(Boolean))];
-    if (assignedToIds.length > 0) {
-      const { data: assignedToProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', assignedToIds as string[]);
-
-      if (!profilesError && assignedToProfiles) {
-        const profileMap = new Map(assignedToProfiles.map((p) => [p.id, p]));
-        entries.forEach((entry) => {
-          const profile = profileMap.get(leads.find((l) => l.id === entry.lead_id)?.assigned_to || '');
-          if (profile) {
-            entry.assigned_to_name = profile.full_name;
-            entry.assigned_to_email = profile.email;
-          }
-        });
+    // Group by assignee
+    const groups: Record<string, AssigneeGroup> = {};
+    leads.forEach((lead) => {
+      if (!lead.assigned_to) return;
+      const key = lead.assigned_to;
+      if (!groups[key]) {
+        groups[key] = {
+          assigneeId: key,
+          assigneeName: null,
+          assigneeEmail: null,
+          leadCount: 0,
+          latestAssignment: lead.assigned_at || '',
+          notes: lead.notes,
+        };
       }
-    }
+      groups[key].leadCount += 1;
+      // Track the latest assignment date (already sorted desc)
+      if (lead.assigned_at && (!groups[key].latestAssignment || lead.assigned_at > groups[key].latestAssignment)) {
+        groups[key].latestAssignment = lead.assigned_at;
+      }
+      // Use the most recent non-empty notes
+      if (lead.notes && !groups[key].notes) {
+        groups[key].notes = lead.notes;
+      }
+    });
 
-    setLogEntries(entries);
+    // Convert to array and enrich with profile data
+    const groupsArray: AssigneeGroup[] = Object.values(groups).map((group) => {
+      const profile = profiles[group.assigneeId];
+      if (profile) {
+        group.assigneeName = profile.full_name;
+        group.assigneeEmail = profile.email;
+      }
+      return group;
+    });
+
+    setAssigneeGroups(groupsArray);
     setLoading(false);
   };
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleString();
+  };
+
+  const fetchAssigneeLeads = async (assigneeId: string) => {
+    const { data: leads, error: leadsError } = await supabase
+      .from('leads')
+      .select('id, title, assigned_at, notes')
+      .eq('assigned_to', assigneeId)
+      .order('assigned_at', { ascending: false })
+      .limit(100);
+
+    if (leadsError) {
+      console.error('Error fetching assignee leads:', leadsError);
+      return [];
+    }
+    return leads || [];
+  };
+
+  const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
+  const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
+
+  const loadAssigneeLeads = async (group: AssigneeGroup) => {
+    if (assigneeLeads[group.assigneeId]) {
+      setSelectedGroup(selectedGroup?.assigneeId === group.assigneeId ? null : group);
+      return;
+    }
+    setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: true }));
+    const leads = await fetchAssigneeLeads(group.assigneeId);
+    setAssigneeLeads((prev) => ({ ...prev, [group.assigneeId]: leads }));
+    setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: false }));
+    setSelectedGroup(group);
   };
 
   if (loading) {
@@ -130,18 +159,12 @@ export default function AssignmentLogPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Assignment Log</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {logEntries.length} assignment{logEntries.length !== 1 ? 's' : ''} total
+            {assigneeGroups.length} team member{assigneeGroups.length !== 1 ? 's' : ''} with assigned leads
           </p>
         </div>
-        <button
-          onClick={fetchAssignmentLog}
-          className="bg-[#3f3f46] hover:bg-[#52525b] text-white text-sm font-medium rounded-lg px-4 py-2 transition flex items-center gap-2"
-        >
-          Refresh
-        </button>
       </div>
 
-      {logEntries.length === 0 ? (
+      {assigneeGroups.length === 0 ? (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
           <div className="text-center">
             <div className="w-12 h-12 rounded-full bg-[#27272a] flex items-center justify-center mx-auto mb-4">
@@ -155,41 +178,82 @@ export default function AssignmentLogPage() {
         </div>
       ) : (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#27272a]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lead</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned To</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logEntries.map((entry) => (
-                  <tr key={entry.id} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25] transition">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/dashboard/leads/${entry.lead_id}`}
-                        className="text-blue-400 hover:text-blue-300 font-medium"
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#27272a]">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Team Member</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Leads Assigned</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Assignment</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {assigneeGroups.map((group) => (
+                <tr key={group.assigneeId}>
+                  <td className="px-4 py-3 text-gray-200">
+                    {group.assigneeName || group.assigneeEmail || 'Unknown'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-white">{group.leadCount}</span>
+                      <button
+                        onClick={() => loadAssigneeLeads(group)}
+                        className="text-xs text-blue-400 hover:text-blue-300"
                       >
-                        {entry.lead_title}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-200">
-                      {entry.assigned_to_name || entry.assigned_to_email || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">
-                      {formatDate(entry.assigned_at)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 max-w-xs truncate">
-                      {entry.notes || '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        {selectedGroup?.assigneeId === group.assigneeId
+                          ? 'Hide'
+                          : 'Show leads'}
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {formatDate(group.latestAssignment)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 max-w-xs truncate">
+                    {group.notes || '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {selectedGroup && (
+            <div className="border-t border-[#27272a]">
+              <div className="px-4 py-3 bg-[#27272a]/30 border-b border-[#27272a]">
+                <h3 className="text-sm font-medium text-white">
+                  Leads assigned to {selectedGroup.assigneeName || selectedGroup.assigneeEmail}
+                </h3>
+              </div>
+              <div className="max-h-96 overflow-y-auto">
+                {loadingLeads[selectedGroup.assigneeId] ? (
+                  <div className="p-4 text-center text-gray-500 text-sm">Loading...</div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {(assigneeLeads[selectedGroup.assigneeId] || []).map((lead) => (
+                        <tr key={lead.id} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25]">
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/dashboard/leads/${lead.id}`}
+                              className="text-blue-400 hover:text-blue-300 font-medium"
+                            >
+                              {lead.title || 'Untitled Business'}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">
+                            {formatDate(lead.assigned_at)}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 max-w-xs truncate text-xs">
+                            {lead.notes || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

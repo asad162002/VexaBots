@@ -35,23 +35,28 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [sourceFilter, setSourceFilter] = useState<LeadSource | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchDebounce, setSearchDebounce] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'icp_high' | 'follow_up'>('newest');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
   const bulk = useBulkSelection(leads);
-  const { selectedIds, toggleItem, selectAllOnPage, deselectAll, isSelected, isAllSelected, isPartiallySelected } = bulk;
+  const { selectedIds, setSelectedIds, toggleItem, selectAllOnPage, deselectAll, isSelected, isAllSelected, isPartiallySelected } = bulk;
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchDebounce(searchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     fetchLeads();
     fetchProfiles();
     fetchCategories();
-  }, [statusFilter, sourceFilter, searchQuery, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    fetchLeads();
-  }, [categoryFilter]);
+  }, [statusFilter, sourceFilter, searchDebounce, sortBy, categoryFilter]);
 
   const fetchCategories = async () => {
     const { data, error } = await supabase
@@ -98,11 +103,21 @@ export default function DashboardPage() {
           : notes;
       }
 
-      await supabase.from('leads').update(updateData).eq('id', id);
+      const { error: updateError } = await supabase.from('leads').update(updateData).eq('id', id);
+      if (updateError) {
+        console.error(`Error assigning lead ${id}:`, updateError);
+      }
     }
 
     await fetchLeads();
-    deselectAll();
+    // Remove assigned IDs from selection to prevent accidental reassignment
+    const remainingIds = selectedIdsArray.filter((id) => !idsToAssign.includes(id));
+    if (remainingIds.length === 0) {
+      deselectAll();
+    } else {
+      // Keep unassigned IDs in selection
+      setSelectedIds(new Set(remainingIds));
+    }
   };
 
   const handleBulkClear = () => {
@@ -137,8 +152,8 @@ export default function DashboardPage() {
       query = query.eq('category_name', categoryFilter);
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
+    if (searchDebounce.trim()) {
+      const q = searchDebounce.toLowerCase().trim();
       query = query.or(
         `title.ilike.%${q},owner_name.ilike.%${q},phone.ilike.%${q},city.ilike.%${q},website.ilike.%${q}`
       );
@@ -157,16 +172,6 @@ export default function DashboardPage() {
   const filteredLeads = leads.filter((lead) => {
     if (statusFilter !== 'all' && lead.status !== statusFilter) return false;
     if (sourceFilter !== 'all' && lead.source !== sourceFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const match =
-        lead.title?.toLowerCase().includes(q) ||
-        lead.owner_name?.toLowerCase().includes(q) ||
-        lead.phone?.includes(q) ||
-        lead.city?.toLowerCase().includes(q) ||
-        lead.website?.toLowerCase().includes(q);
-      if (!match) return false;
-    }
     return true;
   });
 

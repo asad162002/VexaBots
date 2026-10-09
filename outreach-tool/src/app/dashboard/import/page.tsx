@@ -21,6 +21,7 @@ const LEAD_FIELDS = [
   { key: 'owner_role', label: 'Owner Role', required: false },
   { key: 'owner_linkedin_url', label: 'LinkedIn URL', required: false },
   { key: 'company_size_estimate', label: 'Company Size', required: false },
+  { key: 'category_name', label: 'Category', required: false },
   { key: 'notes', label: 'Notes', required: false },
   { key: 'place_id', label: 'Place ID', required: false },
 ];
@@ -45,6 +46,7 @@ export default function ImportPage() {
   const [previewRows, setPreviewRows] = useState<Record<string, string>[]>([]);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [source, setSource] = useState<LeadSource>('csv_import');
+  const [category, setCategory] = useState<string>('');
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<{ total: number; inserted: number; skipped: number; enriched?: number } | null>(null);
@@ -216,7 +218,7 @@ export default function ImportPage() {
       // Map to leads table
       const lead: Record<string, unknown> = {
         title: item.name || '',
-        category_name: item.main_category || '',
+        category_name: item.main_category || category || '',
         categories: Array.isArray(item.categories) ? item.categories.join(', ') : null,
         phone: item.phone || '',
         address: item.address || '',
@@ -364,6 +366,7 @@ export default function ImportPage() {
         const lead: Record<string, unknown> = {
           source,
           status: 'new',
+          category_name: category || null,
         };
 
         for (const [csvCol, leadField] of Object.entries(fieldMap)) {
@@ -505,6 +508,18 @@ export default function ImportPage() {
               <strong>JSON file detected.</strong> This will auto-map google-maps-scraper format
               and import owner enrichment data (LinkedIn profiles, Apollo emails) into separate tables.
             </p>
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-blue-200 mb-1.5 uppercase tracking-wide">
+                Category (optional)
+              </label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g. restaurant, construction"
+                className="w-full sm:w-[200px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              />
+            </div>
           </div>
         )}
 
@@ -514,7 +529,7 @@ export default function ImportPage() {
             <h2 className="text-lg font-semibold text-white mb-4">2. Map Columns</h2>
 
             <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
                 Default Source for imported leads
               </label>
               <select
@@ -528,6 +543,20 @@ export default function ImportPage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                Category (e.g. restaurant, construction)
+              </label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Enter category name"
+                className="w-full sm:w-[200px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              />
+              <p className="text-xs text-gray-500 mt-1">Optional: groups these leads together for filtering</p>
             </div>
 
             {previewRows.length > 0 && (
