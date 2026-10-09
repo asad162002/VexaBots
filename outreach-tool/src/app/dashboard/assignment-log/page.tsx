@@ -21,6 +21,7 @@ export default function AssignmentLogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<AssigneeGroup | null>(null);
   const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
   const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
@@ -29,12 +30,12 @@ export default function AssignmentLogPage() {
     fetchProfiles();
   }, []);
 
-  // Re-run fetchAssignmentLog when profiles change (so enrichment works)
+  // Re-run fetchAssignmentLog when profiles are loaded (so enrichment works)
   useEffect(() => {
-    if (Object.keys(profiles).length > 0) {
+    if (profilesLoaded) {
       fetchAssignmentLog();
     }
-  }, [profiles]);
+  }, [profilesLoaded]);
 
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
@@ -45,6 +46,7 @@ export default function AssignmentLogPage() {
       data.forEach((p) => { profileMap[p.id] = p; });
       setProfiles(profileMap);
     }
+    setProfilesLoaded(true);
   };
 
   const fetchAssignmentLog = async () => {
@@ -150,7 +152,7 @@ export default function AssignmentLogPage() {
     return new Date(dateStr).toLocaleString();
   };
 
-  if (loading && Object.keys(profiles).length === 0) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="flex items-center gap-3 text-gray-500">
