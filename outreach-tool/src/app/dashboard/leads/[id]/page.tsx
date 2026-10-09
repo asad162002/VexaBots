@@ -32,6 +32,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [notes, setNotes] = useState('');
   const [nextFollowUp, setNextFollowUp] = useState('');
   const [assignedTo, setAssignedTo] = useState<string>('');
+  
+  // Activity log state
+  const [activities, setActivities] = useState<any[]>([]);
+  const [showActivityForm, setShowActivityForm] = useState(false);
+  const [activityType, setActivityType] = useState('call');
+  const [activityContent, setActivityContent] = useState('');
+  const [activityOutcome, setActivityOutcome] = useState('');
+  const [activityFollowUp, setActivityFollowUp] = useState('');
 
   useEffect(() => {
     fetchLead();
@@ -68,7 +76,67 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     setNotes(data.notes ?? '');
     setNextFollowUp(data.next_follow_up_at ? new Date(data.next_follow_up_at).toISOString().split('T')[0] : '');
     setAssignedTo(data.assigned_to ?? '');
+    fetchActivities();
     setLoading(false);
+  };
+
+  const fetchActivities = async () => {
+    const { data, error: activitiesError } = await supabase
+      .from('lead_activities')
+      .select('*')
+      .eq('lead_id', id)
+      .order('created_at', { ascending: false });
+
+    if (activitiesError) {
+      console.error('Error fetching activities:', activitiesError);
+    } else {
+      setActivities(data ?? []);
+    }
+  };
+
+  const handleLogActivity = async () => {
+    if (!user || !activityContent.trim()) return;
+
+    const { error: insertError } = await supabase.from('lead_activities').insert({
+      lead_id: id,
+      profile_id: user.id,
+      activity_type: activityType,
+      content: activityContent.trim(),
+      outcome: activityOutcome.trim() || null,
+      next_follow_up_at: activityFollowUp 
+        ? new Date(activityFollowUp).toISOString() 
+        : null,
+    });
+
+    if (insertError) {
+      console.error('Error logging activity:', insertError);
+      setError('Failed to log activity.');
+      return;
+    }
+
+    // Reset form
+    setActivityType('call');
+    setActivityContent('');
+    setActivityOutcome('');
+    setActivityFollowUp('');
+    setShowActivityForm(false);
+    
+    // Refresh activities
+    fetchActivities();
+    
+    // Also update the lead's notes and next_follow_up_at if activity has follow-up
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (activityFollowUp) {
+      updates.next_follow_up_at = new Date(activityFollowUp).toISOString();
+    }
+    // Append activity note to lead notes
+    if (activityContent && !activityFollowUp) {
+      updates.notes = lead?.notes 
+        ? `${lead.notes}\n\n[${activityType}] ${activityContent}` 
+        : `[${activityType}] ${activityContent}`;
+    }
+    await supabase.from('leads').update(updates).eq('id', id);
+    fetchLead();
   };
 
   const handleSave = async () => {
@@ -550,6 +618,139 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 </p>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Activity Log */}
+        <div className="lg:col-span-2 mt-6">
+          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Activity Log</h2>
+              <button
+                onClick={() => setShowActivityForm(!showActivityForm)}
+                className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+              >
+                {showActivityForm ? 'Cancel' : '+ Log Activity'}
+              </button>
+            </div>
+
+            {showActivityForm && (
+              <div className="mb-4 p-4 bg-[#27272a]/30 border border-[#3f3f46] rounded-lg">
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+                      Type
+                    </label>
+                    <select
+                      value={activityType}
+                      onChange={(e) => setActivityType(e.target.value)}
+                      className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="call">Call</option>
+                      <option value="text">Text</option>
+                      <option value="email">Email</option>
+                      <option value="meeting">Meeting</option>
+                      <option value="note">Note</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+                      Outcome
+                    </label>
+                    <input
+                      type="text"
+                      value={activityOutcome}
+                      onChange={(e) => setActivityOutcome(e.target.value)}
+                      placeholder="e.g. Interested, No answer..."
+                      className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+                    Details
+                  </label>
+                  <textarea
+                    value={activityContent}
+                    onChange={(e) => setActivityContent(e.target.value)}
+                    placeholder="What happened in this interaction..."
+                    rows={3}
+                    className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+                    Next Follow-up
+                  </label>
+                  <input
+                    type="date"
+                    value={activityFollowUp}
+                    onChange={(e) => setActivityFollowUp(e.target.value)}
+                    className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleLogActivity}
+                    disabled={!activityContent.trim()}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white font-semibold rounded-lg text-sm transition disabled:cursor-not-allowed"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setShowActivityForm(false)}
+                    className="px-4 py-2 bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 font-medium rounded-lg text-sm transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activities.length === 0 ? (
+              <p className="text-sm text-gray-500">No activities logged yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {activities.map((activity) => {
+                  const profile = profiles.find(p => p.id === activity.profile_id);
+                  return (
+                    <div key={activity.id} className="border-b border-[#27272a last:border-0 pb-3 last:pb-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                              activity.activity_type === 'call' ? 'bg-gray-500/20 text-gray-300' :
+                              activity.activity_type === 'text' ? 'bg-blue-500/20 text-blue-400' :
+                              activity.activity_type === 'email' ? 'bg-purple-500/20 text-purple-400' :
+                              activity.activity_type === 'meeting' ? 'bg-green-500/20 text-green-400' :
+                              'bg-gray-500/20 text-gray-300'
+                            }`}>
+                              {activity.activity_type.charAt(0).toUpperCase() + activity.activity_type.slice(1)}
+                            </span>
+                            {activity.outcome && (
+                              <span className="text-xs text-gray-400">
+                                {activity.outcome}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-300 break-words">{activity.content}</p>
+                          {activity.next_follow_up_at && (
+                            <p className="text-xs text-blue-400 mt-1">
+                              Next follow-up: {new Date(activity.next_follow_up_at).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right text-xs text-gray-500 shrink-0">
+                          <p>{profile?.full_name || profile?.email || 'Unknown'}</p>
+                          {new Date(activity.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
