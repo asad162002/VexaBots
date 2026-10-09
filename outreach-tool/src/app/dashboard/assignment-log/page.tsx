@@ -10,6 +10,8 @@ interface AssigneeGroup {
   assigneeEmail: string | null;
   leadCount: number;
   latestAssignment: string;
+  latestAssignedByName: string | null;
+  latestAssignedByEmail: string | null;
   notes: string | null;
 }
 
@@ -25,6 +27,13 @@ export default function AssignmentLogPage() {
   useEffect(() => {
     fetchProfiles();
   }, []);
+
+  // Re-run fetchAssignmentLog when profiles change (so enrichment works)
+  useEffect(() => {
+    if (Object.keys(profiles).length > 0) {
+      fetchAssignmentLog();
+    }
+  }, [profiles]);
 
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
@@ -44,7 +53,7 @@ export default function AssignmentLogPage() {
     // Fetch leads with assignment data
     const { data: leads, error: leadsError } = await supabase
       .from('leads')
-      .select('id, title, assigned_to, assigned_at, notes')
+      .select('id, title, assigned_to, assigned_at, assigned_by, notes')
       .not('assigned_to', 'is', null)
       .order('assigned_at', { ascending: false })
       .limit(500);
@@ -62,25 +71,31 @@ export default function AssignmentLogPage() {
       return;
     }
 
-    // Group by assignee
+    // Group by assignee (who the lead was assigned TO)
     const groups: Record<string, AssigneeGroup> = {};
     leads.forEach((lead) => {
       if (!lead.assigned_to) return;
       const key = lead.assigned_to;
       if (!groups[key]) {
+        const assignedByProfile = profiles[lead.assigned_by || ''];
         groups[key] = {
           assigneeId: key,
           assigneeName: null,
           assigneeEmail: null,
           leadCount: 0,
           latestAssignment: lead.assigned_at || '',
+          latestAssignedByName: assignedByProfile?.full_name || null,
+          latestAssignedByEmail: assignedByProfile?.email || null,
           notes: lead.notes || null,
         };
       }
       groups[key].leadCount += 1;
-      // Track the latest assignment date (already sorted desc)
+      // Track the latest assignment date and who assigned it
       if (lead.assigned_at && (!groups[key].latestAssignment || lead.assigned_at > groups[key].latestAssignment)) {
         groups[key].latestAssignment = lead.assigned_at;
+        const assignedByProfile = profiles[lead.assigned_by || ''];
+        groups[key].latestAssignedByName = assignedByProfile?.full_name || null;
+        groups[key].latestAssignedByEmail = assignedByProfile?.email || null;
       }
       // Use the most recent non-empty notes
       if (lead.notes && !groups[key].notes) {
@@ -88,7 +103,7 @@ export default function AssignmentLogPage() {
       }
     });
 
-    // Enrich with profile data (from state)
+    // Enrich with profile data for assignee names
     const groupsArray: AssigneeGroup[] = Object.values(groups).map((group) => {
       const profile = profiles[group.assigneeId];
       if (profile) {
@@ -105,7 +120,7 @@ export default function AssignmentLogPage() {
   const fetchAssigneeLeads = async (assigneeId: string) => {
     const { data: leads, error: leadsError } = await supabase
       .from('leads')
-      .select('id, title, assigned_at, notes')
+      .select('id, title, assigned_at, assigned_by, notes')
       .eq('assigned_to', assigneeId)
       .order('assigned_at', { ascending: false })
       .limit(100);
@@ -129,19 +144,12 @@ export default function AssignmentLogPage() {
     setSelectedGroup(group);
   };
 
-  // Re-run fetchAssignmentLog when profiles change (so enrichment works)
-  useEffect(() => {
-    if (Object.keys(profiles).length > 0) {
-      fetchAssignmentLog();
-    }
-  }, [profiles]);
-
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleString();
   };
 
-  if (loading) {
+  if (loading && Object.keys(profiles).length === 0) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-gray-500 text-sm">Loading assignment log...</div>
@@ -166,12 +174,6 @@ export default function AssignmentLogPage() {
             {assigneeGroups.length} team member{assigneeGroups.length !== 1 ? 's' : ''} with assigned leads
           </p>
         </div>
-        <button
-          onClick={fetchAssignmentLog}
-          className="bg-[#3f3f46] hover:bg-[#52525b] text-white text-sm font-medium rounded-lg px-4 py-2 transition flex items-center gap-2"
-        >
-          Refresh
-        </button>
       </div>
 
       {assigneeGroups.length === 0 ? (
@@ -194,6 +196,7 @@ export default function AssignmentLogPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Team Member</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Leads Assigned</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Assignment</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned By</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
               </tr>
             </thead>
@@ -217,6 +220,9 @@ export default function AssignmentLogPage() {
                   <td className="px-4 py-3 text-gray-500">
                     {formatDate(group.latestAssignment)}
                   </td>
+                  <td className="px-4 py-3 text-gray-200">
+                    {group.latestAssignedByName || group.latestAssignedByEmail || '-'}
+                  </td>
                   <td className="px-4 py-3 text-gray-500 max-w-xs truncate">
                     {group.notes || '-'}
                   </td>
@@ -237,25 +243,39 @@ export default function AssignmentLogPage() {
                   <div className="p-4 text-center text-gray-500 text-sm">Loading...</div>
                 ) : (
                   <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#27272a]">
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lead</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned By</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {(assigneeLeads[selectedGroup.assigneeId] || []).map((lead) => (
-                        <tr key={lead.id} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25]">
-                          <td className="px-4 py-3">
-                            <a
-                              href={`/dashboard/leads/${lead.id}`}
-                              className="text-blue-400 hover:text-blue-300 font-medium"
-                            >
-                              {lead.title || 'Untitled Business'}
-                            </a>
-                          </td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">
-                            {formatDate(lead.assigned_at)}
-                          </td>
-                          <td className="px-4 py-3 text-gray-500 max-w-xs truncate text-xs">
-                            {lead.notes || '-'}
-                          </td>
-                        </tr>
-                      ))}
+                      {(assigneeLeads[selectedGroup.assigneeId] || []).map((lead) => {
+                        const assignedByProfile = profiles[lead.assigned_by || ''];
+                        return (
+                          <tr key={lead.id} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25] transition">
+                            <td className="px-4 py-3">
+                              <a
+                                href={`/dashboard/leads/${lead.id}`}
+                                className="text-blue-400 hover:text-blue-300 font-medium"
+                              >
+                                {lead.title || 'Untitled Business'}
+                              </a>
+                            </td>
+                            <td className="px-4 py-3 text-gray-200">
+                              {assignedByProfile?.full_name || assignedByProfile?.email || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 text-xs">
+                              {formatDate(lead.assigned_at)}
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 max-w-xs truncate text-xs">
+                              {lead.notes || '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

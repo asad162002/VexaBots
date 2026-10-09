@@ -7,6 +7,7 @@ import type { Profile } from '@/lib/types';
 import Link from 'next/link';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import BulkActions from '@/components/bulk-actions';
+import { useAuth } from '@/lib/auth-context';
 
 const STATUS_OPTIONS: { value: LeadStatus | 'all'; label: string; color: string }[] = [
   { value: 'all', label: 'All', color: 'text-gray-400' },
@@ -30,6 +31,7 @@ const SOURCE_OPTIONS: { value: LeadSource | 'all'; label: string }[] = [
 ];
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
@@ -94,6 +96,7 @@ export default function DashboardPage() {
       const updateData: Record<string, unknown> = {
         assigned_to: userId,
         assigned_at: new Date().toISOString(),
+        assigned_by: user?.id || null,
       };
 
       if (notes) {

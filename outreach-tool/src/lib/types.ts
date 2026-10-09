@@ -64,6 +64,7 @@ export type Lead = {
   next_follow_up_at: string | null;
   assigned_to: string | null;
   assigned_at: string | null;
+  assigned_by: string | null;
   created_at: string;
   updated_at: string;
 };

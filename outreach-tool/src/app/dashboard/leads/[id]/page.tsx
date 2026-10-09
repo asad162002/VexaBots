@@ -98,13 +98,15 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
     if (assignedTo) {
       updates.assigned_to = assignedTo;
-      // Only set assigned_at if this is a new assignment (wasn't assigned before)
+      // Only set assigned_at and assigned_by if this is a new assignment (wasn't assigned before)
       if (!lead.assigned_to) {
         updates.assigned_at = new Date().toISOString();
+        updates.assigned_by = user?.id || null;
       }
     } else {
       updates.assigned_to = null;
       updates.assigned_at = null;
+      updates.assigned_by = null;
     }
 
     const { error: updateError } = await supabase
