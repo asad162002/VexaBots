@@ -10,6 +10,8 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
+  const [limitsLoading, setLimitsLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
@@ -21,6 +23,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchProfiles();
+    fetchLimits();
   }, []);
 
   const fetchProfiles = async () => {
@@ -36,6 +39,47 @@ export default function SettingsPage() {
       setProfiles(data ?? []);
     }
     setLoading(false);
+  };
+
+  const fetchLimits = async () => {
+    setLimitsLoading(true);
+    const { data, error } = await supabase
+      .from('assignment_limits')
+      .select('profile_id, max_leads, current_leads');
+
+    if (error) {
+      console.error('Error fetching limits:', error);
+    } else {
+      const limitMap: Record<string, { max_leads: number; current_leads: number }> = {};
+      (data ?? []).forEach((l: any) => {
+        limitMap[l.profile_id] = {
+          max_leads: l.max_leads,
+          current_leads: l.current_leads,
+        };
+      });
+      setAssignLimits(limitMap);
+    }
+    setLimitsLoading(false);
+  };
+
+  const updateLimit = async (profileId: string, maxLeads: number) => {
+    const { error } = await supabase
+      .from('assignment_limits')
+      .upsert({
+        profile_id: profileId,
+        max_leads: maxLeads,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error('Error updating limit:', error);
+      alert('Failed to update limit.');
+    } else {
+      setAssignLimits(prev => ({
+        ...prev,
+        [profileId]: { ...prev[profileId], max_leads: maxLeads },
+      }));
+    }
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -184,6 +228,75 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Assignment Limits */}
+      {isAdmin && (
+        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5 mb-5">
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-gray-400" />
+            Assignment Limits
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Set maximum lead assignments per team member. Leave at 0 for no limit.
+          </p>
+
+          {limitsLoading ? (
+            <div className="flex items-center gap-3 text-gray-500">
+              <Spinner size="sm" />
+              <span>Loading limits...</span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {profiles
+                .filter(p => p.role !== 'admin' || p.id === user?.id)
+                .map((profile) => {
+                  const limit = assignLimits[profile.id]?.max_leads ?? 0;
+                  const current = assignLimits[profile.id]?.current_leads ?? 0;
+                  return (
+                    <div key={profile.id} className="bg-[#27272a] rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 flex-shrink-0">
+                            {profile.email?.charAt(0).toUpperCase() ?? '?'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm text-white font-medium truncate">
+                              {profile.email}
+                              {profile.id === user?.id && ' (you)'}
+                            </p>
+                            {current > 0 && (
+                              <p className="text-xs text-gray-500">
+                                {current} assigned {limit > 0 && `of ${limit} max`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {limit > 0 && current > 0 && (
+                            <div className="w-16 h-2 bg-[#3f3f46] rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-500"
+                                style={{ width: `${Math.min(100, (current / limit) * 100)}%` }}
+                              />
+                            </div>
+                          )}
+                          <input
+                            type="number"
+                            min="0"
+                            value={limit}
+                            onChange={(e) => updateLimit(profile.id, parseInt(e.target.value) || 0)}
+                            className="w-20 bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Invite Member Form */}
       {isAdmin && (

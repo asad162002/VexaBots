@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [followUpReminders, setFollowUpReminders] = useState<Lead[]>([]);
+  const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
 
   const bulk = useBulkSelection(leads);
   const { selectedIds, setSelectedIds, toggleItem, selectAllOnPage, deselectAll, isSelected, isAllSelected, isPartiallySelected } = bulk;
@@ -62,7 +63,27 @@ export default function DashboardPage() {
     fetchProfiles();
     fetchCategories();
     fetchFollowUpReminders();
+    fetchAssignLimits();
   }, [statusFilter, sourceFilter, searchDebounce, sortBy, categoryFilter, assignedFilter]);
+
+  const fetchAssignLimits = async () => {
+    const { data, error } = await supabase
+      .from('assignment_limits')
+      .select('profile_id, max_leads, current_leads');
+
+    if (error) {
+      console.error('Error fetching limits:', error);
+    } else {
+      const limitMap: Record<string, { max_leads: number; current_leads: number }> = {};
+      (data ?? []).forEach((l: any) => {
+        limitMap[l.profile_id] = {
+          max_leads: l.max_leads,
+          current_leads: l.current_leads,
+        };
+      });
+      setAssignLimits(limitMap);
+    }
+  };
 
   const fetchCategories = async () => {
     const { data, error } = await supabase
@@ -113,6 +134,28 @@ export default function DashboardPage() {
   const handleBulkAssign = async (userId: string, notes: string, quantity?: number) => {
     const selectedIdsArray = Array.from(selectedIds);
 
+    // Check assignment limit for this user
+    const limit = assignLimits[userId]?.max_leads ?? 0;
+    const currentCount = assignLimits[userId]?.current_leads ?? 0;
+    
+    if (limit > 0) {
+      const idsToAssign = quantity && quantity > 0 && quantity < selectedIdsArray.length
+        ? selectedIdsArray.slice(0, quantity)
+        : selectedIdsArray;
+
+      if (currentCount + idsToAssign.length > limit) {
+        const available = limit - currentCount;
+        if (available <= 0) {
+          alert(`${profiles.find(p => p.id === userId)?.email || 'This member'} has reached their maximum assignment limit of ${limit} leads.`);
+          return;
+        }
+        const proceed = confirm(
+          `${profiles.find(p => p.id === userId)?.email || 'This member'} has a limit of ${limit} leads and currently has ${currentCount}. You can only assign ${available} more. Proceed with ${available} leads?`
+        );
+        if (!proceed) return;
+      }
+    }
+
     // If quantity is specified, only assign that many leads
     const idsToAssign = quantity && quantity > 0 && quantity < selectedIdsArray.length
       ? selectedIdsArray.slice(0, quantity)
@@ -157,9 +200,18 @@ export default function DashboardPage() {
         previous_assignee: previousAssignee,
         notes: notes || null,
       });
+
+      // Update assignment_limits current_leads count
+      const limit = assignLimits[userId];
+      if (limit) {
+        await supabase.from('assignment_limits').update({
+          current_leads: limit.current_leads + 1,
+        }).eq('profile_id', userId);
+      }
     }
 
     await fetchLeads();
+    fetchAssignLimits();
     // Remove assigned IDs from selection to prevent accidental reassignment
     const remainingIds = selectedIdsArray.filter((id) => !idsToAssign.includes(id));
     if (remainingIds.length === 0) {
@@ -679,6 +731,7 @@ export default function DashboardPage() {
         onAssign={handleBulkAssign}
         onClear={handleBulkClear}
         profiles={profiles}
+        assignLimits={assignLimits}
       />
     </div>
   );

@@ -10,6 +10,7 @@ interface BulkActionsProps {
   onAssign: (userId: string, notes: string, quantity?: number) => Promise<void>;
   onClear: () => void;
   profiles: Profile[];
+  assignLimits?: Record<string, { max_leads: number; current_leads: number }>;
 }
 
 export default function BulkActions({
@@ -18,6 +19,7 @@ export default function BulkActions({
   onAssign,
   onClear,
   profiles,
+  assignLimits,
 }: BulkActionsProps) {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [assignNotes, setAssignNotes] = useState('');
@@ -86,10 +88,15 @@ export default function BulkActions({
                     {profile.full_name?.charAt(0) || profile.email?.charAt(0) || '?'}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
-                      {profile.full_name || profile.email}
+                  <p className="text-sm font-medium text-white truncate">
+                    {profile.full_name || profile.email}
+                  </p>
+                  <p className="text-xs text-gray-500 capitalize">{profile.role}</p>
+                  {assignLimits && assignLimits[profile.id] && assignLimits[profile.id].max_leads > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {assignLimits[profile.id].current_leads}/{assignLimits[profile.id].max_leads} leads
                     </p>
-                    <p className="text-xs text-gray-500 capitalize">{profile.role}</p>
+                  )}
                   </div>
                 </button>
               ))}
