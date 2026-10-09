@@ -99,10 +99,25 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
     if (assignedTo) {
       updates.assigned_to = assignedTo;
+      // Track previous assignee for history
+      const previousAssignee = lead.assigned_to;
+      
       // Only set assigned_at and assigned_by if this is a new assignment (wasn't assigned before)
       if (!lead.assigned_to) {
         updates.assigned_at = new Date().toISOString();
         updates.assigned_by = user?.id || null;
+      }
+      
+      // Log to assignment_history when assignment changes
+      if (assignedTo !== previousAssignee) {
+        await supabase.from('assignment_history').insert({
+          lead_id: id,
+          assigned_to: assignedTo,
+          assigned_by: user?.id || null,
+          assigned_at: new Date().toISOString(),
+          previous_assignee: previousAssignee,
+          notes: notes || null,
+        });
       }
     } else {
       updates.assigned_to = null;

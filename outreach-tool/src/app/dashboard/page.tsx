@@ -94,6 +94,15 @@ export default function DashboardPage() {
       : selectedIdsArray;
 
     for (const id of idsToAssign) {
+      // First get the current assigned_to to record in history (previous assignee)
+      const { data: currentLead, error: fetchError } = await supabase
+        .from('leads')
+        .select('assigned_to')
+        .eq('id', id)
+        .single();
+
+      const previousAssignee = fetchError ? null : currentLead?.assigned_to;
+
       const updateData: Record<string, unknown> = {
         assigned_to: userId,
         assigned_at: new Date().toISOString(),
@@ -111,7 +120,18 @@ export default function DashboardPage() {
       const { error: updateError } = await supabase.from('leads').update(updateData).eq('id', id);
       if (updateError) {
         console.error(`Error assigning lead ${id}:`, updateError);
+        continue;
       }
+
+      // Log to assignment_history
+      await supabase.from('assignment_history').insert({
+        lead_id: id,
+        assigned_to: userId,
+        assigned_by: user?.id || null,
+        assigned_at: new Date().toISOString(),
+        previous_assignee: previousAssignee,
+        notes: notes || null,
+      });
     }
 
     await fetchLeads();

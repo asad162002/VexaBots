@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { type Profile, type LeadStatus } from '@/lib/types';
 import Spinner from '@/components/ui/spinner';
+import { useAuth } from '@/lib/auth-context';
 
 interface MemberStats {
   id: string;
@@ -28,6 +29,8 @@ interface SourceDistribution {
 }
 
 export default function AnalyticsPage() {
+  const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
   const [memberStats, setMemberStats] = useState<MemberStats[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([]);
@@ -43,6 +46,19 @@ export default function AnalyticsPage() {
     setError(null);
 
     try {
+      // Check if user is admin first
+      const { data: currentProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user?.id)
+        .single();
+
+      if (profileError) {
+        console.error('Error checking admin status:', profileError);
+      } else {
+        setIsAdmin(currentProfile?.role === 'admin');
+      }
+
       // Fetch all profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
@@ -225,11 +241,18 @@ export default function AnalyticsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Analytics</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Team performance and lead distribution overview
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Analytics</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Team performance and lead distribution overview
+          </p>
+        </div>
+        {!isAdmin && (
+          <span className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5">
+            Admin only
+          </span>
+        )}
       </div>
 
       {/* Team Performance Cards */}

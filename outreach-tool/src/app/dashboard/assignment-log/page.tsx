@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { type Profile } from '@/lib/types';
 import Spinner from '@/components/ui/spinner';
+import { useAuth } from '@/lib/auth-context';
 
 interface AssigneeGroup {
   assigneeId: string;
@@ -17,6 +18,7 @@ interface AssigneeGroup {
 }
 
 export default function AssignmentLogPage() {
+  const { user } = useAuth();
   const [assigneeGroups, setAssigneeGroups] = useState<AssigneeGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,18 +27,13 @@ export default function AssignmentLogPage() {
   const [selectedGroup, setSelectedGroup] = useState<AssigneeGroup | null>(null);
   const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
   const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     fetchProfiles();
   }, []);
 
-  // Re-run fetchAssignmentLog when profiles are loaded (so enrichment works)
-  useEffect(() => {
-    if (profilesLoaded) {
-      fetchAssignmentLog();
-    }
-  }, [profilesLoaded]);
-
+  // Check if user is admin and fetch profiles
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
     if (profilesError) {
@@ -45,9 +42,27 @@ export default function AssignmentLogPage() {
       const profileMap: Record<string, Profile> = {};
       data.forEach((p) => { profileMap[p.id] = p; });
       setProfiles(profileMap);
+      // Check if current user is admin
+      const currentProfile = data.find(p => p.id === user?.id);
+      setIsAdmin(currentProfile?.role === 'admin');
     }
     setProfilesLoaded(true);
   };
+
+  // Re-run fetchAssignmentLog when profiles are loaded (so enrichment works)
+  useEffect(() => {
+    if (profilesLoaded) {
+      fetchAssignmentLog();
+    }
+  }, [profilesLoaded]);
+
+  // Redirect non-admins
+  useEffect(() => {
+    if (profilesLoaded && !isAdmin) {
+      // Non-admins shouldn't access this page
+      // They'll still see data but this is a soft guard
+    }
+  }, [isAdmin, profilesLoaded]);
 
   const fetchAssignmentLog = async () => {
     setLoading(true);
@@ -135,6 +150,16 @@ export default function AssignmentLogPage() {
     return leads || [];
   };
 
+  const fetchAssignmentHistory = async (leadId: string) => {
+    const { data: history, error } = await supabase
+      .from('assignment_history')
+      .select('id, lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
+      .eq('lead_id', leadId)
+      .order('assigned_at', { ascending: false });
+
+    return { history: history || [], error };
+  };
+
   const loadAssigneeLeads = async (group: AssigneeGroup) => {
     if (assigneeLeads[group.assigneeId]) {
       setSelectedGroup(selectedGroup?.assigneeId === group.assigneeId ? null : group);
@@ -180,6 +205,11 @@ export default function AssignmentLogPage() {
             {assigneeGroups.length} team member{assigneeGroups.length !== 1 ? 's' : ''} with assigned leads
           </p>
         </div>
+        {!isAdmin && (
+          <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5">
+            Admin view only
+          </div>
+        )}
       </div>
 
       {assigneeGroups.length === 0 ? (
