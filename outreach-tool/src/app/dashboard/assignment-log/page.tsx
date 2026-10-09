@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { type Profile } from '@/lib/types';
-import Link from 'next/link';
 
 interface AssigneeGroup {
   assigneeId: string;
@@ -20,9 +19,10 @@ export default function AssignmentLogPage() {
   const [error, setError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [selectedGroup, setSelectedGroup] = useState<AssigneeGroup | null>(null);
+  const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
+  const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    fetchAssignmentLog();
     fetchProfiles();
   }, []);
 
@@ -74,7 +74,7 @@ export default function AssignmentLogPage() {
           assigneeEmail: null,
           leadCount: 0,
           latestAssignment: lead.assigned_at || '',
-          notes: lead.notes,
+          notes: lead.notes || null,
         };
       }
       groups[key].leadCount += 1;
@@ -88,7 +88,7 @@ export default function AssignmentLogPage() {
       }
     });
 
-    // Convert to array and enrich with profile data
+    // Enrich with profile data (from state)
     const groupsArray: AssigneeGroup[] = Object.values(groups).map((group) => {
       const profile = profiles[group.assigneeId];
       if (profile) {
@@ -100,11 +100,6 @@ export default function AssignmentLogPage() {
 
     setAssigneeGroups(groupsArray);
     setLoading(false);
-  };
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleString();
   };
 
   const fetchAssigneeLeads = async (assigneeId: string) => {
@@ -122,9 +117,6 @@ export default function AssignmentLogPage() {
     return leads || [];
   };
 
-  const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
-  const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
-
   const loadAssigneeLeads = async (group: AssigneeGroup) => {
     if (assigneeLeads[group.assigneeId]) {
       setSelectedGroup(selectedGroup?.assigneeId === group.assigneeId ? null : group);
@@ -135,6 +127,18 @@ export default function AssignmentLogPage() {
     setAssigneeLeads((prev) => ({ ...prev, [group.assigneeId]: leads }));
     setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: false }));
     setSelectedGroup(group);
+  };
+
+  // Re-run fetchAssignmentLog when profiles change (so enrichment works)
+  useEffect(() => {
+    if (Object.keys(profiles).length > 0) {
+      fetchAssignmentLog();
+    }
+  }, [profiles]);
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString();
   };
 
   if (loading) {
@@ -162,6 +166,12 @@ export default function AssignmentLogPage() {
             {assigneeGroups.length} team member{assigneeGroups.length !== 1 ? 's' : ''} with assigned leads
           </p>
         </div>
+        <button
+          onClick={fetchAssignmentLog}
+          className="bg-[#3f3f46] hover:bg-[#52525b] text-white text-sm font-medium rounded-lg px-4 py-2 transition flex items-center gap-2"
+        >
+          Refresh
+        </button>
       </div>
 
       {assigneeGroups.length === 0 ? (
@@ -200,9 +210,7 @@ export default function AssignmentLogPage() {
                         onClick={() => loadAssigneeLeads(group)}
                         className="text-xs text-blue-400 hover:text-blue-300"
                       >
-                        {selectedGroup?.assigneeId === group.assigneeId
-                          ? 'Hide'
-                          : 'Show leads'}
+                        {selectedGroup?.assigneeId === group.assigneeId ? 'Hide' : 'Show leads'}
                       </button>
                     </div>
                   </td>
@@ -233,12 +241,12 @@ export default function AssignmentLogPage() {
                       {(assigneeLeads[selectedGroup.assigneeId] || []).map((lead) => (
                         <tr key={lead.id} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25]">
                           <td className="px-4 py-3">
-                            <Link
+                            <a
                               href={`/dashboard/leads/${lead.id}`}
                               className="text-blue-400 hover:text-blue-300 font-medium"
                             >
                               {lead.title || 'Untitled Business'}
-                            </Link>
+                            </a>
                           </td>
                           <td className="px-4 py-3 text-gray-500 text-xs">
                             {formatDate(lead.assigned_at)}
