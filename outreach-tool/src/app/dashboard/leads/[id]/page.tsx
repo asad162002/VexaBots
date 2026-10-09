@@ -29,8 +29,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
   const [status, setStatus] = useState<LeadStatus>('new');
-  const [notes, setNotes] = useState('');
-  const [nextFollowUp, setNextFollowUp] = useState('');
   const [assignedTo, setAssignedTo] = useState<string>('');
   
   // Activity log state
@@ -73,8 +71,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
     setLead(data);
     setStatus(data.status);
-    setNotes(data.notes ?? '');
-    setNextFollowUp(data.next_follow_up_at ? new Date(data.next_follow_up_at).toISOString().split('T')[0] : '');
     setAssignedTo(data.assigned_to ?? '');
     fetchActivities();
     setLoading(false);
@@ -147,7 +143,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
     const updates: Record<string, unknown> = {
       status,
-      notes: notes.trim() || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -155,13 +150,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       updates.owner_id = user.id;
     }
 
-    if (nextFollowUp) {
-      updates.next_follow_up_at = new Date(nextFollowUp).toISOString();
-    } else {
-      updates.next_follow_up_at = null;
-    }
-
-    if (status !== 'new') {
+    if (status !== 'new' && status !== lead.status) {
       updates.last_contacted_at = new Date().toISOString();
     }
 
@@ -184,7 +173,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           assigned_by: user?.id || null,
           assigned_at: new Date().toISOString(),
           previous_assignee: previousAssignee,
-          notes: notes || null,
+          notes: lead?.notes || null,
         });
       }
     } else {
@@ -575,29 +564,15 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             )}
 
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
-                Notes (short)
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Quick note about this contact..."
-                rows={3}
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition"
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
-                Next Follow-up
-              </label>
-              <input
-                type="date"
-                value={nextFollowUp}
-                onChange={(e) => setNextFollowUp(e.target.value)}
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-              />
+            <div className="text-xs text-gray-500 mb-4 space-y-1">
+              {lead.last_contacted_at && (
+                <p>Last contacted: {new Date(lead.last_contacted_at).toLocaleString()}</p>
+              )}
+              {lead.next_follow_up_at && (
+                <p className="text-blue-400 font-medium">
+                  Follow-up due: {new Date(lead.next_follow_up_at).toLocaleDateString()}
+                </p>
+              )}
             </div>
 
             <button

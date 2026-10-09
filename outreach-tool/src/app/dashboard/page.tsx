@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [assignedFilter, setAssignedFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [followUpReminders, setFollowUpReminders] = useState<Lead[]>([]);
 
   const bulk = useBulkSelection(leads);
   const { selectedIds, setSelectedIds, toggleItem, selectAllOnPage, deselectAll, isSelected, isAllSelected, isPartiallySelected } = bulk;
@@ -60,6 +61,7 @@ export default function DashboardPage() {
     fetchLeads();
     fetchProfiles();
     fetchCategories();
+    fetchFollowUpReminders();
   }, [statusFilter, sourceFilter, searchDebounce, sortBy, categoryFilter, assignedFilter]);
 
   const fetchCategories = async () => {
@@ -82,6 +84,29 @@ export default function DashboardPage() {
       console.error('Error fetching profiles:', error);
     } else {
       setProfiles(data ?? []);
+    }
+  };
+
+  const fetchFollowUpReminders = async () => {
+    if (!user?.id) return;
+    
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    
+    const { data: reminders, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('assigned_to', user.id)
+      .not('next_follow_up_at', 'is', null)
+      .gte('next_follow_up_at', now.toISOString())
+      .lte('next_follow_up_at', in24h.toISOString())
+      .order('next_follow_up_at', { ascending: true })
+      .limit(5);
+
+    if (error) {
+      console.error('Error fetching reminders:', error);
+    } else {
+      setFollowUpReminders(reminders ?? []);
     }
   };
 
@@ -419,6 +444,37 @@ export default function DashboardPage() {
               ? `${selectedIds.size} selected on this page`
               : 'Select all on page'}
           </span>
+        </div>
+      )}
+
+      {/* Follow-up Reminders */}
+      {followUpReminders.length > 0 && (
+        <div className="mb-6 bg-yellow-500/5 border border-yellow-500/30 rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-yellow-300 mb-3 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Upcoming Follow-ups
+          </h2>
+          <div className="space-y-2">
+            {followUpReminders.map((lead) => (
+              <div key={lead.id} className="bg-[#1a1a1a] border border-[#27272a] rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Link href={`/dashboard/leads/${lead.id}`} className="text-blue-400 hover:text-blue-300 font-medium text-sm truncate">
+                    {lead.title || 'Untitled Business'}
+                  </Link>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[lead.status]}`}>
+                    {STATUS_LABELS[lead.status]}
+                  </span>
+                </div>
+                {lead.next_follow_up_at && (
+                  <p className="text-xs text-yellow-400 mt-1">
+                    Due: {new Date(lead.next_follow_up_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
