@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, Filter, Users, Mail, ExternalLink, Copy } from 'lucide-react';
+import Spinner from '@/components/ui/spinner';
 
 interface LinkedInLead {
   id: string;
@@ -154,7 +155,10 @@ export default function LinkedinLeadsPage() {
   if (loading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
-        <div className="text-gray-400">Loading LinkedIn leads...</div>
+        <div className="flex items-center gap-3 text-gray-400">
+          <Spinner size="md" />
+          <span>Loading LinkedIn leads...</span>
+        </div>
       </div>
     );
   }
@@ -303,8 +307,9 @@ export default function LinkedinLeadsPage() {
 
       {/* Loading more indicator */}
       {loadingMore && (
-        <div className="text-center py-6 text-gray-400">
-          Loading more leads...
+        <div className="text-center py-6 text-gray-400 flex items-center justify-center gap-3">
+          <Spinner size="sm" />
+          <span>Loading more leads...</span>
         </div>
       )}
     </div>

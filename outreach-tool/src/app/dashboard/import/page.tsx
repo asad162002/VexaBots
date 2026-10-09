@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { LeadSource } from '@/lib/types';
 import { FileJson, FileText, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import Spinner from '@/components/ui/spinner';
 
 interface ColumnMapping {
   csvColumn: string | null;

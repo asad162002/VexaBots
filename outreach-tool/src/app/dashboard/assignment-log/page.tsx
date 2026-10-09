@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { type Profile } from '@/lib/types';
+import Spinner from '@/components/ui/spinner';
 
 interface AssigneeGroup {
   assigneeId: string;
@@ -152,7 +153,10 @@ export default function AssignmentLogPage() {
   if (loading && Object.keys(profiles).length === 0) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="text-gray-500 text-sm">Loading assignment log...</div>
+        <div className="flex items-center gap-3 text-gray-500">
+          <Spinner size="md" />
+          <span>Loading assignment log...</span>
+        </div>
       </div>
     );
   }
@@ -240,7 +244,10 @@ export default function AssignmentLogPage() {
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {loadingLeads[selectedGroup.assigneeId] ? (
-                  <div className="p-4 text-center text-gray-500 text-sm">Loading...</div>
+                  <div className="p-4 flex items-center justify-center gap-3 text-gray-500 text-sm">
+                    <Spinner size="sm" />
+                    <span>Loading leads...</span>
+                  </div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>

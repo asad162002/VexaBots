@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus, type Profile } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import Spinner from '@/components/ui/spinner';
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -127,7 +128,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
-        <div className="text-gray-400 text-sm">Loading lead...</div>
+        <div className="flex items-center gap-3 text-gray-400">
+          <Spinner size="md" />
+          <span>Loading lead...</span>
+        </div>
       </div>
     );
   }

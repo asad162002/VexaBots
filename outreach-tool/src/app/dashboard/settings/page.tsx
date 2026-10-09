@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import Spinner from '@/components/ui/spinner';
 import { Users, Shield, Mail, Trash2, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -132,7 +133,10 @@ export default function SettingsPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-gray-500 text-sm">Loading...</div>
+            <div className="flex items-center gap-3 text-gray-500">
+              <Spinner size="md" />
+              <span>Loading team members...</span>
+            </div>
           </div>
         ) : profiles.length === 0 ? (
           <div className="text-center py-8">

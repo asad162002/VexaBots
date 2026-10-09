@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import BulkActions from '@/components/bulk-actions';
 import { useAuth } from '@/lib/auth-context';
+import Spinner from '@/components/ui/spinner';
 
 const STATUS_OPTIONS: { value: LeadStatus | 'all'; label: string; color: string }[] = [
   { value: 'all', label: 'All', color: 'text-gray-400' },
@@ -404,7 +405,10 @@ export default function DashboardPage() {
       {/* Lead list */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="text-gray-500 text-sm">Loading leads...</div>
+          <div className="flex items-center gap-3 text-gray-500">
+            <Spinner size="md" />
+            <span>Loading leads...</span>
+          </div>
         </div>
       ) : sortedLeads.length === 0 ? (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
