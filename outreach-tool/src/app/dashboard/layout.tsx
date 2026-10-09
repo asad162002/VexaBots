@@ -13,6 +13,7 @@ import {
   Plus,
   Upload,
   BarChart3,
+  Clock,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
   { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/dashboard/activity-feed', label: 'Activity Feed', icon: Clock },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
