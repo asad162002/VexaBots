@@ -154,6 +154,17 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       updates.last_contacted_at = new Date().toISOString();
     }
 
+    // Log status change to history
+    if (status !== lead.status) {
+      await supabase.from('lead_status_history').insert({
+        lead_id: id,
+        profile_id: user?.id || null,
+        old_status: lead.status,
+        new_status: status,
+        reason: null,
+      });
+    }
+
     if (assignedTo) {
       updates.assigned_to = assignedTo;
       // Track previous assignee for history
