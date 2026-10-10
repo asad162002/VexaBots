@@ -66,7 +66,21 @@ test.describe('Phase 3 End-to-End Functional Tests', () => {
     
     // 8. Check activity feed shows the new activity
     await page.goto('/dashboard/activity-feed');
+    await page.waitForTimeout(2000);
+    // Set filter to "All Time" to see all activities
+    const dateSelect = await page.locator('select');
+    if (await dateSelect.count() > 0) {
+      await dateSelect.first().selectOption({ value: 'all' });
+    }
     await page.waitForTimeout(3000);
+    
+    // Expand the first user group
+    const userGroups = await page.$$('button.w-full.flex.items-center.justify-between');
+    if (userGroups.length > 0) {
+      await userGroups[0].click();
+      await page.waitForTimeout(2000);
+    }
+    
     const feedHasActivity = await page.locator('text=CALLED CLIENT').or(
       page.locator('text=Called client')
     ).first().isVisible();

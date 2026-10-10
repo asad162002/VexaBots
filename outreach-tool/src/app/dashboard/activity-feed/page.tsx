@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { type Profile } from '@/lib/types';
 import Spinner from '@/components/ui/spinner';
@@ -43,6 +43,13 @@ const ACTIVITY_COLORS = {
   other: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
 };
 
+const DATE_FILTERS = [
+  { value: '24h', label: '24 Hours' },
+  { value: '7d', label: 'Last 7 Days' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: 'all', label: 'All Time' },
+];
+
 export default function ActivityFeedPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +58,7 @@ export default function ActivityFeedPage() {
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [leads, setLeads] = useState<Record<string, { id: string; title: string | null; status: string }>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [dateFilter, setDateFilter] = useState<string>('7d');
 
   useEffect(() => {
     fetchProfiles();
@@ -60,7 +68,7 @@ export default function ActivityFeedPage() {
     if (profilesLoaded) {
       fetchActivities();
     }
-  }, [profilesLoaded]);
+  }, [profilesLoaded, dateFilter]);
 
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
@@ -74,16 +82,38 @@ export default function ActivityFeedPage() {
     setProfilesLoaded(true);
   };
 
+  const getDateFilterValue = (filter: string): string | null => {
+    if (filter === 'all') return null;
+    const now = new Date();
+    let pastDate: Date;
+    if (filter === '24h') {
+      pastDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    } else if (filter === '7d') {
+      pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (filter === '30d') {
+      pastDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else {
+      return null;
+    }
+    return pastDate.toISOString();
+  };
+
   const fetchActivities = async () => {
     setLoading(true);
     setError(null);
 
-    // Fetch recent activities (last 100)
-    const { data: activitiesData, error: activitiesError } = await supabase
+    let query = supabase
       .from('lead_activities')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(100);
+
+    const dateFilterValue = getDateFilterValue(dateFilter);
+    if (dateFilterValue) {
+      query = query.gte('created_at', dateFilterValue);
+    }
+
+    const { data: activitiesData, error: activitiesError } = await query;
 
     if (activitiesError) {
       console.error('Error fetching activities:', activitiesError);
@@ -93,12 +123,8 @@ export default function ActivityFeedPage() {
     }
 
     setActivities(activitiesData ?? []);
-    
-    // Auto-expand first group
-    if (activitiesData && activitiesData.length > 0) {
-      const firstProfileId = activitiesData[0].profile_id;
-      setExpandedGroups({ [firstProfileId]: true });
-    }
+    // Do NOT auto-expand first group - all collapsed by default
+    setExpandedGroups({});
 
     // Fetch lead titles for activities
     const leadIds = Array.from(new Set((activitiesData ?? []).map((a) => a.lead_id)));
@@ -121,28 +147,27 @@ export default function ActivityFeedPage() {
   };
 
   // Group activities by profile
-  const groupedActivities: ActivityGroup[] = [];
-  const groups: Record<string, ActivityGroup> = {};
+  const groupedActivities: ActivityGroup[] = useMemo(() => {
+    const groups: Record<string, ActivityGroup> = {};
 
-  activities.forEach((activity) => {
-    const profileId = activity.profile_id;
-    if (!groups[profileId]) {
-      const profile = profiles[profileId];
-      groups[profileId] = {
-        profileId,
-        profileName: profile?.full_name || profile?.email || 'Unknown',
-        profileEmail: profile?.email || null,
-        count: 0,
-        activities: [],
-      };
-    }
-    groups[profileId].count += 1;
-    groups[profileId].activities.push(activity);
-  });
+    activities.forEach((activity) => {
+      const profileId = activity.profile_id;
+      if (!groups[profileId]) {
+        const profile = profiles[profileId];
+        groups[profileId] = {
+          profileId,
+          profileName: profile?.full_name || profile?.email || 'Unknown',
+          profileEmail: profile?.email || null,
+          count: 0,
+          activities: [],
+        };
+      }
+      groups[profileId].count += 1;
+      groups[profileId].activities.push(activity);
+    });
 
-  Object.values(groups).forEach((group) => {
-    groupedActivities.push(group);
-  });
+    return Object.values(groups);
+  }, [activities, profiles]);
 
   const toggleGroup = (profileId: string) => {
     setExpandedGroups((prev) => ({
@@ -197,12 +222,26 @@ export default function ActivityFeedPage() {
             Team activity grouped by member ({activities.length} total activities)
           </p>
         </div>
-        <button
-          onClick={fetchActivities}
-          className="text-xs text-gray-400 hover:text-white border border-[#27272a] hover:border-[#3f3f46] rounded-lg px-3 py-1.5 transition"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Date filter */}
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-3 py-1.5 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {DATE_FILTERS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={fetchActivities}
+            className="text-xs text-gray-400 hover:text-white border border-[#27272a] hover:border-[#3f3f46] rounded-lg px-3 py-1.5 transition"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {groupedActivities.length === 0 ? (
@@ -238,7 +277,10 @@ export default function ActivityFeedPage() {
                       <p className="text-sm font-medium text-white">
                         {group.profileName}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      {group.profileEmail && group.profileName !== group.profileEmail && (
+                        <p className="text-xs text-gray-500">{group.profileEmail}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-0.5">
                         {group.count} {group.count === 1 ? 'activity' : 'activities'}
                       </p>
                     </div>

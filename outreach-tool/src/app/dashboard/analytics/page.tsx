@@ -36,10 +36,11 @@ export default function AnalyticsPage() {
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<string>('all');
 
   useEffect(() => {
     fetchAnalytics();
-  }, []);
+  }, [dateFilter]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -67,9 +68,25 @@ export default function AnalyticsPage() {
       if (profilesError) throw profilesError;
 
       // Fetch all leads with assignment data
-      const { data: leads, error: leadsError } = await supabase
+      let leadsQuery = supabase
         .from('leads')
         .select('assigned_to, assigned_by, status, source, category_name');
+
+      // Apply date filter based on created_at
+      const now = new Date();
+      let pastDate: Date | null = null;
+      if (dateFilter === '24h') {
+        pastDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      } else if (dateFilter === '7d') {
+        pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else if (dateFilter === '30d') {
+        pastDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+      if (pastDate) {
+        leadsQuery = leadsQuery.gte('created_at', pastDate.toISOString());
+      }
+
+      const { data: leads, error: leadsError } = await leadsQuery;
 
       if (leadsError) throw leadsError;
 
@@ -253,6 +270,18 @@ export default function AnalyticsPage() {
             Admin only
           </span>
         )}
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="px-3 py-1.5 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Time</option>
+          <option value="30d">Last 30 Days</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="24h">Last 24 Hours</option>
+        </select>
       </div>
 
       {/* Team Performance Cards */}

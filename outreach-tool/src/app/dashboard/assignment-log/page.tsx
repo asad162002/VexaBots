@@ -28,6 +28,7 @@ export default function AssignmentLogPage() {
   const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
   const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const [dateFilter, setDateFilter] = useState<string>('all');
 
   useEffect(() => {
     fetchProfiles();
@@ -54,7 +55,7 @@ export default function AssignmentLogPage() {
     if (profilesLoaded) {
       fetchAssignmentLog();
     }
-  }, [profilesLoaded]);
+  }, [profilesLoaded, dateFilter]);
 
   // Redirect non-admins
   useEffect(() => {
@@ -69,12 +70,28 @@ export default function AssignmentLogPage() {
     setError(null);
 
     // Fetch leads with assignment data
-    const { data: leads, error: leadsError } = await supabase
+    let leadsQuery = supabase
       .from('leads')
       .select('id, title, assigned_to, assigned_at, assigned_by, notes')
       .not('assigned_to', 'is', null)
       .order('assigned_at', { ascending: false })
       .limit(500);
+
+    // Apply date filter based on assigned_at
+    const now = new Date();
+    let pastDate: Date | null = null;
+    if (dateFilter === '24h') {
+      pastDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    } else if (dateFilter === '7d') {
+      pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (dateFilter === '30d') {
+      pastDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+    if (pastDate) {
+      leadsQuery = leadsQuery.gte('assigned_at', pastDate.toISOString());
+    }
+
+    const { data: leads, error: leadsError } = await leadsQuery;
 
     if (leadsError) {
       console.error('Error fetching assignment log:', leadsError);
@@ -210,6 +227,18 @@ export default function AssignmentLogPage() {
             Admin view only
           </div>
         )}
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="px-3 py-1.5 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Time</option>
+          <option value="30d">Last 30 Days</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="24h">Last 24 Hours</option>
+        </select>
       </div>
 
       {assigneeGroups.length === 0 ? (
