@@ -628,6 +628,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       Type
                     </label>
                     <select
+                      id="activity-type"
                       value={activityType}
                       onChange={(e) => setActivityType(e.target.value)}
                       className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -645,6 +646,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       Outcome
                     </label>
                     <input
+                      id="activity-outcome"
                       type="text"
                       value={activityOutcome}
                       onChange={(e) => setActivityOutcome(e.target.value)}
@@ -658,6 +660,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     Details
                   </label>
                   <textarea
+                    id="activity-content"
                     value={activityContent}
                     onChange={(e) => setActivityContent(e.target.value)}
                     placeholder="What happened in this interaction..."
@@ -670,6 +673,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     Next Follow-up
                   </label>
                   <input
+                    id="activity-follow-up"
                     type="date"
                     value={activityFollowUp}
                     onChange={(e) => setActivityFollowUp(e.target.value)}

@@ -273,8 +273,8 @@ export default function ImportPage() {
       }
       inserted++;
 
-      // Upload enriched leads to linkedin_leads
-      if (owner?.name) {
+      // Upload enriched leads to linkedin_leads (only for LinkedIn-sourced imports, not Google Maps)
+      if (owner?.name && lead.source !== 'google_maps') {
         const enriched_record = {
           place_id: lead.place_id,
           lead_name: owner.name,
