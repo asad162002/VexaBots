@@ -54,7 +54,8 @@ export default function AnalyticsPage() {
         .eq('id', user?.id)
         .single();
 
-      if (profileError) {
+      if (profileError && profileError.code !== 'PGRST116') {
+        // PGRST116 = no rows found, which is fine for non-admin users
         console.error('Error checking admin status:', profileError);
       } else {
         setIsAdmin(currentProfile?.role === 'admin');
