@@ -230,6 +230,15 @@ export default function DashboardPage() {
   const fetchLeads = async () => {
     setLoading(true);
 
+    // Get current user's profile to check role
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user?.id)
+      .single();
+
+    const isAdmin = currentProfile?.role === 'admin';
+
     let query = supabase
       .from('leads')
       .select('*')
@@ -241,6 +250,11 @@ export default function DashboardPage() {
             : 'created_at',
         { ascending: sortBy === 'follow_up' }
       );
+
+    // Non-admins only see leads assigned to them
+    if (!isAdmin && user?.id) {
+      query = query.eq('assigned_to', user.id);
+    }
 
     if (statusFilter !== 'all') {
       query = query.eq('status', statusFilter);
