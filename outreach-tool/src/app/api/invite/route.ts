@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-// This route creates a Supabase user via the Management API
-// Requires the Management API PAT in SURPABASE_MANAGEMENT_TOKEN env var
+// This route creates a Supabase auth user and sends an invite email.
+// Uses the service_role key for admin operations.
+// Requires SUPABASE_SERVICE_ROLE_KEY in .env.local
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,54 +13,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
     }
 
-    const managementToken = process.env.SUPABASE_MANAGEMENT_TOKEN;
-    const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/https:\/\/(.+?)\.supabase\.co/)?.[1];
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!managementToken) {
+    if (!serviceRoleKey) {
       return NextResponse.json(
-        { error: 'Server not configured. Ask the admin to set SUPABASE_MANAGEMENT_TOKEN.' },
+        { error: 'Server not configured. Set SUPABASE_SERVICE_ROLE_KEY in environment.' },
         { status: 500 }
       );
     }
 
-    // Create the auth user via Management API
-    const authRes = await fetch(
-      `https://api.supabase.com/v1/projects/${projectRef}/auth/users`,
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+    });
+
+    // Create user and send invite email via Admin SDK
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      email.toLowerCase().trim(),
       {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${managementToken}`,
-          'Content-Type': 'application/json',
-          'apikey': managementToken,
+        data: {
+          full_name: name || '',
+          role: role || 'member',
         },
-        body: JSON.stringify({
-          email: email.toLowerCase().trim(),
-          send_email_invite: true,
-          data: {
-            full_name: name || '',
-            role: role || 'member',
-          },
-        }),
       }
     );
 
-    const authData = await authRes.json();
-
-    if (!authRes.ok) {
+    if (authError) {
       // Check if user already exists
-      if (authRes.status === 400 && authData.message?.includes('already been invited')) {
+      if (authError.message?.includes('already been invited')) {
         return NextResponse.json(
           { success: true, message: 'User already invited. They can sign in with the existing invite.' },
           { status: 200 }
         );
       }
-      return NextResponse.json({ error: authData.message || 'Failed to create user' }, { status: authRes.status });
+      return NextResponse.json({ error: authError.message || 'Failed to create user' }, { status: 400 });
+    }
+
+    // Create profile entry if user was created
+    if (authData?.user?.id) {
+      await supabaseAdmin.from('profiles').upsert({
+        id: authData.user.id,
+        email: email.toLowerCase().trim(),
+        full_name: name || '',
+        role: role || 'member',
+      });
+
+      // Create default assignment limit entry (0 = no limit)
+      await supabaseAdmin.from('assignment_limits').upsert({
+        profile_id: authData.user.id,
+        max_leads: 0,
+        current_leads: 0,
+      });
     }
 
     return NextResponse.json({
       success: true,
       message: `Invitation sent to ${email}`,
-      user_id: authData.id,
+      user_id: authData?.user?.id,
     });
   } catch (err) {
     console.error('Invite error:', err);
