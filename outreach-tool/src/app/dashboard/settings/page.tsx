@@ -63,6 +63,8 @@ export default function SettingsPage() {
   };
 
   const updateLimit = async (profileId: string, maxLeads: number) => {
+    // Use upsert with on: 'profile_id' to avoid duplicate key errors
+    // when the assignment_limits row already exists
     const { error } = await supabase
       .from('assignment_limits')
       .upsert({
@@ -70,6 +72,9 @@ export default function SettingsPage() {
         max_leads: maxLeads,
         current_leads: assignLimits[profileId]?.current_leads ?? 0,
         updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'profile_id',
+        ignoreDuplicates: false,
       });
 
     if (error) {
