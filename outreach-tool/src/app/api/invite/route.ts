@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// This route creates a Supabase auth user and sends an invite email.
+// This route creates a Supabase auth user.
 // Uses the service_role key for admin operations.
 // Requires SUPABASE_SERVICE_ROLE_KEY in .env.local
 
@@ -31,35 +31,37 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create user and send invite email via Admin SDK
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email.toLowerCase().trim(),
-      {
-        data: {
-          full_name: name || '',
-          role: role || 'member',
-        },
-      }
-    );
+    // Create user with email already confirmed (no invite email sent)
+    // User can login with "magic link" or "forgot password"
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: email.toLowerCase().trim(),
+      email_confirm: true,
+      user_metadata: {
+        full_name: name || '',
+      },
+      app_metadata: {
+        role: role || 'member',
+      },
+    });
 
     if (authError) {
-      // Check if user already exists
-      if (authError.message?.includes('already been invited')) {
+      if (authError.message?.includes('already been invited') || authError.message?.includes('already registered')) {
         return NextResponse.json(
-          { success: true, message: 'User already invited. They can sign in with the existing invite.' },
+          { success: true, message: 'User already exists. They can sign in directly.', email: email.toLowerCase().trim() },
           { status: 200 }
         );
       }
       return NextResponse.json({ error: authError.message || 'Failed to create user' }, { status: 400 });
     }
 
-    // Create profile entry if user was created
+    // Create profile entry
     if (authData?.user?.id) {
       await supabaseAdmin.from('profiles').upsert({
         id: authData.user.id,
         email: email.toLowerCase().trim(),
         full_name: name || '',
         role: role || 'member',
+        created_at: new Date().toISOString(),
       });
 
       // Create default assignment limit entry (0 = no limit)
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Invitation sent to ${email}`,
+      message: `Team member added: ${email}. They can sign in with magic link or password reset.`,
       user_id: authData?.user?.id,
     });
   } catch (err) {

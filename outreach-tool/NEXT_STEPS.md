@@ -7,25 +7,33 @@
 4. Cold caller data on lead detail (Google Maps link, address, rating, competitors, copyable phone)
 5. Admin import page (CSV + JSON scraper format)
 6. Upload script for n8n automation
+7. **Phase 1 (Basic CRUD)**: Basic CRUD on leads table, LinkedIn/Apollo enrichment tables, upload script + web import
+8. **Phase 2 (Scoring & Prioritization)**: ICP score calculation, lead scoring, assignment/claiming for team members
+9. **Phase 3 (Outreach Tracking)**: Activity logging (calls, texts, emails, meetings), follow-up scheduling, activity timeline, assignment limits, status audit trail
+10. **Invite team members** via Settings page (now working with service_role key)
+11. **All E2E tests passing (68 tests)** covering login, dashboard, lead detail, assignment, activity logging, JSON/CSV import
 
 ## What's Next (Priority Order)
-
-### 1. Fix Upload Script Integration
-- The Python script uses direct REST API calls (not supabase-py) since supabase-py wasn't installed
-- Need to save it to Windows Desktop for your workflow
-- Update the service_role key placeholder
-
-### 2. Test the Web Import Page
+### 1. Test the Web Import Page
 - Upload a JSON file via the /dashboard/import page
-- Verify it splits data correctly into 3 tables
+- Verify it splits data correctly into 3 tables (leads, linkedin_leads, tech_stack)
 
-### RLS Policies
+### 2. Phase 4 - n8n Integration
+- Deploy the upload script as an n8n node
+- Auto-import from scraper output
+- Webhook receiver for real-time updates
+
+### 3. Phase 5 - Production Deployment
+- Deploy to Vercel
+- Move from dev to prod Supabase
+- Team access control (role-based)
+
+## RLS Policies
 - The leads table shows data correctly via anon key
 - But LinkedIn leads were initially failing - fixed by adding RLS policies
 - **Assignment update failing**: The `leads_update_own` policy only allowed `auth.uid() = owner_id`, but leads with NULL owner_id were blocked. Fixed by adding `(owner_id IS NULL)` condition to update policy.
 
 ## Key Supabase Lessons (Don't Forget!)
-
 ### PAT Token Issues
 - The Pat token `sbp_fc3a...` works for Management API but NOT for REST API
 - The JWT service_role key works for REST API (read/write/upsert/delete)
@@ -37,6 +45,12 @@
 - REST API accepts the JWT fine for reads, writes, deletes, patches
 - BUT deletes via anon key return 204 (success) WITHOUT actually deleting - it's silently skipped due to RLS
 - Solution: Use service_role JWT for deletes, not anon key
+
+### User Invite API
+- The Management API endpoint `https://api.supabase.com/v1/projects/{ref}/auth/users` no longer works (returns "Cannot POST")
+- Use the Supabase Admin SDK (`supabase.auth.admin.inviteUserByEmail()`) with the service_role key instead
+- The service_role key is the full JWT: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpteWdjbG9meXhhbnByd2tsZW1hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTM5NDUyMSwiZXhwIjoyMTA0OTcwNTIxfQ.2xGg6TInQhKquLcCyfVQe2oOdg_AZIl2d9VuVThPhD0`
+- Note: Supabase has email rate limits on invites - 3 invites per hour for the same email by default
 
 ### Execute SQL via MCP
 - MCP server's `execute_sql` works with the PAT token
@@ -54,33 +68,6 @@
 - Project URL: https://zmygclofyxanprwklema.supabase.co
 - REST API: https://zmygclofyxanprwklema.supabase.co/rest/v1/
 - Database: PostgreSQL (hosted)
-
-## Next Phase Planning (Vexabots Lead Tool)
-
-### Phase 1 (Current) - Done
-- Basic CRUD on leads table
-- LinkedIn/Apollo enrichment tables
-- Upload script + web import
-
-### Phase 2 - Scoring & Prioritization
-- Implement ICP score calculation properly
-- Lead scoring based on ad signals, owner data, company size
-- Lead assignment/claiming for team members
-
-### Phase 3 - Outreach Tracking
-- Log calls, texts, emails per lead
-- Follow-up scheduling and reminders
-- Activity timeline per lead
-
-### Phase 4 - n8n Integration
-- Deploy the upload script as an n8n node
-- Auto-import from scraper output
-- Webhook receiver for real-time updates
-
-### Phase 5 - Production Deployment
-- Deploy to Vercel
-- Move from dev to prod Supabase
-- Team access control (role-based)
 
 ## Environment Notes
 - Server: npm run dev on port 3000 (may need kill -9 PID if stuck)
