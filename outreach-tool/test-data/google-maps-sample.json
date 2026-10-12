@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Test Business GMaps",
+    "main_category": "restaurant",
+    "categories": ["restaurant", "cafe"],
+    "phone": "+1234567890",
+    "address": "123 Main St",
+    "website": "https://testbusiness.com",
+    "rating": 4.5,
+    "reviews": 10,
+    "place_id": "test_place_001",
+    "query": "restaurants in NYC",
+    "link": "https://maps.google.com/?cid=123",
+    "is_spending_on_ads": false,
+    "coordinates": {"lat": 40.7128, "lng": -74.0060},
+    "detailed_address": {
+      "city": "New York",
+      "postal_code": "10001",
+      "country_code": "US"
+    }
+  }
+]

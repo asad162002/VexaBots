@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import * as path from 'path';
 
 async function loginAsync({ page }: { page: import('@playwright/test').Page }) {
   await page.goto('/');
@@ -208,15 +209,15 @@ test.describe('Vexabots Outreach Tool - E2E Tests', () => {
 
     test('should load with heading', async ({ page }) => {
       await page.goto('/dashboard/import');
-      await expect(page.getByRole('heading', { name: 'Import CSV' })).toBeVisible();
-      await expect(page.getByText('Upload a CSV file and map its columns to lead fields')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Import Leads' })).toBeVisible();
+      await expect(page.getByText('Upload a CSV or JSON file (google-maps-scraper format) to import leads.')).toBeVisible();
     });
 
     test('should show file upload area', async ({ page }) => {
       await page.goto('/dashboard/import');
       await expect(page.getByText('Click to upload')).toBeVisible();
       await expect(page.getByText('drag and drop')).toBeVisible();
-      await expect(page.getByText('CSV file, max 5MB')).toBeVisible();
+      await expect(page.getByText('CSV or JSON file, max 5MB')).toBeVisible();
     });
 
     test('should show column mapping after CSV upload', async ({ page }) => {
@@ -251,6 +252,51 @@ test.describe('Vexabots Outreach Tool - E2E Tests', () => {
         buffer: Buffer.from(csvContent),
       });
       await expect(page.getByText('Default Source for imported leads')).toBeVisible({ timeout: 10000 });
+    });
+
+    test('should import CSV file and verify leads in dashboard', async ({ page }) => {
+      const csvPath = path.resolve(__dirname, '../test-data/csv-sample.csv');
+
+      // Navigate to import page
+      await page.goto('/dashboard/import');
+      await page.waitForTimeout(1000);
+
+      // Upload the CSV file
+      await page.locator('input[type="file"]').setInputFiles(csvPath);
+      await page.waitForTimeout(2000);
+
+      // Verify column mapping appears
+      await expect(page.getByRole('heading', { name: 'Map Columns' })).toBeVisible({ timeout: 10000 });
+
+      // Verify CSV headers are detected
+      await expect(page.locator('text=Business Name').first()).toBeVisible();
+      await expect(page.locator('text=Website').first()).toBeVisible();
+      await expect(page.locator('text=Phone').first()).toBeVisible();
+
+      // Verify column mapping dropdowns exist
+      const mappingSelects = page.locator('select');
+      expect(await mappingSelects.count()).toBeGreaterThan(3); // At least one per column
+
+      // Click Import button
+      await page.getByRole('button', { name: /Import/i }).last().click();
+
+      // Wait for success message
+      await expect(page.locator('text=Import complete').first()).toBeVisible({ timeout: 30000 });
+      await expect(page.locator('text=3 added').first()).toBeVisible({ timeout: 10000 });
+      await page.screenshot({ path: '/tmp/csv-import-success.png', fullPage: true });
+
+      // Navigate to dashboard and verify the leads appear
+      await page.goto('/dashboard');
+      await page.waitForTimeout(3000);
+
+      // Search for a specific lead
+      const searchInput = page.locator('input[placeholder*="Search"]');
+      await searchInput.fill('Test CSV Business');
+      await page.waitForTimeout(2000);
+
+      await expect(page.locator('text=Test CSV Business').first()).toBeVisible({ timeout: 10000 });
+      await page.screenshot({ path: '/tmp/csv-lead-found.png', fullPage: true });
+      console.log('CSV import verified: Test CSV Business found in dashboard');
     });
   });
 });

@@ -1,0 +1,119 @@
+[
+  {
+    "name": "Starbucks Coffee Company",
+    "main_category": "Coffee shop",
+    "categories": ["Coffee shop", "Breakfast restaurant", "Cafe", "Coffee store", "Espresso bar", "Internet cafe"],
+    "phone": "+1 916-482-1205",
+    "address": "4301 Arden Way Arden, Plaza, Sacramento, CA 95864, United States",
+    "website": "https://www.starbucks.com/store-locator/store/15801/",
+    "rating": 4.1,
+    "reviews": 438,
+    "place_id": "ChIJCV_Dko_bmoARgq5HYBtMXNw",
+    "query": "restaurant in cupertino, california, united states",
+    "link": "https://www.google.com/maps/place/Starbucks+Coffee+Company/data=!4m7!3m6!1s0x809adb8f92c35f09:0xdc5c4c1b6047ae82!8m2!3d38.59586!4d-121.3641!16s%2Fg%2F1vh_8msl!19sChIJCV_Dko_bmoARgq5HYBtMXNw?authuser=0&rclk=1",
+    "is_spending_on_ads": false,
+    "coordinates": {"lat": 38.59586, "lng": -121.3641},
+    "detailed_address": {
+      "city": "Sacramento",
+      "postal_code": "95864",
+      "country_code": "US"
+    },
+    "competitors": "Name: Sana'a Cafe\nLink: No Link\nReviews: 165 reviews\n\nName: Dutch Bros Coffee\nLink: No Link\nReviews: 136 reviews\n\nName: Eli cafe\nLink: No Link\nReviews: 92 reviews\n\nName: Starbucks\nLink: No Link\nReviews: 34 reviews",
+    "review_keywords": ["drive thru", "mobile ordering", "outdoor seating", "friendly staff", "cozy interior", "customized drinks", "frappuccino", "wait time", "friendly employees", "baristas"],
+    "owner": {
+      "name": "Jessica Foust",
+      "title": "VP, Culinary Innovation & Food Experience",
+      "snippet": "Curious Chef I Registered Dietitian I Innovator I Food Industry Leader I Spokesperson",
+      "linkedin_url": "http://www.linkedin.com/in/chefjessrd",
+      "email": "jfoust@starbucks.com"
+    },
+    "leads": [
+      {
+        "name": "Jessica Foust",
+        "title": "VP, Culinary Innovation & Food Experience",
+        "email": "jfoust@starbucks.com",
+        "linkedin_url": "http://www.linkedin.com/in/chefjessrd"
+      }
+    ],
+    "tech_stack": {
+      "google_ads": true,
+      "facebook_ads": false,
+      "tech_stack": ["react", "next.js", "aws", "google-analytics"]
+    }
+  },
+  {
+    "name": "Hakashi Japanese Sushi Bar & Grill",
+    "main_category": "Japanese restaurant",
+    "categories": ["Japanese restaurant", "Sushi restaurant", "Bar"],
+    "phone": "+1 916-555-0199",
+    "address": "1220 E Davis St, Woodland, CA 95695, United States",
+    "website": "https://hakashisushi.com",
+    "rating": 4.3,
+    "reviews": 256,
+    "place_id": "ChIJ0ZgFm0CBhYARtAjGUT07m3w",
+    "query": "restaurant in woodland, california, united states",
+    "link": "https://www.google.com/maps/place/Hakashi+Japanese+Sushi+Bar+%26+Grill/data=!3m1!4b0!4m6!3m5!1s0x809c2e0f5d6b6c3b1:0x5e8b9a5e0c4e2a3f",
+    "is_spending_on_ads": true,
+    "coordinates": {"lat": 38.6786, "lng": -121.7556},
+    "detailed_address": {
+      "city": "Woodland",
+      "postal_code": "95695",
+      "country_code": "US"
+    },
+    "owner": {
+      "name": "Masaru Saito",
+      "title": "Owner / Chef",
+      "snippet": "Sushi chef with 15+ years experience. Specializes in traditional Edomae sushi.",
+      "linkedin_url": "https://www.linkedin.com/in/masarusaito",
+      "email": "masaru@hakashisushi.com"
+    },
+    "leads": [],
+    "tech_stack": {
+      "google_ads": false,
+      "facebook_ads": true,
+      "tech_stack": ["wordpress", "php", "mysql"]
+    }
+  },
+  {
+    "name": "Punjabi Dhaba",
+    "main_category": "Indian restaurant",
+    "categories": ["Indian restaurant", "Vegetarian restaurant"],
+    "phone": "+1 408-555-0123",
+    "address": "10425 N De Anza Blvd, Cupertino, CA 95014, United States",
+    "website": "https://www.punjabidhaba.com",
+    "rating": 4.5,
+    "reviews": 512,
+    "place_id": "ChIJabc123def456ghi789",
+    "query": "indian restaurant in cupertino, california, united states",
+    "link": "https://www.google.com/maps/place/Punjabi+Dhaba/data=!4m7!3m6",
+    "is_spending_on_ads": true,
+    "coordinates": {"lat": 37.3230, "lng": -122.0322},
+    "detailed_address": {
+      "city": "Cupertino",
+      "postal_code": "95014",
+      "country_code": "US"
+    },
+    "competitors": "Name: Curry House\nLink: No Link\nReviews: 89 reviews\n\nName: Tandoor\nLink: No Link\nReviews: 45 reviews",
+    "review_keywords": ["paneer", "naan", "laksa", "biryani", "thali", "dal makhani", "garlic naan", "chicken tikka masala"],
+    "owner": {
+      "name": "Raj Patel",
+      "title": "General Manager",
+      "snippet": "Restaurant industry professional focused on customer experience and operations.",
+      "linkedin_url": "https://www.linkedin.com/in/rajpatel-restaurant",
+      "email": "raj@punjabidhaba.com"
+    },
+    "leads": [
+      {
+        "name": "Raj Patel",
+        "title": "General Manager",
+        "email": "raj@punjabidhaba.com",
+        "linkedin_url": "https://www.linkedin.com/in/rajpatel-restaurant"
+      }
+    ],
+    "tech_stack": {
+      "google_ads": true,
+      "facebook_ads": true,
+      "tech_stack": ["shopify", "klaviyo", "hotjar", "google-analytics"]
+    }
+  }
+]

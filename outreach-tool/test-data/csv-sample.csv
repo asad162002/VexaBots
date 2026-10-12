@@ -1,0 +1,4 @@
+Business Name,Website,Phone,City,Country Code,Owner Name,Owner Role,LinkedIn URL,Company Size,Notes,Place ID
+Test CSV Business,https://testcsv.com,+1 555-0100,San Francisco,US,Jane Smith,Manager,https://linkedin.com/in/janesmith,small,Test note from CSV,CSV_PLACE_001
+Another CSV Lead,https://another.com,+1 555-0200,Los Angeles,US,Bob Wilson,Director,https://linkedin.com/in/bobwilson,medium,"Lead from CSV import",CSV_PLACE_002
+Third CSV Company,https://thirdcorp.com,+1 555-0300,Seattle,US,Alice Chen,CEO,https://linkedin.com/in/alicechen,large,Potential lead,CSV_PLACE_003
