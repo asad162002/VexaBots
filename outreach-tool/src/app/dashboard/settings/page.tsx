@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
-import { Users, Shield, Mail, Trash2, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
+import { Users, Shield, Trash2, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([])
   const [loading, setLoading] = useState(true);
   const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
   const [limitsLoading, setLimitsLoading] = useState(false);
@@ -63,8 +63,6 @@ export default function SettingsPage() {
   };
 
   const updateLimit = async (profileId: string, maxLeads: number) => {
-    // Use upsert with on: 'profile_id' to avoid duplicate key errors
-    // when the assignment_limits row already exists
     const { error } = await supabase
       .from('assignment_limits')
       .upsert({
@@ -145,14 +143,14 @@ export default function SettingsPage() {
   const currentUserProfile = profiles.find(p => p.id === user?.id);
 
   return (
-    <div>
-      <div className="mb-6">
+    <div className="space-y-8">
+      <div>
         <h1 className="text-2xl font-bold text-white">Settings</h1>
         <p className="text-sm text-gray-400 mt-0.5">Manage your team and account settings.</p>
       </div>
 
       {/* Current User Card */}
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5 mb-5">
+      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
             {user?.email?.charAt(0).toUpperCase() ?? '?'}
@@ -174,12 +172,13 @@ export default function SettingsPage() {
       </div>
 
       {/* Team Members */}
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5 mb-5">
-        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+        <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
           <Users className="w-5 h-5 text-gray-400" />
           Team Members
-          <span className="text-sm font-normal text-gray-500 ml-2">({profiles.length})</span>
+          <span className="text-sm font-normal text-gray-500">({profiles.length})</span>
         </h2>
+        <p className="text-xs text-gray-500 mb-4">Manage who has access to the outreach tool.</p>
 
         {loading ? (
           <div className="flex items-center justify-center py-8">
@@ -195,41 +194,17 @@ export default function SettingsPage() {
             <p className="text-gray-600 text-xs mt-1">Add members below to get started.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {profiles.map((profile) => (
-              <div key={profile.id} className="flex items-center justify-between bg-[#27272a] rounded-lg px-4 py-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 flex-shrink-0">
-                    {profile.email?.charAt(0).toUpperCase() ?? '?'}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm text-white font-medium truncate">{profile.email}</p>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        profile.role === 'admin'
-                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                          : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-                      }`}>
-                        {profile.role === 'admin' ? 'Admin' : 'Member'}
-                      </span>
-                      {profile.id === user?.id && (
-                        <span className="text-xs text-gray-500">(you)</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {isAdmin && profile.id !== user?.id && (
-                  <button
-                    onClick={() => handleRemove(profile.id, profile.email || '')}
-                    disabled={removingId === profile.id}
-                    className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition disabled:opacity-50 px-2 py-1 rounded hover:bg-red-500/10"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    {removingId === profile.id ? 'Removing...' : 'Remove'}
-                  </button>
-                )}
-              </div>
+              <TeamMemberRow
+                key={profile.id}
+                profile={profile}
+                isAdmin={isAdmin}
+                currentUserId={user?.id}
+                onRemove={handleRemove}
+                removingId={removingId}
+                removeError={removeError}
+              />
             ))}
           </div>
         )}
@@ -237,8 +212,8 @@ export default function SettingsPage() {
 
       {/* Assignment Limits */}
       {isAdmin && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5 mb-5">
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
             <Shield className="w-5 h-5 text-gray-400" />
             Assignment Limits
           </h2>
@@ -259,44 +234,14 @@ export default function SettingsPage() {
                   const limit = assignLimits[profile.id]?.max_leads ?? 0;
                   const current = assignLimits[profile.id]?.current_leads ?? 0;
                   return (
-                    <div key={profile.id} className="bg-[#27272a] rounded-lg px-4 py-3">
-                      <div className="flex items-center justify-between gap-3 mb-2">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 flex-shrink-0">
-                            {profile.email?.charAt(0).toUpperCase() ?? '?'}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm text-white font-medium truncate">
-                              {profile.email}
-                              {profile.id === user?.id && ' (you)'}
-                            </p>
-                            {current > 0 && (
-                              <p className="text-xs text-gray-500">
-                                {current} assigned {limit > 0 && `of ${limit} max`}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {limit > 0 && current > 0 && (
-                            <div className="w-16 h-2 bg-[#3f3f46] rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-blue-500"
-                                style={{ width: `${Math.min(100, (current / limit) * 100)}%` }}
-                              />
-                            </div>
-                          )}
-                          <input
-                            type="number"
-                            min="0"
-                            value={limit}
-                            onChange={(e) => updateLimit(profile.id, parseInt(e.target.value) || 0)}
-                            className="w-20 bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    <AssignmentLimitRow
+                      key={profile.id}
+                      profile={profile}
+                      limit={limit}
+                      current={current}
+                      currentUserId={user?.id}
+                      onUpdate={updateLimit}
+                    />
                   );
                 })}
             </div>
@@ -307,10 +252,11 @@ export default function SettingsPage() {
       {/* Invite Member Form */}
       {isAdmin && (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-gray-400" />
             Invite Team Member
           </h2>
+          <p className="text-xs text-gray-500 mb-4">They'll receive a magic link to sign in.</p>
 
           {inviteError && (
             <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -372,18 +318,98 @@ export default function SettingsPage() {
               disabled={inviting || !inviteEmail.trim()}
               className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
             >
-              {inviting ? 'Sending...' : 'Send Invitation'}
+              {inviting ? 'Adding...' : 'Add Team Member'}
             </button>
           </form>
-
-          <div className="mt-4 p-3 bg-[#27272a]/50 rounded-lg">
-            <p className="text-xs text-gray-500 leading-relaxed">
-              <strong className="text-gray-400">How it works:</strong> Sending an invitation creates the user in Supabase Auth and sends them a signup link.
-              The user's profile is automatically created when they sign in for the first time.
-            </p>
-          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Extracted team member row component for better readability
+function TeamMemberRow({ profile, isAdmin, currentUserId, onRemove, removingId, removeError }: any) {
+  return (
+    <div className="flex items-center justify-between bg-[#27272a] hover:bg-[#2a2a32] rounded-xl px-4 py-3.5 transition-colors">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
+          profile.role === 'admin' ? 'bg-purple-600' : 'bg-gray-700'
+        }`}>
+          {profile.email?.charAt(0).toUpperCase() ?? '?'}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm text-white font-medium truncate">{profile.email}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              profile.role === 'admin'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
+            }`}>
+              {profile.role === 'admin' ? 'Admin' : 'Member'}
+            </span>
+            {profile.id === currentUserId && (
+              <span className="text-xs text-gray-500">(you)</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {isAdmin && profile.id !== currentUserId && (
+        <button
+          onClick={() => onRemove(profile.id, profile.email || '')}
+          disabled={removingId === profile.id}
+          className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition disabled:opacity-50 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          {removingId === profile.id ? 'Removing...' : 'Remove'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Extracted assignment limit row component for better readability
+function AssignmentLimitRow({ profile, limit, current, currentUserId, onUpdate }: any) {
+  return (
+    <div className="bg-[#27272a] rounded-xl px-4 py-3.5">
+      <div className="flex items-center justify-between gap-4 mb-2.5">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 flex-shrink-0">
+            {profile.email?.charAt(0).toUpperCase() ?? '?'}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm text-white font-medium truncate">
+              {profile.email}
+              {profile.id === currentUserId && ' (you)'}
+            </p>
+            {current > 0 && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                {current} assigned {limit > 0 && `of ${limit} max`}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {limit > 0 && current > 0 && (
+            <div className="w-16 h-1.5 bg-[#3f3f46] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full"
+                style={{ width: `${Math.min(100, (current / limit) * 100)}%` }}
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-1">
+            <label className="text-xs text-gray-500">Limit:</label>
+            <input
+              type="number"
+              min="0"
+              value={limit}
+              onChange={(e) => onUpdate(profile.id, parseInt(e.target.value) || 0)}
+              className="w-16 bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
