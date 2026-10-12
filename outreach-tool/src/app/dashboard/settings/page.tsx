@@ -68,6 +68,7 @@ export default function SettingsPage() {
       .upsert({
         profile_id: profileId,
         max_leads: maxLeads,
+        current_leads: assignLimits[profileId]?.current_leads ?? 0,
         updated_at: new Date().toISOString(),
       });
 

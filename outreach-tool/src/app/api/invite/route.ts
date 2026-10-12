@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Create user with email already confirmed (no invite email sent)
-    // User can login with "magic link" or "forgot password"
+    // User can login with "magic link" on the sign-in page
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase().trim(),
       email_confirm: true,
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
 
     // Create profile entry
     if (authData?.user?.id) {
+      // Upsert profile
       await supabaseAdmin.from('profiles').upsert({
         id: authData.user.id,
         email: email.toLowerCase().trim(),
