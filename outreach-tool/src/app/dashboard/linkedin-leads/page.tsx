@@ -46,6 +46,7 @@ export default function LinkedinLeadsPage() {
   const [emailFilter, setEmailFilter] = useState<'all' | 'verified' | 'not_found'>('all');
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [selectN, setSelectN] = useState(50);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [assignmentTarget, setAssignmentTarget] = useState('');
   const [assigning, setAssigning] = useState(false);
@@ -179,12 +180,14 @@ export default function LinkedinLeadsPage() {
   }, [loadMore]);
 
   useEffect(() => {
-    // Initial fetch and refetch when admin status changes
+    // Don't fetch until we know the user's role
+    if (loadingRole) return;
+    // Initial fetch and refetch when filters change
     setLeads([]);
     setHasMore(true);
     setSelectedLeads(new Set());
     fetchLeads(0);
-  }, [sourceFilter, emailFilter, isAdmin, user]);
+  }, [sourceFilter, emailFilter, isAdmin, user, loadingRole]);
 
   // Filter leads client-side for search
   const filteredLeads = leads.filter((lead) => {
@@ -230,6 +233,11 @@ export default function LinkedinLeadsPage() {
       setAssignmentTarget('');
     }
     setAssigning(false);
+  };
+
+  const selectFirstN = (n: number) => {
+    const toSelect = filteredLeads.slice(0, n).map(l => l.id);
+    setSelectedLeads(new Set(toSelect));
   };
 
   const EmailIcon = ({ status }: { status: string | null }) => {
@@ -307,9 +315,30 @@ export default function LinkedinLeadsPage() {
 
       {/* Results summary + bulk action */}
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-400">
-          {filteredLeads.length} leads found
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="text-sm text-gray-400">
+            {filteredLeads.length} leads found
+          </p>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max={filteredLeads.length}
+                value={selectN}
+                onChange={(e) => setSelectN(Math.min(parseInt(e.target.value) || 0, filteredLeads.length))}
+                className="w-16 bg-[#27272a] border border-[#3f3f46] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="N"
+              />
+              <button
+                onClick={() => selectFirstN(selectN)}
+                className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+              >
+                Select First N
+              </button>
+            </div>
+          )}
+        </div>
         {/* Bulk action bar for admins */}
         {isAdmin && selectedLeads.size > 0 && (
           <div className="flex items-center gap-3 bg-[#27272a]/50 border border-[#3f3f46] rounded-lg px-4 py-2">
