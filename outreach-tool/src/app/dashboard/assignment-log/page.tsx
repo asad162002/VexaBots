@@ -77,6 +77,11 @@ export default function AssignmentLogPage() {
       .order('assigned_at', { ascending: false })
       .limit(500);
 
+    // Non-admins only see leads assigned to them
+    if (!isAdmin && user?.id) {
+      leadsQuery = leadsQuery.eq('assigned_to', user.id);
+    }
+
     // Apply date filter based on assigned_at
     const now = new Date();
     let pastDate: Date | null = null;
@@ -224,7 +229,7 @@ export default function AssignmentLogPage() {
         </div>
         {!isAdmin && (
           <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5">
-            Admin view only
+            Member View
           </div>
         )}
       </div>

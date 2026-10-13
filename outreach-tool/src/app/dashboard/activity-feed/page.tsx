@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { type Profile } from '@/lib/types';
 import Spinner from '@/components/ui/spinner';
 import { Clock, Phone, MessageSquare, Mail, Calendar, FileText, ChevronDown, ChevronRight } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
 
 interface Activity {
   id: string;
@@ -51,11 +52,13 @@ const DATE_FILTERS = [
 ];
 
 export default function ActivityFeedPage() {
+  const { user } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [leads, setLeads] = useState<Record<string, { id: string; title: string | null; status: string }>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [dateFilter, setDateFilter] = useState<string>('7d');
@@ -78,6 +81,10 @@ export default function ActivityFeedPage() {
       const profileMap: Record<string, Profile> = {};
       data.forEach((p) => { profileMap[p.id] = p; });
       setProfiles(profileMap);
+
+      // Check if current user is admin
+      const myProfile = profileMap[user?.id || ''];
+      setIsAdmin(myProfile?.role === 'admin');
     }
     setProfilesLoaded(true);
   };
@@ -107,6 +114,11 @@ export default function ActivityFeedPage() {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(100);
+
+    // Non-admins only see their own activities
+    if (!isAdmin && user?.id) {
+      query = query.eq('profile_id', user.id);
+    }
 
     const dateFilterValue = getDateFilterValue(dateFilter);
     if (dateFilterValue) {
@@ -219,7 +231,7 @@ export default function ActivityFeedPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Activity Feed</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Team activity grouped by member ({activities.length} total activities)
+            {isAdmin ? `Team activity grouped by member (${activities.length} total activities)` : 'Your activity history'}
           </p>
         </div>
         <div className="flex items-center gap-3">
