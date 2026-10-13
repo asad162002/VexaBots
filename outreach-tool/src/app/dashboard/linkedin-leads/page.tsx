@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Filter, Users, Mail, ExternalLink, Copy, Shield } from 'lucide-react';
+import { Search, Filter, Users, Mail, ExternalLink, Copy, Shield, CheckSquare, Square, UserPlus } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
 import { useAuth } from '@/lib/auth-context';
 
@@ -17,6 +17,9 @@ interface LinkedInLead {
   email_status: string | null;
   linkedin_url: string | null;
   source: string | null;
+  notes: string | null;
+  assigned_to: string | null;
+  assigned_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +45,10 @@ export default function LinkedinLeadsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [emailFilter, setEmailFilter] = useState<'all' | 'verified' | 'not_found'>('all');
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [assignmentTarget, setAssignmentTarget] = useState('');
+  const [assigning, setAssigning] = useState(false);
 
   const observer = useRef<IntersectionObserver | null>(null);
   const lastLeadRef = useRef<HTMLDivElement | null>(null);
@@ -60,7 +67,15 @@ export default function LinkedinLeadsPage() {
       setIsAdmin(profile?.role === 'admin');
       setLoadingRole(false);
     };
+    const loadProfiles = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .order('full_name');
+      if (!error) setProfiles(data ?? []);
+    };
     checkRole();
+    loadProfiles();
   }, [user]);
 
   const fetchLeads = useCallback(async (offset = 0) => {
@@ -98,7 +113,7 @@ export default function LinkedinLeadsPage() {
 
       let query = supabase
         .from('linkedin_leads')
-        .select('*', { count: 'exact' })
+        .select('*, assigned_to, assigned_at', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
@@ -167,6 +182,7 @@ export default function LinkedinLeadsPage() {
     // Initial fetch and refetch when admin status changes
     setLeads([]);
     setHasMore(true);
+    setSelectedLeads(new Set());
     fetchLeads(0);
   }, [sourceFilter, emailFilter, isAdmin, user]);
 
@@ -189,6 +205,31 @@ export default function LinkedinLeadsPage() {
     navigator.clipboard.writeText(email);
     setCopiedEmail(email);
     setTimeout(() => setCopiedEmail(null), 2000);
+  };
+
+  const handleAssignSelected = async () => {
+    if (!selectedLeads.size || !assignmentTarget) return;
+    setAssigning(true);
+    const ids = Array.from(selectedLeads);
+    const { error } = await supabase
+      .from('linkedin_leads')
+      .update({
+        assigned_to: assignmentTarget || null,
+        assigned_at: assignmentTarget ? new Date().toISOString() : null,
+      })
+      .in('id', ids);
+    if (error) {
+      console.error('Error assigning leads:', error);
+    } else {
+      setLeads((prev) => prev.map(l =>
+        selectedLeads.has(l.id)
+          ? { ...l, assigned_to: assignmentTarget, assigned_at: assignmentTarget ? new Date().toISOString() : null }
+          : l
+      ));
+      setSelectedLeads(new Set());
+      setAssignmentTarget('');
+    }
+    setAssigning(false);
   };
 
   const EmailIcon = ({ status }: { status: string | null }) => {
@@ -264,11 +305,37 @@ export default function LinkedinLeadsPage() {
         </div>
       </div>
 
-      {/* Results summary */}
+      {/* Results summary + bulk action */}
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-gray-400">
           {filteredLeads.length} leads found
         </p>
+        {/* Bulk action bar for admins */}
+        {isAdmin && selectedLeads.size > 0 && (
+          <div className="flex items-center gap-3 bg-[#27272a]/50 border border-[#3f3f46] rounded-lg px-4 py-2">
+            <span className="text-sm text-gray-300">{selectedLeads.size} selected</span>
+            <select
+              value={assignmentTarget}
+              onChange={(e) => setAssignmentTarget(e.target.value)}
+              className="bg-[#27272a] border border-[#3f3f46] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Assign to...</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.email || 'Unnamed'}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleAssignSelected}
+              disabled={assigning || !assignmentTarget}
+              className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-3 py-1.5 text-sm transition disabled:cursor-not-allowed"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              {assigning ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Leads list */}
@@ -293,63 +360,93 @@ export default function LinkedinLeadsPage() {
                 className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 hover:border-blue-500/50 hover:shadow-lg transition group"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
-                      <h3 className="font-semibold text-white text-base truncate">
-                        <Link href={`/dashboard/linkedin-leads/${lead.id}`}>
-                          {lead.lead_name || 'Untitled Contact'}
-                        </Link>
-                      </h3>
-                      {lead.source && (
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
-                          lead.source === 'apollo_enrichment'
-                            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        }`}>
-                          {lead.source === 'apollo_enrichment' ? 'Apollo' : 'LinkedIn'}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mb-2">
-                      {lead.title && (
-                        <span className="text-gray-400">
-                          {lead.title}
-                        </span>
-                      )}
-                      {lead.email && (
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(lead.email!)}
-                          className="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 group/inline"
-                        >
-                          {lead.email}
-                          {copiedEmail === lead.email && (
-                            <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                      )}
-                      {!lead.email && (
-                        <span className="text-gray-500 italic">No email</span>
-                      )}
-                    </div>
-
-                    {lead.linkedin_url && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
-                        <ExternalLink className="w-3 h-3" />
-                        <a
-                          href={lead.linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-blue-400 truncate"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {lead.linkedin_url.replace('https://www.', '').replace('https://', '')}
-                        </a>
-                      </div>
+                  <div className="flex items-start gap-3">
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const newSelected = new Set(selectedLeads);
+                          if (newSelected.has(lead.id)) {
+                            newSelected.delete(lead.id);
+                          } else {
+                            newSelected.add(lead.id);
+                          }
+                          setSelectedLeads(newSelected);
+                        }}
+                        className="mt-0.5 text-gray-500 hover:text-blue-400"
+                      >
+                        {selectedLeads.has(lead.id) ? (
+                          <CheckSquare className="w-4 h-4 text-blue-400" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
                     )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+                        <h3 className="font-semibold text-white text-base truncate">
+                          <Link href={`/dashboard/linkedin-leads/${lead.id}`}>
+                            {lead.lead_name || 'Untitled Contact'}
+                          </Link>
+                        </h3>
+                        {lead.source && (
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+                            lead.source === 'apollo_enrichment'
+                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                              : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          }`}>
+                            {lead.source === 'apollo_enrichment' ? 'Apollo' : 'LinkedIn'}
+                          </span>
+                        )}
+                        {lead.assigned_to && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
+                            Assigned
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mb-2">
+                        {lead.title && (
+                          <span className="text-gray-400">
+                            {lead.title}
+                          </span>
+                        )}
+                        {lead.email && (
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(lead.email!)}
+                            className="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 group/inline"
+                          >
+                            {lead.email}
+                            {copiedEmail === lead.email && (
+                              <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        )}
+                        {!lead.email && (
+                          <span className="text-gray-500 italic">No email</span>
+                        )}
+                      </div>
+
+                      {lead.linkedin_url && (
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <ExternalLink className="w-3 h-3" />
+                          <a
+                            href={lead.linkedin_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-blue-400 truncate"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {lead.linkedin_url.replace('https://www.', '').replace('https://', '')}
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
