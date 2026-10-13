@@ -697,7 +697,7 @@ function ImportPageContent() {
 
             <div className="mb-4">
               <p className="text-sm text-gray-300 mb-2">
-                <strong>{headers.length} rows detected.</strong> The script will auto-map all fields:
+                <strong>{previewRows.length} rows detected.</strong> The script will auto-map all fields:
               </p>
               <ul className="text-sm text-gray-400 space-y-1 ml-4">
                 <li>• Basic business info → <span className="text-white">leads</span> table</li>
@@ -746,7 +746,7 @@ function ImportPageContent() {
             <button
               onClick={handleImport}
               disabled={importing || (headers.length === 0 && fileType === 'csv' && mappings.filter(m => m.leadField).length === 0)}
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-6 py-3 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
+              className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-6 py-2.5 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
             >
               {importing ? (
                 <>
@@ -756,7 +756,7 @@ function ImportPageContent() {
               ) : (
                 <>
                   <Upload className="w-4 h-4" />
-                  <span>Import {fileType.toUpperCase()}</span>
+                  <span>Import {file.name}</span>
                 </>
               )}
             </button>
@@ -777,11 +777,11 @@ function ImportPageContent() {
             <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="text-green-400 font-medium">
-                Import complete! {success.inserted} leads imported, {success.skipped} skipped.
+                Import complete. {success.total} rows processed — {success.inserted} added, {success.skipped} skipped
               </p>
               {success.enriched && success.enriched > 0 && (
                 <p className="text-green-400 mt-0.5">
-                  {success.enriched} enriched contacts added to LinkedIn Leads.
+                  ({success.enriched} enriched leads added)
                 </p>
               )}
             </div>
