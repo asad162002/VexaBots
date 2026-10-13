@@ -6,23 +6,9 @@ import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
 import { Users, Shield, Trash2, CheckCircle, AlertCircle, UserPlus, Copy } from 'lucide-react';
 
-interface Profile {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  role: 'admin' | 'member' | null;
-  created_at: string | null;
-}
-
-interface AssignmentLimit {
-  profile_id: string;
-  max_leads: number;
-  current_leads: number;
-}
-
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([])
   const [loading, setLoading] = useState(true);
   const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
   const [limitsLoading, setLimitsLoading] = useState(false);
@@ -51,7 +37,7 @@ export default function SettingsPage() {
     if (error) {
       console.error('Error fetching profiles:', error);
     } else {
-      setProfiles((data ?? []) as Profile[]);
+      setProfiles(data ?? []);
     }
     setLoading(false);
   };
@@ -66,7 +52,7 @@ export default function SettingsPage() {
       console.error('Error fetching limits:', error);
     } else {
       const limitMap: Record<string, { max_leads: number; current_leads: number }> = {};
-      (data ?? []).forEach((l: AssignmentLimit) => {
+      (data ?? []).forEach((l: any) => {
         limitMap[l.profile_id] = {
           max_leads: l.max_leads,
           current_leads: l.current_leads,
@@ -111,7 +97,6 @@ export default function SettingsPage() {
     setInviting(true);
     setInviteError('');
     setInviteSuccess('');
-    setInvitePassword('');
 
     const res = await fetch('/api/invite', {
       method: 'POST',
@@ -168,7 +153,7 @@ export default function SettingsPage() {
         <p className="text-sm text-gray-400 mt-0.5">Manage your team and account settings.</p>
       </div>
 
-      {/* Current User Card - shows for everyone */}
+      {/* Current User Card */}
       <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
@@ -231,7 +216,22 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Assignment Limits - Admin only */}
+      {/* Non-admin info */}
+      {!isAdmin && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-5">
+          <div className="flex items-start gap-3">
+            <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-yellow-300 mb-1">Member Access</p>
+              <p className="text-xs text-gray-400">
+                You can view and update leads assigned to you. Contact an admin for access to team management features.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assignment Limits */}
       {isAdmin && (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
           <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
@@ -270,14 +270,14 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Invite Member Form - Admin only */}
+      {/* Invite Member Form */}
       {isAdmin && (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
           <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-gray-400" />
             Invite Team Member
           </h2>
-          <p className="text-xs text-gray-500 mb-4">Add a new member to the team. A password will be generated.</p>
+          <p className="text-xs text-gray-500 mb-4">Add a new member to the team. A password will be generated for them.</p>
 
           {inviteError && (
             <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">

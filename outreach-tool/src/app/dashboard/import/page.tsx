@@ -39,16 +39,16 @@ const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
 
 type FileType = 'csv' | 'json';
 
-// Main wrapper component - handles auth check
 export default function ImportPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadingRole, setLoadingRole] = useState(true);
 
   useEffect(() => {
     const checkRole = async () => {
       if (!user?.id) {
-        setLoading(false);
+        setLoadingRole(false);
         return;
       }
       const { data: profile } = await supabase
@@ -57,56 +57,11 @@ export default function ImportPage() {
         .eq('id', user.id)
         .single();
       setIsAdmin(profile?.role === 'admin');
-      setLoading(false);
+      setLoadingRole(false);
     };
     checkRole();
   }, [user]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-3 text-gray-500">
-          <Spinner size="md" />
-          <span>Checking permissions...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return <AccessDenied />;
-  }
-
-  return <ImportPageContent />;
-}
-
-function AccessDenied() {
-  const router = useRouter();
-  return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
-        <div className="flex items-start gap-3">
-          <Shield className="w-6 h-6 text-red-400 flex-shrink-0" />
-          <div>
-            <h1 className="text-xl font-bold text-white mb-2">Access Restricted</h1>
-            <p className="text-gray-300 mb-4">
-              Import leads is an admin-only feature. You need admin permissions to upload CSV or JSON files.
-            </p>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="text-blue-400 hover:text-blue-300 font-medium text-sm"
-            >
-              Go back to dashboard
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Separate component for the import form
-function ImportPageContent() {
   const [file, setFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState<FileType>('csv');
   const [headers, setHeaders] = useState<string[]>([]);
@@ -173,6 +128,7 @@ function ImportPageContent() {
         try {
           const jsonData = JSON.parse(text);
           const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
+
           // For JSON files, we auto-map google-maps-scraper format
           const preview = dataArray.slice(0, 3).map((item: Record<string, unknown>) => {
             const row: Record<string, string> = {};
@@ -242,6 +198,7 @@ function ImportPageContent() {
       });
 
       setMappings(initialMappings);
+
       const previewLines = lines.slice(1, 6);
       const preview: Record<string, string>[] = [];
       for (const line of previewLines) {
@@ -265,7 +222,7 @@ function ImportPageContent() {
     });
   };
 
-  // JSON Import (google-maps-scraper format)
+  // ─── JSON Import (google-maps-scraper format) ──────────────────────
   const handleJsonImport = async (jsonData: unknown[]) => {
     const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
 
@@ -280,6 +237,7 @@ function ImportPageContent() {
       const leads_array = item.leads as Record<string, unknown>[] | undefined;
       const tech_stack = item.tech_stack as Record<string, unknown> | undefined;
 
+      // Map to leads table
       const lead: Record<string, unknown> = {
         title: item.name || '',
         category_name: item.main_category || category || '',
@@ -305,6 +263,7 @@ function ImportPageContent() {
           reviews: item.reviews,
           coordinates: item.coordinates,
         }),
+        // Owner enrichment
         owner_name: owner?.name || null,
         owner_role: owner?.title || owner?.role || null,
         owner_linkedin_url: owner?.linkedin_url || null,
@@ -323,6 +282,7 @@ function ImportPageContent() {
         .upsert(lead, { onConflict: 'place_id' });
 
       if (upsertError) {
+        // Try PATCH as fallback
         const { error: patchError } = await supabase
           .from('leads')
           .update(lead)
@@ -391,7 +351,7 @@ function ImportPageContent() {
     return { total: dataArray.length, inserted, skipped, enriched };
   };
 
-  // CSV Import
+  // ─── CSV Import ────────────────────────────────────────────────────
   const handleCsvImport = async () => {
     if (!file || headers.length === 0) return;
 
@@ -473,6 +433,7 @@ function ImportPageContent() {
     if (!file) return;
 
     if (fileType === 'json') {
+      // Parse JSON
       const text = await file.text();
       try {
         const jsonData = JSON.parse(text);
@@ -496,6 +457,41 @@ function ImportPageContent() {
       await handleCsvImport();
     }
   };
+
+  if (loadingRole) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="flex items-center gap-3 text-gray-500">
+          <Spinner size="md" />
+          <span>Checking permissions...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
+          <div className="flex items-start gap-3">
+            <Shield className="w-6 h-6 text-red-400 flex-shrink-0" />
+            <div>
+              <h1 className="text-xl font-bold text-white mb-2">Access Restricted</h1>
+              <p className="text-gray-300 mb-4">
+                Import leads is an admin-only feature. You need admin permissions to upload CSV or JSON files.
+              </p>
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="text-blue-400 hover:text-blue-300 font-medium text-sm"
+              >
+                Go back to dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -558,125 +554,209 @@ function ImportPageContent() {
               </div>
             </div>
           )}
+
+          {error && !file && <p className="mt-3 text-sm text-red-400">{error}</p>}
         </div>
 
-        {/* Column mapping step */}
-        {file && (
-          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">2. Map Columns</h2>
-
-            {headers.length === 0 && fileType === 'json' ? (
-              <p className="text-sm text-gray-500">JSON files are automatically mapped.</p>
-            ) : (
-              <div className="space-y-3">
-                {mappings.map((mapping, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div className="w-1/2">
-                      <p className="text-sm text-gray-300 truncate">{mapping.csvColumn}</p>
-                    </div>
-                    <div className="w-1/2">
-                      <select
-                        value={mapping.leadField ?? 'none'}
-                        onChange={(e) => {
-                          const value = e.target.value === 'none' ? null : e.target.value;
-                          updateMapping(index, value);
-                        }}
-                        className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                      >
-                        {mapping.csvColumn && (
-                          <option value="none" className="bg-[#1a1a1a]">-- Select field --</option>
-                        )}
-                        {LEAD_FIELDS.map((field) => (
-                          <option key={field.key} value={field.key} className="bg-[#1a1a1a]">
-                            {field.label}{field.required && ' *'}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* JSON detection message */}
+        {file && fileType === 'json' && (
+          <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-4">
+            <p className="text-sm text-blue-200">
+              <strong>JSON file detected.</strong> This will auto-map google-maps-scraper format
+              and import owner enrichment data (LinkedIn profiles, Apollo emails) into separate tables.
+            </p>
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-blue-200 mb-1.5 uppercase tracking-wide">
+                Category (optional)
+              </label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g. restaurant, construction"
+                className="w-full sm:w-[200px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              />
+            </div>
           </div>
         )}
 
-        {/* Source selection */}
-        {file && headers.length === 0 && fileType === 'json' && (
+        {/* Preview + mapping step */}
+        {headers.length > 0 && fileType === 'csv' && (
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">2. Select Source</h2>
-            <select
-              value={source}
-              onChange={(e) => setSource(e.target.value as LeadSource)}
-              className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-            >
-              {SOURCE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {source === 'google_maps' && (
-              <div className="mt-3">
-                <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
-                  Category (optional)
-                </label>
-                <input
-                  type="text"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="e.g. restaurants, real estate"
-                  className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                />
+            <h2 className="text-lg font-semibold text-white mb-4">2. Map Columns</h2>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                Default Source for imported leads
+              </label>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value as LeadSource)}
+                className="w-full sm:w-[200px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              >
+                {SOURCE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                Category (e.g. restaurant, construction)
+              </label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Enter category name"
+                className="w-full sm:w-[200px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              />
+              <p className="text-xs text-gray-500 mt-1">Optional: groups these leads together for filtering</p>
+            </div>
+
+            {previewRows.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs text-gray-500 mb-2">Preview (first {previewRows.length} rows):</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#3f3f46]">
+                        {Object.keys(previewRows[0]).map((h) => (
+                          <th
+                            key={h}
+                            className="text-left px-3 py-2 text-xs text-gray-400 font-medium uppercase tracking-wider whitespace-nowrap"
+                          >
+                            {h.length > 20 ? h.slice(0, 20) + '...' : h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewRows.slice(0, 3).map((row, i) => (
+                        <tr key={i} className="border-b border-[#27272a]">
+                          {Object.values(row).map((val, j) => (
+                            <td key={j} className="px-3 py-2 text-gray-300 max-w-[150px] truncate">
+                              {val || '-'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
+
+            <p className="text-xs text-gray-500 mb-3">Map each CSV column to a lead field. Leave unmapped to skip.</p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {headers.map((col, index) => {
+                const mapping = mappings[index] || { csvColumn: col, leadField: null };
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 bg-[#27272a] rounded-lg px-3 py-2 border border-[#3f3f46]"
+                  >
+                    <span className="text-xs text-gray-400 min-w-[120px] truncate flex-1" title={col}>
+                      {col}
+                    </span>
+                    <select
+                      value={mapping.leadField ?? ''}
+                      onChange={(e) => updateMapping(index, e.target.value || null)}
+                      className="bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
+                    >
+                      <option value="" className="bg-[#1a1a1a]">— Skip —</option>
+                      {LEAD_FIELDS.map((field) => (
+                        <option key={field.key} value={field.key} className="bg-[#1a1a1a]">
+                          {field.label}
+                          {field.required ? ' *' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
         {/* Import button */}
         {file && (
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-            <button
-              onClick={handleImport}
-              disabled={importing || (headers.length === 0 && fileType === 'csv' && mappings.filter(m => m.leadField).length === 0)}
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-6 py-3 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {importing ? (
-                <>
-                  <Spinner size="sm" />
-                  <span>Importing...</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  <span>Import {fileType.toUpperCase()}</span>
-                </>
-              )}
-            </button>
-          </div>
-        )}
+            <h2 className="text-lg font-semibold text-white mb-4">3. Import</h2>
 
-        {/* Error display */}
-        {error && (
-          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
-
-        {/* Success display */}
-        {success && (
-          <div className="flex items-start gap-2 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-            <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="text-green-400 font-medium">
-                Import complete! {success.inserted} leads imported, {success.skipped} skipped.
-              </p>
-              {success.enriched && success.enriched > 0 && (
-                <p className="text-green-400 mt-0.5">
-                  {success.enriched} enriched contacts added to LinkedIn Leads.
+            {success ? (
+              <div className="text-center py-4">
+                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle className="w-6 h-6 text-green-400" />
+                </div>
+                <p className="text-white font-medium">Import complete</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  {success.total} rows processed — {success.inserted} added, {success.skipped} skipped
+                  {success.enriched ? ` (${success.enriched} enriched leads added)` : ''}
                 </p>
-              )}
-            </div>
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="mt-4 text-blue-400 hover:text-blue-300 text-sm"
+                >
+                  View leads
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleImport}
+                  disabled={importing}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-6 py-2.5 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {importing ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Import {file.name}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setFile(null);
+                    setHeaders([]);
+                    setPreviewRows([]);
+                    setMappings([]);
+                    setError('');
+                    setSuccess(null);
+                  }}
+                  className="text-gray-400 hover:text-white text-sm transition"
+                >
+                  Start over
+                </button>
+              </div>
+            )}
+
+            {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+          </div>
+        )}
+
+        {/* Status message */}
+        {fileType === 'json' && previewRows.length > 0 && (
+          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-2">Data Preview</h2>
+            <p className="text-sm text-gray-400 mb-3">
+              {previewRows.length} rows detected. The script will auto-map all fields:
+            </p>
+            <ul className="text-xs text-gray-400 space-y-1">
+              <li>• Basic business info → <span className="text-white">leads</span> table</li>
+              <li>• Owner/LinkedIn/Apollo contacts → <span className="text-white">linkedin_leads</span> table</li>
+              <li>• Tech stack data → <span className="text-white">tech_stack</span> table</li>
+            </ul>
           </div>
         )}
       </div>
