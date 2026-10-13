@@ -4,11 +4,25 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
-import { Users, Shield, Trash2, CheckCircle, AlertCircle, UserPlus } from 'lucide-react';
+import { Users, Shield, Trash2, CheckCircle, AlertCircle, UserPlus, Copy } from 'lucide-react';
+
+interface Profile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  role: 'admin' | 'member' | null;
+  created_at: string | null;
+}
+
+interface AssignmentLimit {
+  profile_id: string;
+  max_leads: number;
+  current_leads: number;
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [profiles, setProfiles] = useState<any[]>([])
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
   const [limitsLoading, setLimitsLoading] = useState(false);
@@ -18,6 +32,7 @@ export default function SettingsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
+  const [invitePassword, setInvitePassword] = useState('');
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState('');
 
@@ -36,7 +51,7 @@ export default function SettingsPage() {
     if (error) {
       console.error('Error fetching profiles:', error);
     } else {
-      setProfiles(data ?? []);
+      setProfiles((data ?? []) as Profile[]);
     }
     setLoading(false);
   };
@@ -51,7 +66,7 @@ export default function SettingsPage() {
       console.error('Error fetching limits:', error);
     } else {
       const limitMap: Record<string, { max_leads: number; current_leads: number }> = {};
-      (data ?? []).forEach((l: any) => {
+      (data ?? []).forEach((l: AssignmentLimit) => {
         limitMap[l.profile_id] = {
           max_leads: l.max_leads,
           current_leads: l.current_leads,
@@ -96,6 +111,7 @@ export default function SettingsPage() {
     setInviting(true);
     setInviteError('');
     setInviteSuccess('');
+    setInvitePassword('');
 
     const res = await fetch('/api/invite', {
       method: 'POST',
@@ -119,6 +135,9 @@ export default function SettingsPage() {
     setInviteEmail('');
     setInviteName('');
     setInviting(false);
+    if (data.password) {
+      setInvitePassword(data.password);
+    }
     fetchProfiles();
   };
 
@@ -149,7 +168,7 @@ export default function SettingsPage() {
         <p className="text-sm text-gray-400 mt-0.5">Manage your team and account settings.</p>
       </div>
 
-      {/* Current User Card */}
+      {/* Current User Card - shows for everyone */}
       <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
@@ -171,46 +190,48 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Team Members */}
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-        <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <Users className="w-5 h-5 text-gray-400" />
-          Team Members
-          <span className="text-sm font-normal text-gray-500">({profiles.length})</span>
-        </h2>
-        <p className="text-xs text-gray-500 mb-4">Manage who has access to the outreach tool.</p>
+      {/* Team Members - Admin only */}
+      {isAdmin && (
+        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+            <Users className="w-5 h-5 text-gray-400" />
+            Team Members
+            <span className="text-sm font-normal text-gray-500">({profiles.length})</span>
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">Manage who has access to the outreach tool.</p>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="flex items-center gap-3 text-gray-500">
-              <Spinner size="md" />
-              <span>Loading team members...</span>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="flex items-center gap-3 text-gray-500">
+                <Spinner size="md" />
+                <span>Loading team members...</span>
+              </div>
             </div>
-          </div>
-        ) : profiles.length === 0 ? (
-          <div className="text-center py-8">
-            <Users className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400 text-sm">No team members yet.</p>
-            <p className="text-gray-600 text-xs mt-1">Add members below to get started.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {profiles.map((profile) => (
-              <TeamMemberRow
-                key={profile.id}
-                profile={profile}
-                isAdmin={isAdmin}
-                currentUserId={user?.id}
-                onRemove={handleRemove}
-                removingId={removingId}
-                removeError={removeError}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          ) : profiles.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-8 h-8 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">No team members yet.</p>
+              <p className="text-gray-600 text-xs mt-1">Add members below to get started.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {profiles.map((profile) => (
+                <TeamMemberRow
+                  key={profile.id}
+                  profile={profile}
+                  isAdmin={isAdmin}
+                  currentUserId={user?.id}
+                  onRemove={handleRemove}
+                  removingId={removingId}
+                  removeError={removeError}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Assignment Limits */}
+      {/* Assignment Limits - Admin only */}
       {isAdmin && (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
           <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
@@ -249,14 +270,14 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Invite Member Form */}
+      {/* Invite Member Form - Admin only */}
       {isAdmin && (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
           <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-gray-400" />
             Invite Team Member
           </h2>
-          <p className="text-xs text-gray-500 mb-4">They'll receive a magic link to sign in.</p>
+          <p className="text-xs text-gray-500 mb-4">Add a new member to the team. A password will be generated.</p>
 
           {inviteError && (
             <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -269,6 +290,18 @@ export default function SettingsPage() {
             <div className="mb-3 flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
               <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
               <p className="text-sm text-green-400">{inviteSuccess}</p>
+              {invitePassword && (
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="text-sm font-mono bg-[#1a1a1a] px-2 py-1 rounded text-gray-200">{invitePassword}</code>
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(invitePassword); }}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

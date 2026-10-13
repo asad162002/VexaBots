@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Filter, Users, Mail, ExternalLink, Copy } from 'lucide-react';
+import { Search, Filter, Users, Mail, ExternalLink, Copy, Shield } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
+import { useAuth } from '@/lib/auth-context';
 
 interface LinkedInLead {
   id: string;
@@ -30,6 +31,7 @@ const PAGE_SIZE = 50;
 
 export default function LinkedinLeadsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [leads, setLeads] = useState<LinkedInLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -38,6 +40,8 @@ export default function LinkedinLeadsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [emailFilter, setEmailFilter] = useState<'all' | 'verified' | 'not_found'>('all');
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loadingRole, setLoadingRole] = useState(true);
 
   const observer = useRef<IntersectionObserver | null>(null);
   const lastLeadRef = useRef<HTMLDivElement | null>(null);
@@ -62,7 +66,28 @@ export default function LinkedinLeadsPage() {
     return query;
   };
 
+  // Check if user is admin on mount
+  useEffect(() => {
+    const checkRole = async () => {
+      if (!user?.id) {
+        setLoadingRole(false);
+        return;
+      }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      setIsAdmin(profile?.role === 'admin');
+      setLoadingRole(false);
+    };
+    checkRole();
+  }, [user]);
+
   const fetchLeads = useCallback(async (offset = 0) => {
+    if (loadingRole) return;
+    if (!isAdmin && !user?.id) return;
+
     if (offset === 0) {
       setLoading(true);
     } else {
@@ -70,6 +95,36 @@ export default function LinkedinLeadsPage() {
     }
 
     let query = buildQuery();
+
+    // Non-admins only see leads assigned to them (via place_id matching)
+    if (!isAdmin && user?.id) {
+      // LinkedIn leads don't have direct assigned_to field, but we can show
+      // leads associated with leads the user is assigned to via place_id
+      const { data: userLeads, error: leadsError } = await supabase
+        .from('leads')
+        .select('place_id')
+        .eq('assigned_to', user.id)
+        .not('place_id', 'is', null);
+
+      if (leadsError) {
+        console.error('Error fetching user leads:', leadsError);
+        setLeads([]);
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
+
+      const placeIds = (userLeads || []).map(l => l.place_id).filter(Boolean);
+      if (placeIds.length === 0) {
+        setLeads([]);
+        setHasMore(false);
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
+
+      query = query.in('place_id', placeIds);
+    }
 
     // Apply search client-side (already filtered server-side for source/email)
     const { data, error, count } = await query.range(offset, offset + PAGE_SIZE - 1);
@@ -87,7 +142,7 @@ export default function LinkedinLeadsPage() {
 
     setLoading(false);
     setLoadingMore(false);
-  }, [sourceFilter, emailFilter]);
+  }, [sourceFilter, emailFilter, isAdmin, user?.id, loadingRole]);
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
@@ -152,6 +207,17 @@ export default function LinkedinLeadsPage() {
     return <Mail className="w-4 h-4 text-gray-500" />;
   };
 
+  if (loadingRole) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <div className="flex items-center gap-3 text-gray-400">
+          <Spinner size="md" />
+          <span>Checking permissions...</span>
+        </div>
+      </div>
+    );
+  }
+
   if (loading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
@@ -166,14 +232,24 @@ export default function LinkedinLeadsPage() {
   return (
     <div className="max-w-5xl">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">LinkedIn Leads</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          Enriched contacts with LinkedIn profiles, emails, and titles for your outreach.
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">LinkedIn Leads</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {isAdmin
+              ? 'Enriched contacts with LinkedIn profiles, emails, and titles for your outreach.'
+              : 'LinkedIn leads assigned to you.'}
+          </p>
+        </div>
+        {!isAdmin && (
+          <span className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5">
+            Member View
+          </span>
+        )}
       </div>
 
-      {/* Filters */}
+      {/* Only show filters for admins (members see their own filtered view) */}
+      {isAdmin && (
       <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 mb-6">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
@@ -209,7 +285,7 @@ export default function LinkedinLeadsPage() {
             <option value="not_found" className="bg-[#1a1a1a]">No Email</option>
           </select>
         </div>
-      </div>
+      </div>)}
 
       {/* Results summary */}
       <div className="flex items-center justify-between mb-4">
