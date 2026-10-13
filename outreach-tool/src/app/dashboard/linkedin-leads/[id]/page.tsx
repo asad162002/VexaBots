@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Mail, ExternalLink, User, Building2, FileText, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, Mail, ExternalLink, User, Building2, FileText, Calendar, CheckCircle } from 'lucide-react';
 
 interface LinkedInLead {
   id: string;
@@ -15,6 +15,9 @@ interface LinkedInLead {
   linkedin_url: string | null;
   source: string | null;
   notes: string | null;
+  assigned_to: string | null;
+  assigned_at: string | null;
+  assigned_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -25,14 +28,29 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
   const leadId = unwrappedParams.id;
 
   const [lead, setLead] = useState<LinkedInLead | null>(null);
+  const [profiles, setProfiles] = useState<{id: string; full_name: string | null; email: string | null}[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notes, setNotes] = useState('');
   const [notesError, setNotesError] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
 
   useEffect(() => {
     fetchLead();
+    fetchProfiles();
   }, [leadId]);
+
+  const fetchProfiles = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .order('full_name');
+    if (error) {
+      console.error('Error fetching profiles:', error);
+    } else {
+      setProfiles(data ?? []);
+    }
+  };
 
   const fetchLead = async () => {
     setLoading(true);
@@ -48,6 +66,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
     } else if (data) {
       setLead(data as LinkedInLead);
       setNotes(data.notes || '');
+      setAssignedTo(data.assigned_to || '');
     }
     setLoading(false);
   };
@@ -56,6 +75,22 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
     if (!lead) return;
     setSaving(true);
     setNotesError('');
+
+    // Save assignment if changed
+    if (assignedTo !== (lead.assigned_to || '')) {
+      const { error: assignError } = await supabase
+        .from('linkedin_leads')
+        .update({
+          assigned_to: assignedTo || null,
+          assigned_at: assignedTo ? new Date().toISOString() : null,
+        })
+        .eq('id', lead.id);
+      if (assignError) {
+        setNotesError(assignError.message);
+        setSaving(false);
+        return;
+      }
+    }
 
     const { error } = await supabase
       .from('linkedin_leads')
@@ -66,7 +101,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
       setNotesError(error.message);
     } else {
       // Update local state
-      setLead({ ...lead, notes });
+      setLead({ ...lead, notes, assigned_to: assignedTo || null, assigned_at: assignedTo ? new Date().toISOString() : null });
     }
     setSaving(false);
   };
@@ -200,9 +235,26 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
               </label>
               <span className="text-white">{lead.source?.replace('_', ' ') || 'Unknown'}</span>
             </div>
+            {profiles.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                  Assign To
+                </label>
+                <select
+                  value={assignedTo}
+                  onChange={(e) => setAssignedTo(e.target.value)}
+                  className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                >
+                  <option value="">Unassigned</option>
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.full_name || profile.email || 'Unnamed'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-
-          {/* Timeline */}
           <div className="mt-6 pt-4 border-t border-[#27272a]">
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Calendar className="w-3.5 h-3.5" />
