@@ -87,6 +87,13 @@ export default function LinkedinLeadsPage() {
         } else {
           placeIds = (assignedLeads || []).map(l => l.place_id).filter(Boolean) as string[];
         }
+
+        // Members with no assigned leads get empty results
+        if (placeIds.length === 0) {
+          setLeads([]);
+          setHasMore(false);
+          return;
+        }
       }
 
       let query = supabase
@@ -98,9 +105,6 @@ export default function LinkedinLeadsPage() {
       // Members only see LinkedIn leads for leads assigned to them
       if (!isAdmin && placeIds.length > 0) {
         query = query.in('place_id', placeIds);
-      } else if (!isAdmin && placeIds.length === 0) {
-        // No assigned leads means no results
-        query = query.eq('id', 'never-matches');
       }
 
       if (sourceFilter !== 'all') {
