@@ -164,11 +164,11 @@ export default function LinkedinLeadsPage() {
   }, [loadMore]);
 
   useEffect(() => {
-    // Reset and re-fetch when filters change
+    // Initial fetch and refetch when admin status changes
     setLeads([]);
     setHasMore(true);
     fetchLeads(0);
-  }, [sourceFilter, emailFilter]);
+  }, [sourceFilter, emailFilter, isAdmin, user]);
 
   // Filter leads client-side for search
   const filteredLeads = leads.filter((lead) => {
