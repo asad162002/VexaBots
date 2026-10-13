@@ -31,15 +31,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Generate random password for the user
-    const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
-
     // Create user with email already confirmed (no invite email sent)
-    // Also set password so user can log in directly
+    // User can login with "magic link" on the sign-in page
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase().trim(),
       email_confirm: true,
-      password: randomPassword,
       user_metadata: {
         full_name: name || '',
       },
@@ -79,9 +75,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Team member added: ${email}. They can sign in with the password provided below or reset it.`,
+      message: `Team member added: ${email}. They can sign in with magic link or password reset.`,
       user_id: authData?.user?.id,
-      password: randomPassword,
     });
   } catch (err) {
     console.error('Invite error:', err);
