@@ -60,6 +60,7 @@ export type Lead = {
   source: LeadSource;
   notes: string | null;
   source_details: Record<string, unknown> | null;
+  meeting_link: string | null;
   last_contacted_at: string | null;
   next_follow_up_at: string | null;
   assigned_to: string | null;
