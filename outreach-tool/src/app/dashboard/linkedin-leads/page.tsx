@@ -63,31 +63,6 @@ export default function LinkedinLeadsPage() {
     checkRole();
   }, [user]);
 
-  const buildQuery = () => {
-    let query = supabase
-      .from('linkedin_leads')
-      .select(`*, leads!inner(place_id, assigned_to)`, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .limit(PAGE_SIZE);
-
-    // Members only see LinkedIn leads for leads assigned to them
-    if (user && user.id && !isAdmin) {
-      query = query.eq('leads.assigned_to', user.id);
-    }
-
-    if (sourceFilter !== 'all') {
-      query = query.eq('source', sourceFilter);
-    }
-
-    if (emailFilter === 'verified') {
-      query = query.not('email', 'is', null).neq('email', '');
-    } else if (emailFilter === 'not_found') {
-      query = query.or('email.is.null,email.eq.');
-    }
-
-    return query;
-  };
-
   const fetchLeads = useCallback(async (offset = 0) => {
     if (offset === 0) {
       setLoading(true);
@@ -95,25 +70,66 @@ export default function LinkedinLeadsPage() {
       setLoadingMore(true);
     }
 
-    let query = buildQuery();
+    try {
+      let placeIds: string[] = [];
 
-    // Apply search client-side (already filtered server-side for source/email)
-    const { data, error, count } = await query.range(offset, offset + PAGE_SIZE - 1);
+      // For members, first get the place_ids of leads assigned to them
+      if (user && user.id && !isAdmin) {
+        const { data: assignedLeads, error: assignError } = await supabase
+          .from('leads')
+          .select('place_id')
+          .eq('assigned_to', user.id)
+          .not('place_id', 'is', null)
+          .neq('place_id', '');
 
-    if (error) {
-      console.error('Error fetching linkedin leads:', error);
-    } else {
-      if (offset === 0) {
-        setLeads(data ?? []);
-      } else {
-        setLeads((prev) => [...prev, ...(data ?? [])]);
+        if (assignError) {
+          console.error('Error fetching assigned place_ids:', assignError);
+        } else {
+          placeIds = (assignedLeads || []).map(l => l.place_id).filter(Boolean) as string[];
+        }
       }
-      setHasMore(data ? data.length === PAGE_SIZE : false);
-    }
 
-    setLoading(false);
-    setLoadingMore(false);
-  }, [sourceFilter, emailFilter]);
+      let query = supabase
+        .from('linkedin_leads')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      // Members only see LinkedIn leads for leads assigned to them
+      if (!isAdmin && placeIds.length > 0) {
+        query = query.in('place_id', placeIds);
+      } else if (!isAdmin && placeIds.length === 0) {
+        // No assigned leads means no results
+        query = query.eq('id', 'never-matches');
+      }
+
+      if (sourceFilter !== 'all') {
+        query = query.eq('source', sourceFilter);
+      }
+
+      if (emailFilter === 'verified') {
+        query = query.not('email', 'is', null).neq('email', '');
+      } else if (emailFilter === 'not_found') {
+        query = query.or('email.is.null,email.eq.');
+      }
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        console.error('Error fetching linkedin leads:', error);
+      } else {
+        if (offset === 0) {
+          setLeads(data ?? []);
+        } else {
+          setLeads((prev) => [...prev, ...(data ?? [])]);
+        }
+        setHasMore(data ? data.length === PAGE_SIZE : false);
+      }
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [sourceFilter, emailFilter, isAdmin, user]);
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
