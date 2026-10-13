@@ -10,7 +10,6 @@ import { Shield, TrendingUp, BarChart3, Clock } from 'lucide-react';
 interface LeadWithDetails {
   id: string;
   title: string;
-  company: string | null;
   status: LeadStatus;
   source: string | null;
   category_name: string | null;
@@ -70,7 +69,7 @@ export default function AnalyticsPage() {
       // Fetch leads - admins get all, members get only their assigned leads
       let leadsQuery = supabase
         .from('leads')
-        .select('id, title, company, status, source, category_name, assigned_at, assigned_by, updated_at');
+        .select('id, title, status, source, category_name, assigned_to, assigned_at, assigned_by, updated_at');
 
       // Non-admins only see their own leads
       if (!userIsAdmin && user?.id) {
