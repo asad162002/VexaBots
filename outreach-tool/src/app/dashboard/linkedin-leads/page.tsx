@@ -44,6 +44,7 @@ export default function LinkedinLeadsPage() {
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [emailFilter, setEmailFilter] = useState<'all' | 'verified' | 'not_found'>('all');
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'assigned' | 'unassigned'>('all');
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [selectN, setSelectN] = useState(50);
@@ -131,6 +132,12 @@ export default function LinkedinLeadsPage() {
         query = query.not('email', 'is', null).neq('email', '');
       } else if (emailFilter === 'not_found') {
         query = query.or('email.is.null,email.eq.');
+      }
+
+      if (assignmentFilter === 'assigned') {
+        query = query.not('assigned_to', 'is', null);
+      } else if (assignmentFilter === 'unassigned') {
+        query = query.is('assigned_to', null);
       }
 
       const { data, error, count } = await query;
@@ -309,6 +316,16 @@ export default function LinkedinLeadsPage() {
             <option value="all" className="bg-[#1a1a1a]">All Emails</option>
             <option value="verified" className="bg-[#1a1a1a]">Has Email</option>
             <option value="not_found" className="bg-[#1a1a1a]">No Email</option>
+          </select>
+
+          <select
+            value={assignmentFilter}
+            onChange={(e) => setAssignmentFilter(e.target.value as typeof assignmentFilter)}
+            className="bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+          >
+            <option value="all" className="bg-[#1a1a1a]">All Leads</option>
+            <option value="assigned" className="bg-[#1a1a1a]">Assigned</option>
+            <option value="unassigned" className="bg-[#1a1a1a]">Unassigned</option>
           </select>
         </div>
       </div>

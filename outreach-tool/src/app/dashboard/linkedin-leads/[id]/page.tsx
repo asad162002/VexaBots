@@ -78,17 +78,24 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
 
     // Save assignment if changed
     if (assignedTo !== (lead.assigned_to || '')) {
-      const { error: assignError } = await supabase
-        .from('linkedin_leads')
+      const previousAssignee = lead.assigned_to;
+      await supabase.from('linkedin_leads')
         .update({
           assigned_to: assignedTo || null,
           assigned_at: assignedTo ? new Date().toISOString() : null,
         })
         .eq('id', lead.id);
-      if (assignError) {
-        setNotesError(assignError.message);
-        setSaving(false);
-        return;
+
+      // Log to assignment_history when assignment changes
+      if (assignedTo !== previousAssignee) {
+        await supabase.from('assignment_history').insert({
+          lead_id: lead.id,
+          assigned_to: assignedTo,
+          assigned_by: null,
+          assigned_at: new Date().toISOString(),
+          previous_assignee: previousAssignee,
+          notes: lead.notes || null,
+        });
       }
     }
 

@@ -357,12 +357,20 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       </a>
                     </div>
                   ) : (
-                    <iframe
-                      src={`https://cal.com/${process.env.NEXT_PUBLIC_CALCOM_USERNAME || 'demo'}/${process.env.NEXT_PUBLIC_CALCOM_EVENT_TYPE || '30min'}?prefill[name]=${encodeURIComponent(lead.owner_name || '')}`}
-                      title="Book Meeting"
-                      className="w-full h-[600px] border border-[#27272a] rounded-lg"
-                      allowFullScreen
-                    />
+                    <div className="text-center py-8">
+                      <Calendar className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                      <p className="text-gray-300 mb-4">
+                        Click below to book a meeting on Cal.com.
+                      </p>
+                      <a
+                        href={`https://cal.com/${process.env.NEXT_PUBLIC_CALCOM_USERNAME || 'demo'}/${process.env.NEXT_PUBLIC_CALCOM_EVENT_TYPE || '30min'}?prefill[name]=${encodeURIComponent(lead.owner_name || '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-semibold rounded-lg px-6 py-3 text-sm transition"
+                      >
+                        Open Cal.com Booking
+                      </a>
+                    </div>
                   )}
                 </div>
                 {!lead.meeting_link && (
