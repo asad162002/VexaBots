@@ -57,14 +57,6 @@ export default function AssignmentLogPage() {
     }
   }, [profilesLoaded, dateFilter]);
 
-  // Redirect non-admins
-  useEffect(() => {
-    if (profilesLoaded && !isAdmin) {
-      // Non-admins shouldn't access this page
-      // They'll still see data but this is a soft guard
-    }
-  }, [isAdmin, profilesLoaded]);
-
   const fetchAssignmentLog = async () => {
     setLoading(true);
     setError(null);
@@ -223,6 +215,12 @@ export default function AssignmentLogPage() {
     setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: false }));
     setSelectedGroup(group);
   };
+
+  // Clear cached leads when date filter changes
+  useEffect(() => {
+    setAssigneeLeads({});
+    setSelectedGroup(null);
+  }, [dateFilter]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
