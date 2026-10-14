@@ -5,16 +5,24 @@ import { supabase } from '@/lib/supabase';
 import { type Profile } from '@/lib/types';
 import Spinner from '@/components/ui/spinner';
 import { useAuth } from '@/lib/auth-context';
+import { ChevronDown, ChevronRight, Calendar, User } from 'lucide-react';
+
+interface DateGroup {
+  date: string; // ISO date string (e.g., "2026-10-14")
+  display: string; // formatted for display
+  leadIds: string[];
+  count: number;
+  latestAssignment: string;
+  latestAssignedByName: string | null;
+  latestAssignedByEmail: string | null;
+}
 
 interface AssigneeGroup {
   assigneeId: string;
   assigneeName: string | null;
   assigneeEmail: string | null;
-  leadCount: number;
-  latestAssignment: string;
-  latestAssignedByName: string | null;
-  latestAssignedByEmail: string | null;
-  notes: string | null;
+  dateGroups: DateGroup[];
+  totalLeads: number;
 }
 
 export default function AssignmentLogPage() {
@@ -24,7 +32,8 @@ export default function AssignmentLogPage() {
   const [error, setError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [profilesLoaded, setProfilesLoaded] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<AssigneeGroup | null>(null);
+  const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null);
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
   const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
   const [isAdmin, setIsAdmin] = useState(false);
@@ -34,7 +43,6 @@ export default function AssignmentLogPage() {
     fetchProfiles();
   }, []);
 
-  // Check if user is admin and fetch profiles
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
     if (profilesError) {
@@ -43,14 +51,12 @@ export default function AssignmentLogPage() {
       const profileMap: Record<string, Profile> = {};
       data.forEach((p) => { profileMap[p.id] = p; });
       setProfiles(profileMap);
-      // Check if current user is admin
       const currentProfile = data.find(p => p.id === user?.id);
       setIsAdmin(currentProfile?.role === 'admin');
     }
     setProfilesLoaded(true);
   };
 
-  // Re-run fetchAssignmentLog when profiles are loaded (so enrichment works)
   useEffect(() => {
     if (profilesLoaded) {
       fetchAssignmentLog();
@@ -61,7 +67,6 @@ export default function AssignmentLogPage() {
     setLoading(true);
     setError(null);
 
-    // Fetch leads with assignment data
     let leadsQuery = supabase
       .from('leads')
       .select('id, title, assigned_to, assigned_at, assigned_by, notes')
@@ -69,12 +74,10 @@ export default function AssignmentLogPage() {
       .order('assigned_at', { ascending: false })
       .limit(500);
 
-    // Non-admins only see leads assigned to them
     if (!isAdmin && user?.id) {
       leadsQuery = leadsQuery.eq('assigned_to', user.id);
     }
 
-    // Apply date filter based on assigned_at
     const now = new Date();
     let pastDate: Date | null = null;
     if (dateFilter === '24h') {
@@ -103,53 +106,64 @@ export default function AssignmentLogPage() {
       return;
     }
 
-    // Group by assignee (who the lead was assigned TO)
-    const groups: Record<string, AssigneeGroup> = {};
-    const seenLeads: Record<string, Set<string>> = {}; // Track seen titles per assignee
+    // Group by assignee, then by date
+    const groups: Record<string, { dates: Record<string, DateGroup> }> = {};
+    const seenLeads: Record<string, Record<string, Set<string>>> = {};
+
     leads.forEach((lead) => {
-      if (!lead.assigned_to) return;
-      const key = lead.assigned_to;
-      if (!groups[key]) {
+      if (!lead.assigned_to || !lead.assigned_at) return;
+      const assigneeKey = lead.assigned_to;
+      const dateKey = new Date(lead.assigned_at).toISOString().split('T')[0]; // YYYY-MM-DD
+
+      if (!groups[assigneeKey]) {
+        groups[assigneeKey] = { dates: {} };
+        seenLeads[assigneeKey] = {};
+      }
+      if (!seenLeads[assigneeKey][dateKey]) {
+        seenLeads[assigneeKey][dateKey] = new Set();
+      }
+
+      // Deduplicate by title within each assignee+date group
+      const title = lead.title || 'Untitled Business';
+      if (seenLeads[assigneeKey][dateKey].has(title)) return;
+      seenLeads[assigneeKey][dateKey].add(title);
+
+      if (!groups[assigneeKey].dates[dateKey]) {
         const assignedByProfile = profiles[lead.assigned_by || ''];
-        groups[key] = {
-          assigneeId: key,
-          assigneeName: null,
-          assigneeEmail: null,
-          leadCount: 0,
-          latestAssignment: lead.assigned_at || '',
+        groups[assigneeKey].dates[dateKey] = {
+          date: dateKey,
+          display: new Date(lead.assigned_at).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }),
+          leadIds: [],
+          count: 0,
+          latestAssignment: lead.assigned_at,
           latestAssignedByName: assignedByProfile?.full_name || null,
           latestAssignedByEmail: assignedByProfile?.email || null,
-          notes: lead.notes || null,
         };
-        seenLeads[key] = new Set();
       }
-      // Deduplicate by title within each assignee group
-      const title = lead.title || 'Untitled Business';
-      if (seenLeads[key].has(title)) return;
-      seenLeads[key].add(title);
-      groups[key].leadCount += 1;
-      // Track the latest assignment date and who assigned it
-      if (lead.assigned_at && (!groups[key].latestAssignment || lead.assigned_at > groups[key].latestAssignment)) {
-        groups[key].latestAssignment = lead.assigned_at;
+      groups[assigneeKey].dates[dateKey].count += 1;
+      groups[assigneeKey].dates[dateKey].leadIds.push(lead.id);
+      if (lead.assigned_at && lead.assigned_at > groups[assigneeKey].dates[dateKey].latestAssignment) {
+        groups[assigneeKey].dates[dateKey].latestAssignment = lead.assigned_at;
         const assignedByProfile = profiles[lead.assigned_by || ''];
-        groups[key].latestAssignedByName = assignedByProfile?.full_name || null;
-        groups[key].latestAssignedByEmail = assignedByProfile?.email || null;
-      }
-      // Use the most recent non-empty notes
-      if (lead.notes && !groups[key].notes) {
-        groups[key].notes = lead.notes;
+        groups[assigneeKey].dates[dateKey].latestAssignedByName = assignedByProfile?.full_name || null;
+        groups[assigneeKey].dates[dateKey].latestAssignedByEmail = assignedByProfile?.email || null;
       }
     });
 
-    // Enrich with profile data for assignee names
-    const groupsArray: AssigneeGroup[] = Object.values(groups).map((group) => {
-      const profile = profiles[group.assigneeId];
-      if (profile) {
-        group.assigneeName = profile.full_name;
-        group.assigneeEmail = profile.email;
-      }
-      return group;
-    });
+    // Convert to array structure
+    const groupsArray: AssigneeGroup[] = Object.entries(groups).map(([assigneeId, data]) => {
+      const profile = profiles[assigneeId];
+      const dateGroups = Object.values(data.dates).sort((a, b) =>
+        b.date.localeCompare(a.date)
+      );
+      return {
+        assigneeId,
+        assigneeName: profile?.full_name || null,
+        assigneeEmail: profile?.email || null,
+        dateGroups,
+        totalLeads: dateGroups.reduce((sum, dg) => sum + dg.count, 0),
+      };
+    }).sort((a, b) => b.totalLeads - a.totalLeads);
 
     setAssigneeGroups(groupsArray);
     setLoading(false);
@@ -163,7 +177,6 @@ export default function AssignmentLogPage() {
       .order('assigned_at', { ascending: false })
       .limit(500);
 
-    // Apply date filter
     const now = new Date();
     let pastDate: Date | null = null;
     if (dateFilter === '24h') {
@@ -183,7 +196,6 @@ export default function AssignmentLogPage() {
       console.error('Error fetching assignee leads:', leadsError);
       return [];
     }
-    // Deduplicate by title - keep only the most recent assignment per unique lead
     const seen = new Set<string>();
     const deduplicated = (leads || []).filter(lead => {
       const title = lead.title || 'Untitled Business';
@@ -194,37 +206,32 @@ export default function AssignmentLogPage() {
     return deduplicated;
   };
 
-  const fetchAssignmentHistory = async (leadId: string) => {
-    const { data: history, error } = await supabase
-      .from('assignment_history')
-      .select('id, lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
-      .eq('lead_id', leadId)
-      .order('assigned_at', { ascending: false });
-
-    return { history: history || [], error };
-  };
-
-  const loadAssigneeLeads = async (group: AssigneeGroup) => {
-    if (assigneeLeads[group.assigneeId]) {
-      setSelectedGroup(selectedGroup?.assigneeId === group.assigneeId ? null : group);
+  const loadAssigneeLeads = async (assigneeId: string) => {
+    if (assigneeLeads[assigneeId]) {
+      setSelectedAssignee(selectedAssignee === assigneeId ? null : assigneeId);
       return;
     }
-    setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: true }));
-    const leads = await fetchAssigneeLeads(group.assigneeId);
-    setAssigneeLeads((prev) => ({ ...prev, [group.assigneeId]: leads }));
-    setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: false }));
-    setSelectedGroup(group);
+    setLoadingLeads((prev) => ({ ...prev, [assigneeId]: true }));
+    const leads = await fetchAssigneeLeads(assigneeId);
+    setAssigneeLeads((prev) => ({ ...prev, [assigneeId]: leads }));
+    setLoadingLeads((prev) => ({ ...prev, [assigneeId]: false }));
+    setSelectedAssignee(assigneeId);
   };
 
-  // Clear cached leads when date filter changes
+  // Clear cached data when date filter changes
   useEffect(() => {
     setAssigneeLeads({});
-    setSelectedGroup(null);
+    setSelectedAssignee(null);
+    setExpandedDates({});
   }, [dateFilter]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleString();
+  };
+
+  const toggleDate = (assigneeId: string, dateKey: string) => {
+    setExpandedDates((prev) => ({ ...prev, [`${assigneeId}-${dateKey}`]: !prev[`${assigneeId}-${dateKey}`] }));
   };
 
   if (loading) {
@@ -295,90 +302,121 @@ export default function AssignmentLogPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Leads Assigned</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Assignment</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned By</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
               </tr>
             </thead>
             <tbody>
               {assigneeGroups.map((group) => (
                 <tr key={group.assigneeId}>
                   <td className="px-4 py-3 text-gray-200">
-                    {group.assigneeName || group.assigneeEmail || 'Unknown'}
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-gray-400" />
+                      {group.assigneeName || group.assigneeEmail || 'Unknown'}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">{group.leadCount}</span>
+                      <span className="font-medium text-white">{group.totalLeads}</span>
                       <button
-                        onClick={() => loadAssigneeLeads(group)}
+                        onClick={() => loadAssigneeLeads(group.assigneeId)}
                         className="text-xs text-blue-400 hover:text-blue-300"
                       >
-                        {selectedGroup?.assigneeId === group.assigneeId ? 'Hide' : 'Show leads'}
+                        {selectedAssignee === group.assigneeId ? 'Hide' : 'Show dates'}
                       </button>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500">
-                    {formatDate(group.latestAssignment)}
+                    {group.dateGroups.length > 0 ? formatDate(group.dateGroups[0].latestAssignment) : '-'}
                   </td>
                   <td className="px-4 py-3 text-gray-200">
-                    {group.latestAssignedByName || group.latestAssignedByEmail || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 max-w-xs truncate">
-                    {group.notes || '-'}
+                    {group.dateGroups.length > 0 ? (group.dateGroups[0].latestAssignedByName || group.dateGroups[0].latestAssignedByEmail || '-') : '-'}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {selectedGroup && (
+          {selectedAssignee && (
             <div className="border-t border-[#27272a]">
               <div className="px-4 py-3 bg-[#27272a]/30 border-b border-[#27272a]">
-                <h3 className="text-sm font-medium text-white">
-                  Leads assigned to {selectedGroup.assigneeName || selectedGroup.assigneeEmail}
+                <h3 className="text-sm font-medium text-white flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Assignment dates for {assigneeGroups.find(g => g.assigneeId === selectedAssignee)?.assigneeName || 'Unknown'}
                 </h3>
               </div>
               <div className="max-h-96 overflow-y-auto">
-                {loadingLeads[selectedGroup.assigneeId] ? (
+                {loadingLeads[selectedAssignee] ? (
                   <div className="p-4 flex items-center justify-center gap-3 text-gray-500 text-sm">
                     <Spinner size="sm" />
-                    <span>Loading leads...</span>
+                    <span>Loading dates...</span>
                   </div>
                 ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-[#27272a]">
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lead</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned By</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(assigneeLeads[selectedGroup.assigneeId] || []).map((lead) => {
-                        const assignedByProfile = profiles[lead.assigned_by || ''];
-                        return (
-                          <tr key={lead.id} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25] transition">
-                            <td className="px-4 py-3">
-                              <a
-                                href={`/dashboard/leads/${lead.id}`}
-                                className="text-blue-400 hover:text-blue-300 font-medium"
-                              >
-                                {lead.title || 'Untitled Business'}
-                              </a>
-                            </td>
-                            <td className="px-4 py-3 text-gray-200">
-                              {assignedByProfile?.full_name || assignedByProfile?.email || '-'}
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 text-xs">
-                              {formatDate(lead.assigned_at)}
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 max-w-xs truncate text-xs">
-                              {lead.notes || '-'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                  (() => {
+                    const selGroup = assigneeGroups.find(g => g.assigneeId === selectedAssignee);
+                    if (!selGroup || selGroup.dateGroups.length === 0) {
+                      return <div className="p-4 text-gray-500 text-sm">No dates found</div>;
+                    }
+                    return selGroup.dateGroups.map((dateGroup) => {
+                      const dateKey = `${selectedAssignee}-${dateGroup.date}`;
+                      const isExpanded = expandedDates[dateKey];
+                      return (
+                        <div key={dateKey}>
+                          <button
+                            onClick={() => toggleDate(selectedAssignee, dateGroup.date)}
+                            className="w-full px-4 py-3 flex items-center gap-2 hover:bg-[#1f1f25] transition text-left"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-gray-400" />
+                            )}
+                            <span className="text-sm font-medium text-white">{dateGroup.display}</span>
+                            <span className="text-xs text-gray-500">({dateGroup.count} leads)</span>
+                          </button>
+                          {isExpanded && (
+                            <div className="border-t border-[#27272a] bg-[#0f0f0f]/30">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-[#27272a]">
+                                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lead</th>
+                                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned By</th>
+                                    <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {dateGroup.leadIds.map((leadId) => {
+                                    const lead = (assigneeLeads[selectedAssignee] || []).find(l => l.id === leadId);
+                                    const assignedByProfile = lead ? profiles[lead.assigned_by || ''] : null;
+                                    return (
+                                      <tr key={leadId} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25] transition">
+                                        <td className="px-4 py-3">
+                                          {lead ? (
+                                            <a
+                                              href={`/dashboard/leads/${lead.id}`}
+                                              className="text-blue-400 hover:text-blue-300 font-medium"
+                                            >
+                                              {lead.title || 'Untitled Business'}
+                                            </a>
+                                          ) : (
+                                            <span className="text-gray-500">Loading...</span>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-200">
+                                          {assignedByProfile?.full_name || assignedByProfile?.email || '-'}
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-500 text-xs">
+                                          {lead ? formatDate(lead.assigned_at) : '-'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()
                 )}
               </div>
             </div>
