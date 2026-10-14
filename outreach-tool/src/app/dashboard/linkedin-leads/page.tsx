@@ -89,9 +89,11 @@ export default function LinkedinLeadsPage() {
 
     try {
       let placeIds: string[] = [];
+      let directAssignedIds: string[] = [];
 
-      // For members, first get the place_ids of leads assigned to them
+      // For members, get leads assigned to them
       if (user && user.id && !isAdmin) {
+        // Get place_ids from leads table (for Google Maps leads)
         const { data: assignedLeads, error: assignError } = await supabase
           .from('leads')
           .select('place_id')
@@ -105,12 +107,26 @@ export default function LinkedinLeadsPage() {
           placeIds = (assignedLeads || []).map(l => l.place_id).filter(Boolean) as string[];
         }
 
-        // Members with no assigned leads get empty results
-        if (placeIds.length === 0) {
-          setLeads([]);
-          setHasMore(false);
-          return;
+        // Get LinkedIn lead IDs directly assigned to this member
+        const { data: directAssignedLL, error: llError } = await supabase
+          .from('linkedin_leads')
+          .select('id')
+          .eq('assigned_to', user.id);
+        
+        if (llError) {
+          console.error('Error fetching directly assigned LinkedIn leads:', llError);
+        } else {
+          directAssignedIds = (directAssignedLL || []).map((l: any) => l.id);
         }
+      }
+
+      // If member has no assigned leads (neither via place_id nor direct), return empty
+      if (!isAdmin && user?.id && placeIds.length === 0 && directAssignedIds.length === 0) {
+        setLeads([]);
+        setHasMore(false);
+        setLoading(false);
+        setLoadingMore(false);
+        return;
       }
 
       let query = supabase
@@ -119,9 +135,13 @@ export default function LinkedinLeadsPage() {
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
-      // Members only see LinkedIn leads for leads assigned to them
-      if (!isAdmin && placeIds.length > 0) {
+      // Members only see LinkedIn leads where place_id matches OR directly assigned
+      if (!isAdmin && directAssignedIds.length > 0 && placeIds.length > 0) {
+        query = query.or(`place_id.in.((${placeIds.join(',')})),id.in.((${directAssignedIds.join(',')}))`);
+      } else if (!isAdmin && placeIds.length > 0) {
         query = query.in('place_id', placeIds);
+      } else if (!isAdmin && directAssignedIds.length > 0) {
+        query = query.in('id', directAssignedIds);
       }
 
       if (sourceFilter !== 'all') {
