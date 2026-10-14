@@ -113,6 +113,7 @@ export default function AssignmentLogPage() {
 
     // Group by assignee (who the lead was assigned TO)
     const groups: Record<string, AssigneeGroup> = {};
+    const seenLeads: Record<string, Set<string>> = {}; // Track seen titles per assignee
     leads.forEach((lead) => {
       if (!lead.assigned_to) return;
       const key = lead.assigned_to;
@@ -128,7 +129,12 @@ export default function AssignmentLogPage() {
           latestAssignedByEmail: assignedByProfile?.email || null,
           notes: lead.notes || null,
         };
+        seenLeads[key] = new Set();
       }
+      // Deduplicate by title within each assignee group
+      const title = lead.title || 'Untitled Business';
+      if (seenLeads[key].has(title)) return;
+      seenLeads[key].add(title);
       groups[key].leadCount += 1;
       // Track the latest assignment date and who assigned it
       if (lead.assigned_at && (!groups[key].latestAssignment || lead.assigned_at > groups[key].latestAssignment)) {
@@ -158,18 +164,42 @@ export default function AssignmentLogPage() {
   };
 
   const fetchAssigneeLeads = async (assigneeId: string) => {
-    const { data: leads, error: leadsError } = await supabase
+    let leadsQuery = supabase
       .from('leads')
       .select('id, title, assigned_at, assigned_by, notes')
       .eq('assigned_to', assigneeId)
       .order('assigned_at', { ascending: false })
-      .limit(100);
+      .limit(500);
+
+    // Apply date filter
+    const now = new Date();
+    let pastDate: Date | null = null;
+    if (dateFilter === '24h') {
+      pastDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    } else if (dateFilter === '7d') {
+      pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (dateFilter === '30d') {
+      pastDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+    if (pastDate) {
+      leadsQuery = leadsQuery.gte('assigned_at', pastDate.toISOString());
+    }
+
+    const { data: leads, error: leadsError } = await leadsQuery;
 
     if (leadsError) {
       console.error('Error fetching assignee leads:', leadsError);
       return [];
     }
-    return leads || [];
+    // Deduplicate by title - keep only the most recent assignment per unique lead
+    const seen = new Set<string>();
+    const deduplicated = (leads || []).filter(lead => {
+      const title = lead.title || 'Untitled Business';
+      if (seen.has(title)) return false;
+      seen.add(title);
+      return true;
+    });
+    return deduplicated;
   };
 
   const fetchAssignmentHistory = async (leadId: string) => {
