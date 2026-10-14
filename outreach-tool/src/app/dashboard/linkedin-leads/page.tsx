@@ -221,6 +221,13 @@ export default function LinkedinLeadsPage() {
     if (!selectedLeads.size || !assignmentTarget) return;
     setAssigning(true);
     const ids = Array.from(selectedLeads);
+    
+    // Get previous assignees before updating
+    const { data: prevLeads } = await supabase
+      .from('linkedin_leads')
+      .select('id, assigned_to')
+      .in('id', ids);
+    
     const { error } = await supabase
       .from('linkedin_leads')
       .update({
@@ -231,6 +238,17 @@ export default function LinkedinLeadsPage() {
     if (error) {
       console.error('Error assigning leads:', error);
     } else {
+      // Log to assignment_history for each lead whose assignment changed
+      const historyEntries = (prevLeads || []).map((pl) => ({
+        lead_id: pl.id,
+        assigned_to: assignmentTarget || null,
+        assigned_by: user?.id || null,
+        assigned_at: new Date().toISOString(),
+        previous_assignee: pl.assigned_to || null,
+        notes: null,
+      }));
+      await supabase.from('assignment_history').insert(historyEntries);
+      
       setLeads((prev) => prev.map(l =>
         selectedLeads.has(l.id)
           ? { ...l, assigned_to: assignmentTarget, assigned_at: assignmentTarget ? new Date().toISOString() : null }
