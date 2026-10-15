@@ -194,8 +194,8 @@ test.describe('Lead Assignment E2E Tests', () => {
     await expect(page.locator('h1:has-text("Assignment Log")')).toBeVisible();
 
     // The assignment log shows team members grouped with lead counts.
-    // Click "Show leads" to expand the lead list for the admin's group
-    const showLeadsButton = page.locator('button:has-text("Show leads")').first();
+    // Click "Show dates" to expand the lead list for the admin's group
+    const showLeadsButton = page.locator('button:has-text("Show dates")').first();
     await expect(showLeadsButton).toBeVisible({ timeout: 10000 });
     await showLeadsButton.click();
     await page.waitForTimeout(2000);
