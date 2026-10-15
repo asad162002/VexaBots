@@ -137,12 +137,14 @@ export default function LinkedinLeadsPage() {
         .range(offset, offset + PAGE_SIZE - 1);
 
       // Members only see LinkedIn leads where place_id matches OR directly assigned
-      if (!isAdmin && directAssignedIds.length > 0 && placeIds.length > 0) {
-        query = query.or(`place_id.in.((${placeIds.join(',')})),id.in.((${directAssignedIds.join(',')}))`);
-      } else if (!isAdmin && placeIds.length > 0) {
-        query = query.in('place_id', placeIds);
-      } else if (!isAdmin && directAssignedIds.length > 0) {
-        query = query.in('id', directAssignedIds);
+      if (!isAdmin) {
+        if (directAssignedIds.length > 0 && placeIds.length > 0) {
+          query = query.or(`place_id.in.((${placeIds.join(',')})),id.in.((${directAssignedIds.join(',')}))`);
+        } else if (placeIds.length > 0) {
+          query = query.in('place_id', placeIds);
+        } else if (directAssignedIds.length > 0) {
+          query = query.in('id', directAssignedIds);
+        }
       }
 
       if (sourceFilter !== 'all') {
