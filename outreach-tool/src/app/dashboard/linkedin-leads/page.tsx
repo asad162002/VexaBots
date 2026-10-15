@@ -177,7 +177,7 @@ export default function LinkedinLeadsPage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [sourceFilter, emailFilter, assignmentFilter, isAdmin, user, dateFilter]);
+  }, [sourceFilter, emailFilter, assignmentFilter, isAdmin, user]);
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
