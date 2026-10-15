@@ -201,10 +201,11 @@ test.describe('Lead Assignment E2E Tests', () => {
     await page.waitForTimeout(2000);
     
     // Click on the first date entry to expand leads
-    const dateButton = page.locator('.bg-[#27272a]/30 button').first();
-    if (await dateButton.count() > 0) {
-      await dateButton.click();
-      await page.waitForTimeout(1000);
+    // Date entry buttons contain a chevron and date text
+    const dateEntryButton = page.locator("button").filter({ hasText: /Oct|Nov|Dec|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep/ }).first();
+    if (await dateEntryButton.count() > 0) {
+      await dateEntryButton.click();
+      await page.waitForTimeout(2000);
     }
     
     // Verify the lead appears in the expanded leads table
