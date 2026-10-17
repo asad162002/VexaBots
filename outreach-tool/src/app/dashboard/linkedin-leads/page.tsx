@@ -55,6 +55,7 @@ export default function LinkedinLeadsPage() {
   const observer = useRef<IntersectionObserver | null>(null);
   const lastLeadRef = useRef<HTMLDivElement | null>(null);
   const initialFetchDone = useRef(false);
+  const lastFetchDeps = useRef('');
 
   useEffect(() => {
     const checkRole = async () => {
@@ -212,18 +213,17 @@ export default function LinkedinLeadsPage() {
   useEffect(() => {
     // Don't fetch until we know the user's role
     if (loadingRole) return;
-    // Initial fetch and refetch when filters change
-    if (initialFetchDone.current) {
-      // Only refetch when filters change, not on every re-render
-      setLeads([]);
-      setHasMore(true);
-      setSelectedLeads(new Set());
-      fetchLeads(0);
-    } else {
-      initialFetchDone.current = true;
-      fetchLeads(0);
-    }
-  }, [sourceFilter, emailFilter, isAdmin, user, loadingRole]);
+    
+    // Create a dependency key to detect actual filter changes
+    const depsKey = `${sourceFilter}|${emailFilter}|${assignmentFilter}|${isAdmin}|${user?.id}`;
+    if (lastFetchDeps.current === depsKey) return; // No change in deps, skip
+    lastFetchDeps.current = depsKey;
+    
+    setLeads([]);
+    setHasMore(true);
+    setSelectedLeads(new Set());
+    fetchLeads(0);
+  }, [sourceFilter, emailFilter, assignmentFilter, isAdmin, user, loadingRole]);
 
   // Filter leads client-side for search
   const filteredLeads = leads.filter((lead) => {
