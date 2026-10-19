@@ -126,7 +126,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
     // Refresh activities
     fetchActivities();
 
-    // Update lead's notes (but don't duplicate - only update notes, not next_follow_up_at)
+    // Update lead's notes - append activity as a note
     if (activityContent && lead) {
       const newNotes = lead?.notes
         ? `${lead.notes}\n\n[${activityType}] ${activityContent}`
@@ -143,6 +143,8 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
         notes: newNotes,
         updated_at: new Date().toISOString(),
       });
+      // Sync the notes textarea state
+      setNotes(newNotes);
     }
   };
 
