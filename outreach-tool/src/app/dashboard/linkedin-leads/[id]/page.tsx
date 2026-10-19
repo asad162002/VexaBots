@@ -85,6 +85,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
       .from('lead_activities')
       .select('*')
       .eq('lead_id', leadId)
+      .eq('lead_table', 'linkedin_leads')
       .order('created_at', { ascending: false });
 
     if (activitiesError) {
@@ -99,6 +100,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
 
     const { error: insertError } = await supabase.from('lead_activities').insert({
       lead_id: leadId,
+      lead_table: 'linkedin_leads',
       profile_id: user.id,
       activity_type: activityType,
       content: activityContent.trim(),
