@@ -124,41 +124,21 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
     // Refresh activities
     fetchActivities();
 
-    // Also update lead's notes and next_follow_up_at if activity has follow-up
-    if (activityFollowUp && lead) {
+    // Update lead's notes (but don't duplicate - only update notes, not next_follow_up_at)
+    if (activityContent && lead) {
+      const newNotes = lead?.notes
+        ? `${lead.notes}\n\n[${activityType}] ${activityContent}`
+        : `[${activityType}] ${activityContent}`;
       await supabase
         .from('linkedin_leads')
         .update({
-          notes: lead?.notes
-            ? `${lead.notes}\n\n[${activityType}] ${activityContent}`
-            : `[${activityType}] ${activityContent}`,
-          next_follow_up_at: new Date(activityFollowUp).toISOString(),
+          notes: newNotes,
           updated_at: new Date().toISOString(),
         })
         .eq('id', lead.id);
       setLead({
         ...lead,
-        notes: lead?.notes
-          ? `${lead.notes}\n\n[${activityType}] ${activityContent}`
-          : `[${activityType}] ${activityContent}`,
-        updated_at: new Date().toISOString(),
-      });
-    } else if (activityContent && lead && !activityFollowUp) {
-      // Append activity note to lead notes
-      await supabase
-        .from('linkedin_leads')
-        .update({
-          notes: lead?.notes
-            ? `${lead.notes}\n\n[${activityType}] ${activityContent}`
-            : `[${activityType}] ${activityContent}`,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', lead.id);
-      setLead({
-        ...lead,
-        notes: lead?.notes
-          ? `${lead.notes}\n\n[${activityType}] ${activityContent}`
-          : `[${activityType}] ${activityContent}`,
+        notes: newNotes,
         updated_at: new Date().toISOString(),
       });
     }
