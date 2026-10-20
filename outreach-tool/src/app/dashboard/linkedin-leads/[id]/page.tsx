@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Mail, ExternalLink, User, Building2, FileText, Calendar, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Mail, ExternalLink, User, Building2, Calendar, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 interface LinkedInLead {
@@ -33,8 +33,6 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
   const [profiles, setProfiles] = useState<{id: string; full_name: string | null; email: string | null}[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [notesError, setNotesError] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [activities, setActivities] = useState<any[]>([]);
   const [showActivityForm, setShowActivityForm] = useState(false);
@@ -70,10 +68,8 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
 
     if (error) {
       console.error('Error fetching lead:', error);
-      setNotesError(error.message);
     } else if (data) {
       setLead(data as LinkedInLead);
-      setNotes(data.notes || '');
       setAssignedTo(data.assigned_to || '');
       fetchActivities();
     }
@@ -112,7 +108,6 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
 
     if (insertError) {
       console.error('Error logging activity:', insertError);
-      setNotesError('Failed to log activity.');
       return;
     }
 
@@ -125,33 +120,11 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
 
     // Refresh activities
     fetchActivities();
-
-    // Update lead's notes - append activity as a note
-    if (activityContent && lead) {
-      const newNotes = lead?.notes
-        ? `${lead.notes}\n\n[${activityType}] ${activityContent}`
-        : `[${activityType}] ${activityContent}`;
-      await supabase
-        .from('linkedin_leads')
-        .update({
-          notes: newNotes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', lead.id);
-      setLead({
-        ...lead,
-        notes: newNotes,
-        updated_at: new Date().toISOString(),
-      });
-      // Sync the notes textarea state
-      setNotes(newNotes);
-    }
   };
 
-  const saveNotes = async () => {
+  const saveAssignment = async () => {
     if (!lead) return;
     setSaving(true);
-    setNotesError('');
 
     // Save assignment if changed
     if (assignedTo !== (lead.assigned_to || '')) {
@@ -175,18 +148,8 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
           notes: lead.notes || null,
         });
       }
-    }
 
-    const { error } = await supabase
-      .from('linkedin_leads')
-      .update({ notes } as any)
-      .eq('id', lead.id);
-
-    if (error) {
-      setNotesError(error.message);
-    } else {
-      // Update local state
-      setLead({ ...lead, notes, assigned_to: assignedTo || null, assigned_at: assignedTo ? new Date().toISOString() : null });
+      setLead({ ...lead, assigned_to: assignedTo || null, assigned_at: assignedTo ? new Date().toISOString() : null });
     }
     setSaving(false);
   };
@@ -339,6 +302,15 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
                       </option>
                     ))}
                   </select>
+                  {assignedTo !== (lead.assigned_to || '') && (
+                    <button
+                      onClick={saveAssignment}
+                      disabled={saving}
+                      className="mt-2 w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-medium rounded-lg text-sm transition disabled:cursor-not-allowed"
+                    >
+                      {saving ? 'Saving...' : 'Save Assignment'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -357,51 +329,6 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
                   </>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-            <label className="block text-sm font-medium text-white mb-2">
-              Notes
-            </label>
-            <p className="text-xs text-gray-500 mb-3">
-              Add notes about this lead - your observations, follow-up plans, or any context.
-            </p>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={6}
-              className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition resize-none"
-              placeholder="Enter your notes here..."
-            />
-            {notesError && (
-              <p className="mt-2 text-sm text-red-400">{notesError}</p>
-            )}
-            <div className="flex items-center justify-between mt-4">
-              <button
-                onClick={saveNotes}
-                disabled={saving || notes === lead.notes}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-medium rounded-lg text-sm transition disabled:cursor-not-allowed"
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Save Notes
-                  </>
-                )}
-              </button>
-              {notes !== lead.notes && (
-                <span className="text-xs text-gray-500">Unsaved changes</span>
-              )}
             </div>
           </div>
 
