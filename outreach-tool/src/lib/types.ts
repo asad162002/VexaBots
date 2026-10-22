@@ -60,7 +60,6 @@ export type Lead = {
   source: LeadSource;
   notes: string | null;
   source_details: Record<string, unknown> | null;
-  meeting_link: string | null;
   last_contacted_at: string | null;
   next_follow_up_at: string | null;
   assigned_to: string | null;
@@ -105,4 +104,27 @@ export const STATUS_COLORS: Record<LeadStatus, string> = {
   send_info: 'bg-yellow-100 text-yellow-700',
   meeting_booked: 'bg-purple-100 text-purple-700',
   dead: 'bg-gray-200 text-gray-500',
+};
+
+// Telnyx Call Log Types
+export type CallStatus =
+  | 'initiated'
+  | 'ringing'
+  | 'answered'
+  | 'busy'
+  | 'voicemail'
+  | 'no_answer'
+  | 'disconnected';
+
+export type CallLog = {
+  id: string;
+  lead_id: string;
+  caller_id: string;
+  from_number: string;
+  to_number: string;
+  status: CallStatus;
+  duration_seconds: number | null;
+  recorded_url: string | null;
+  created_at: string;
+  updated_at: string;
 };

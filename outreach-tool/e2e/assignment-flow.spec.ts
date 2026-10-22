@@ -194,20 +194,12 @@ test.describe('Lead Assignment E2E Tests', () => {
     await expect(page.locator('h1:has-text("Assignment Log")')).toBeVisible();
 
     // The assignment log shows team members grouped with lead counts.
-    // Click "Show dates" to expand the date list for the admin's group
-    const showDatesButton = page.locator('button:has-text("Show dates")').first();
-    await expect(showDatesButton).toBeVisible({ timeout: 10000 });
-    await showDatesButton.click();
+    // Click "Show leads" to expand the lead list for the admin's group
+    const showLeadsButton = page.locator('button:has-text("Show leads")').first();
+    await expect(showLeadsButton).toBeVisible({ timeout: 10000 });
+    await showLeadsButton.click();
     await page.waitForTimeout(2000);
-    
-    // Click on the first date entry to expand leads
-    // Date entry buttons contain a chevron and date text
-    const dateEntryButton = page.locator("button").filter({ hasText: /Oct|Nov|Dec|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep/ }).first();
-    if (await dateEntryButton.count() > 0) {
-      await dateEntryButton.click();
-      await page.waitForTimeout(2000);
-    }
-    
+
     // Verify the lead appears in the expanded leads table
     await expect(page.locator('text=Test CSV Business').first()).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: '/tmp/assignment-log-csv-lead.png', fullPage: true });
