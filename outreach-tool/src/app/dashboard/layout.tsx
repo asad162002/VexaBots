@@ -14,10 +14,12 @@ import {
   Upload,
   BarChart3,
   Clock,
+  Phone,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true },
+  { href: '/dashboard/calls', label: 'Call Dialer', icon: Phone },
   { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users },
   { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard },
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
