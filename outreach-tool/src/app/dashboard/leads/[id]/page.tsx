@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
 
 import { Calendar, X } from 'lucide-react';
+import CallDialer from '@/components/CallDialer';
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -237,11 +238,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const handleCall = (phone: string | null) => {
-    if (phone) {
-      window.location.href = `tel:${phone}`;
-    }
-  };
 
   return (
     <div>
@@ -295,17 +291,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
             {/* Action buttons */}
             <div className="flex flex-wrap gap-3 mt-6">
-              {lead.phone && (
-                <button
-                  onClick={() => handleCall(lead.phone)}
-                  className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-500 active:bg-green-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                  Call Now
-                </button>
-              )}
               {lead.website && (
                 <a
                   href={lead.website}
@@ -329,6 +314,20 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               )}
             </div>
           </div>
+
+          {/* Phone Dialer (if lead has phone) */}
+          {lead.phone && (
+            <div className="mt-6">
+              <CallDialer
+                lead={{
+                  id: lead.id,
+                  phone: lead.phone,
+                  country_code: lead.country_code || null,
+                  owner_name: lead.owner_name || null,
+                }}
+              />
+            </div>
+          )}
 
           {/* Cal.com Booking Modal */}
           {showBookMeeting && (
