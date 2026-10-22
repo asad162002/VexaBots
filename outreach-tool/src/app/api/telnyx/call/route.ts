@@ -12,24 +12,24 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
 
 export async function POST(req: NextRequest) {
   try {
-    const { leadId, leadName, leadPhone } = await req.json();
+    const { callerId, leadId, leadName, leadPhone } = await req.json();
 
-    if (!leadId || !leadPhone) {
+    if (!callerId || !leadPhone) {
       return NextResponse.json({ error: 'Missing required fields: callerId, leadPhone' }, { status: 400 });
     }
 
-    // Get the team member's assigned phone number from the lead's caller_id
-    const { data: teamMember, error: teamError } = await supabaseAdmin
-      .from('team_members')
+    // Get the caller's assigned phone number from profiles table
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
       .select('phone_number, full_name')
-      .eq('id', leadId)
+      .eq('id', callerId)
       .single();
 
-    if (teamError || !teamMember?.phone_number) {
-      return NextResponse.json({ error: 'Phone number not assigned to this caller' }, { status: 400 });
+    if (profileError || !profile?.phone_number) {
+      return NextResponse.json({ error: 'No phone number assigned to your account. Add one in Settings first.' }, { status: 400 });
     }
 
-    const fromNumber = teamMember.phone_number;
+    const fromNumber = profile.phone_number;
 
     // Create the call via Telnyx API
     const response = await fetch('https://api.telnyx.com/v2/calls', {
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     // Log the call in call_logs
     await supabaseAdmin.from('call_logs').insert({
       call_id: callId,
-      caller_id: leadId,
+      caller_id: callerId,
       from_number: fromNumber,
       to_number: leadPhone,
       lead_id: leadId,

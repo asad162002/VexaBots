@@ -32,9 +32,14 @@ export default function CallsPage() {
   const [success, setSuccess] = useState('')
 
   const fetchTeamMembers = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return
+
     const { data, error } = await supabase
-      .from('team_members')
-      .select('*')
+      .from('profiles')
+      .select('*, phone_number')
+      .neq('phone_number', null)
+      .not('phone_number', 'is', null)
     if (error) console.error('Error fetching team members:', error)
     else setTeamMembers(data || [])
   }

@@ -370,16 +370,9 @@ function TeamMemberRow({ profile, isAdmin, currentUserId, onRemove, removingId, 
     
     setSavingPhone(true);
     const { error } = await supabase
-      .from('team_members')
-      .upsert({
-        user_id: profile.id,
-        full_name: profile.full_name || profile.email || '',
-        phone_number: phoneNumber,
-        phone_label: 'Assigned Number',
-        is_active: true,
-      }, {
-        onConflict: 'user_id',
-      });
+      .from('profiles')
+      .update({ phone_number: phoneNumber })
+      .eq('id', profile.id);
 
     if (error) {
       console.error('Error saving phone number:', error);
