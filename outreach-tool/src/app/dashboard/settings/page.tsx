@@ -4,11 +4,21 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
-import { Users, Shield, Trash2, CheckCircle, AlertCircle, UserPlus, Copy } from 'lucide-react';
+import { Users, Shield, AlertCircle, CheckCircle, UserPlus, Copy } from 'lucide-react';
+import TeamMemberRow from '@/components/dashboard/TeamMemberRow';
+import AssignmentLimitRow from '@/components/dashboard/AssignmentLimitRow';
+
+import { type Profile } from '@/lib/types';
+
+interface AssignLimit {
+  profile_id: string;
+  max_leads: number;
+  current_leads: number;
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [profiles, setProfiles] = useState<any[]>([])
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
   const [limitsLoading, setLimitsLoading] = useState(false);
@@ -33,7 +43,6 @@ export default function SettingsPage() {
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: true });
-
     if (error) {
       console.error('Error fetching profiles:', error);
     } else {
@@ -47,16 +56,12 @@ export default function SettingsPage() {
     const { data, error } = await supabase
       .from('assignment_limits')
       .select('profile_id, max_leads, current_leads');
-
     if (error) {
       console.error('Error fetching limits:', error);
     } else {
-      const limitMap: Record<string, { max_leads: number; current_leads: number }> = {};
-      (data ?? []).forEach((l: any) => {
-        limitMap[l.profile_id] = {
-          max_leads: l.max_leads,
-          current_leads: l.current_leads,
-        };
+      const limitMap: Record<string, AssignLimit> = {};
+      (data ?? []).forEach((l: AssignLimit) => {
+        limitMap[l.profile_id] = l;
       });
       setAssignLimits(limitMap);
     }
@@ -71,11 +76,7 @@ export default function SettingsPage() {
         max_leads: maxLeads,
         current_leads: assignLimits[profileId]?.current_leads ?? 0,
         updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'profile_id',
-        ignoreDuplicates: false,
-      });
-
+      }, { onConflict: 'profile_id', ignoreDuplicates: false });
     if (error) {
       console.error('Error updating limit:', error);
       alert('Failed to update limit.');
@@ -93,53 +94,38 @@ export default function SettingsPage() {
       setInviteError('Email is required');
       return;
     }
-
     setInviting(true);
     setInviteError('');
     setInviteSuccess('');
-
     const res = await fetch('/api/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: inviteEmail.trim(),
-        name: inviteName.trim(),
-        role: inviteRole,
-      }),
+      body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole }),
     });
-
     const data = await res.json();
-
     if (!res.ok) {
       setInviteError(data.error || 'Failed to send invitation');
       setInviting(false);
       return;
     }
-
     setInviteSuccess(data.message);
     setInviteEmail('');
     setInviteName('');
     setInviting(false);
-    if (data.password) {
-      setInvitePassword(data.password);
-    }
+    if (data.password) setInvitePassword(data.password);
     fetchProfiles();
   };
 
   const handleRemove = async (profileId: string, email: string) => {
     if (!confirm(`Remove ${email} from the team? This cannot be undone.`)) return;
-
     setRemovingId(profileId);
     setRemoveError('');
-
     const { error } = await supabase.from('profiles').delete().eq('id', profileId);
-
     if (error) {
       setRemoveError(error.message);
       setRemovingId(null);
       return;
     }
-
     fetchProfiles();
   };
 
@@ -162,11 +148,14 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-white font-semibold">{user?.email}</h2>
             <p className="text-sm text-gray-400">
-              {currentUserProfile?.role === 'admin' ? 'Admin' : 'Member'} · Joined {currentUserProfile?.created_at ? new Date(currentUserProfile.created_at).toLocaleDateString() : 'N/A'}
+              {currentUserProfile?.role === 'admin' ? 'Admin' : 'Member'} · Joined {
+                currentUserProfile?.created_at
+                  ? new Date(currentUserProfile.created_at).toLocaleDateString()
+                  : 'N/A'
+              }
             </p>
           </div>
         </div>
-
         {isAdmin && (
           <div className="flex items-center gap-2 text-sm text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
             <Shield className="w-4 h-4" />
@@ -175,7 +164,7 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Team Members - Admin only */}
+      {/* Team Members */}
       {isAdmin && (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
           <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
@@ -184,7 +173,6 @@ export default function SettingsPage() {
             <span className="text-sm font-normal text-gray-500">({profiles.length})</span>
           </h2>
           <p className="text-xs text-gray-500 mb-4">Manage who has access to the outreach tool.</p>
-
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="flex items-center gap-3 text-gray-500">
@@ -208,7 +196,6 @@ export default function SettingsPage() {
                   currentUserId={user?.id}
                   onRemove={handleRemove}
                   removingId={removingId}
-                  removeError={removeError}
                 />
               ))}
             </div>
@@ -241,7 +228,6 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-500 mb-4">
             Set maximum lead assignments per team member. Leave at 0 for no limit.
           </p>
-
           {limitsLoading ? (
             <div className="flex items-center gap-3 text-gray-500">
               <Spinner size="sm" />
@@ -251,41 +237,37 @@ export default function SettingsPage() {
             <div className="space-y-3">
               {profiles
                 .filter(p => p.role !== 'admin' || p.id === user?.id)
-                .map((profile) => {
-                  const limit = assignLimits[profile.id]?.max_leads ?? 0;
-                  const current = assignLimits[profile.id]?.current_leads ?? 0;
-                  return (
-                    <AssignmentLimitRow
-                      key={profile.id}
-                      profile={profile}
-                      limit={limit}
-                      current={current}
-                      currentUserId={user?.id}
-                      onUpdate={updateLimit}
-                    />
-                  );
-                })}
+                .map((profile) => (
+                  <AssignmentLimitRow
+                    key={profile.id}
+                    profile={profile}
+                    limit={assignLimits[profile.id]?.max_leads ?? 0}
+                    current={assignLimits[profile.id]?.current_leads ?? 0}
+                    currentUserId={user?.id}
+                    onUpdate={updateLimit}
+                  />
+                ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Invite Member Form */}
+      {/* Invite Member */}
       {isAdmin && (
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
           <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-gray-400" />
             Invite Team Member
           </h2>
-          <p className="text-xs text-gray-500 mb-4">Add a new member to the team. A password will be generated for them.</p>
-
+          <p className="text-xs text-gray-500 mb-4">
+            Add a new member to the team. A password will be generated for them.
+          </p>
           {inviteError && (
             <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
               <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
               <p className="text-sm text-red-400">{inviteError}</p>
             </div>
           )}
-
           {inviteSuccess && (
             <div className="mb-3 flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
               <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
@@ -304,7 +286,6 @@ export default function SettingsPage() {
               )}
             </div>
           )}
-
           <form onSubmit={handleInvite} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
@@ -318,7 +299,6 @@ export default function SettingsPage() {
                 className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
               />
             </div>
-
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
                 Full Name (optional)
@@ -331,7 +311,6 @@ export default function SettingsPage() {
                 className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
               />
             </div>
-
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
                 Role
@@ -345,7 +324,6 @@ export default function SettingsPage() {
                 <option value="admin">Admin (full access)</option>
               </select>
             </div>
-
             <button
               type="submit"
               disabled={inviting || !inviteEmail.trim()}
@@ -356,129 +334,6 @@ export default function SettingsPage() {
           </form>
         </div>
       )}
-    </div>
-  );
-}
-
-// Extracted team member row component for better readability
-function TeamMemberRow({ profile, isAdmin, currentUserId, onRemove, removingId, removeError }: any) {
-  const [phoneInput, setPhoneInput] = useState(profile.phone_number || '');
-  const [savingPhone, setSavingPhone] = useState(false);
-  const [phoneError, setPhoneError] = useState('');
-
-  const savePhoneNumber = async () => {
-    if (!phoneInput.trim()) return;
-    setSavingPhone(true);
-    setPhoneError('');
-    const { error } = await supabase
-      .from('profiles')
-      .update({ phone_number: phoneInput.trim() })
-      .eq('id', profile.id);
-    if (error) {
-      setPhoneError(error.message);
-    } else {
-      setPhoneError('Saved!');
-      setTimeout(() => setPhoneError(''), 2000);
-    }
-    setSavingPhone(false);
-  };
-
-  return (
-    <div className="flex items-center justify-between bg-[#27272a] hover:bg-[#2a2a32] rounded-xl px-4 py-3.5 transition-colors">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
-          profile.role === 'admin' ? 'bg-purple-600' : 'bg-gray-700'
-        }`}>
-          {profile.email?.charAt(0).toUpperCase() ?? '?'}
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm text-white font-medium truncate">{profile.email}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              profile.role === 'admin'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-            }`}>
-              {profile.role === 'admin' ? 'Admin' : 'Member'}
-            </span>
-            {profile.id === currentUserId && (
-              <span className="text-xs text-gray-500">(you)</span>
-            )}
-          </div>
-          {isAdmin && (
-            <div className="mt-2">
-              <input
-                type="tel"
-                value={phoneInput}
-                onChange={(e) => setPhoneInput(e.target.value)}
-                onBlur={savePhoneNumber}
-                disabled={savingPhone}
-                placeholder="+1XXXXXXXXXX"
-                className="w-full bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {phoneError && <p className="text-xs mt-1 text-green-400">{phoneError}</p>}
-              {phoneError === 'Saved!' && <p className="text-xs mt-1 text-green-400">Saved!</p>}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {isAdmin && profile.id !== currentUserId && (
-        <button
-          onClick={() => onRemove(profile.id, profile.email || '')}
-          disabled={removingId === profile.id}
-          className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition disabled:opacity-50 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          {removingId === profile.id ? 'Removing...' : 'Remove'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// Extracted assignment limit row component for better readability
-function AssignmentLimitRow({ profile, limit, current, currentUserId, onUpdate }: any) {
-  return (
-    <div className="bg-[#27272a] rounded-xl px-4 py-3.5">
-      <div className="flex items-center justify-between gap-4 mb-2.5">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 flex-shrink-0">
-            {profile.email?.charAt(0).toUpperCase() ?? '?'}
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm text-white font-medium truncate">
-              {profile.email}
-              {profile.id === currentUserId && ' (you)'}
-            </p>
-            {current > 0 && (
-              <p className="text-xs text-gray-500 mt-0.5">
-                {current} assigned {limit > 0 && `of ${limit} max`}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {limit > 0 && current > 0 && (
-            <div className="w-16 h-1.5 bg-[#3f3f46] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full"
-                style={{ width: `${Math.min(100, (current / limit) * 100)}%` }}
-              />
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            <label className="text-xs text-gray-500">Limit:</label>
-            <input
-              type="number"
-              min="0"
-              value={limit}
-              onChange={(e) => onUpdate(profile.id, parseInt(e.target.value) || 0)}
-              className="w-16 bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
-            />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

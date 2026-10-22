@@ -2,63 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { type Profile, type LeadStatus } from '@/lib/types';
-import Spinner from '@/components/ui/spinner';
 import { useAuth } from '@/lib/auth-context';
-import { Shield, TrendingUp, BarChart3, Clock, Phone, Calendar, CheckCircle, Target, Mail, XCircle } from 'lucide-react';
-
-interface LeadWithDetails {
-  id: string;
-  title: string;
-  status: LeadStatus;
-  source: string | null;
-  category_name: string | null;
-  assigned_to: string | null;
-  assigned_at: string | null;
-  assigned_by: string | null;
-  updated_at: string | null;
-}
-
-interface ActivityEntry {
-  id: string;
-  action: string;
-  description: string;
-  timestamp: string;
-}
-
-interface ConversionFunnel {
-  total: number;
-  new: number;
-  contacted: number;
-  interested: number;
-  send_info: number;
-  meeting_booked: number;
-  dead: number;
-  not_interested: number;
-}
-
-interface MemberStats {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  role: string | null;
-  leads_assigned: number;
-  leads_by_status: Record<LeadStatus, number>;
-  total_leads: number;
-  funnel: ConversionFunnel;
-}
-
-interface StatusDistribution {
-  status: LeadStatus;
-  count: number;
-  percentage: number;
-}
-
-interface SourceDistribution {
-  source: string;
-  count: number;
-  percentage: number;
-}
+import Spinner from '@/components/ui/spinner';
+import AnalyticsHeader from '@/components/dashboard/AnalyticsHeader';
+import TeamPerformanceCard from '@/components/dashboard/TeamPerformanceCard';
+import TeamConversionFunnel from '@/components/dashboard/TeamConversionFunnel';
+import MemberFunnel from '@/components/dashboard/MemberFunnel';
+import ActivityLogList from '@/components/dashboard/ActivityLogList';
+import {
+  type MemberStats, type ConversionFunnel, type StatusDistribution,
+  type SourceDistribution, type LeadWithDetails, type ActivityEntry,
+  computeFunnel, EMPTY_STATUS,
+} from '@/components/dashboard/analytics-types';
+import { BarChart3 } from 'lucide-react';
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
@@ -76,26 +32,6 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetchAnalytics();
   }, [dateFilter]);
-
-  const computeFunnel = (leads: LeadWithDetails[]): ConversionFunnel => {
-    const funnel: ConversionFunnel = {
-      total: leads.length,
-      new: 0,
-      contacted: 0,
-      interested: 0,
-      send_info: 0,
-      meeting_booked: 0,
-      dead: 0,
-      not_interested: 0,
-    };
-    leads.forEach((lead) => {
-      const status = lead.status as LeadStatus;
-      if (status in funnel) {
-        funnel[status] = (funnel[status] as number) + 1;
-      }
-    });
-    return funnel;
-  };
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -115,23 +51,19 @@ export default function AnalyticsPage() {
       const userIsAdmin = currentProfile?.role === 'admin';
       setIsAdmin(userIsAdmin);
 
-      // Fetch all profiles (admins see all, members only need their own data)
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*');
+      // Fetch profiles and leads
+      const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*');
       if (profilesError) throw profilesError;
 
-      // Fetch leads - admins get all, members get only their assigned leads
       let leadsQuery = supabase
         .from('leads')
         .select('id, title, status, source, category_name, assigned_to, assigned_at, assigned_by, updated_at');
 
-      // Non-admins only see their own leads
       if (!userIsAdmin && user?.id) {
         leadsQuery = leadsQuery.eq('assigned_to', user.id);
       }
 
-      // Apply date filter based on assigned_at
+      // Apply date filter
       const now = new Date();
       let pastDate: Date | null = null;
       if (dateFilter === '24h') {
@@ -148,7 +80,7 @@ export default function AnalyticsPage() {
       const { data: leads, error: leadsError } = await leadsQuery;
       if (leadsError) throw leadsError;
 
-      // Fetch activity log from assignment_history
+      // Fetch activity log
       const { data: activityData, error: activityError } = await supabase
         .from('assignment_history')
         .select('lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
@@ -159,39 +91,35 @@ export default function AnalyticsPage() {
         console.error('Error fetching activity:', activityError.message);
       }
 
-      // Build activity entries for members: only show what happened to them
-      const profileMap: Record<string, Profile> = {};
+      // Process activity entries
+      const profileMap: Record<string, any> = {};
       (profiles || []).forEach((p) => { profileMap[p.id] = p; });
 
-      // Personal activity log for members (leads assigned to them)
       const myActivity: ActivityEntry[] = [];
       const myReceived: ActivityEntry[] = [];
       if (activityData && user?.id) {
         activityData.forEach(entry => {
-          // What admin did - assignments made by admins to me
           if (entry.assigned_to === user.id && entry.assigned_by && entry.assigned_by !== user.id) {
             const adminName = profileMap[entry.assigned_by]?.email || 'Admin';
             myReceived.push({
               id: entry.lead_id + '_received_' + entry.assigned_at,
               action: 'assigned',
               description: `${adminName} assigned you a lead: ${entry.notes || 'New lead assigned'}`,
-              timestamp: entry.assigned_at
+              timestamp: entry.assigned_at,
             });
           }
-          // What I did (if any action attributed to my user)
           if (entry.assigned_by === user.id) {
             const assigneeName = profileMap[entry.assigned_to]?.email || 'Unknown';
             myActivity.push({
               id: entry.lead_id + '_assigned_' + entry.assigned_at,
               action: 'assigned',
               description: `Assigned lead to ${assigneeName}`,
-              timestamp: entry.assigned_at
+              timestamp: entry.assigned_at,
             });
           }
         });
       }
 
-      // For admins: show team activity
       const adminActivity: ActivityEntry[] = [];
       if (userIsAdmin && activityData) {
         activityData.forEach(entry => {
@@ -202,7 +130,7 @@ export default function AnalyticsPage() {
               id: entry.lead_id + '_team_' + entry.assigned_at,
               action: 'assigned',
               description: `${assignerName} assigned a lead to ${assigneeName}`,
-              timestamp: entry.assigned_at
+              timestamp: entry.assigned_at,
             });
           }
         });
@@ -211,23 +139,19 @@ export default function AnalyticsPage() {
       setActivityLog(userIsAdmin ? adminActivity : myActivity);
       setLeadsReceivedLog(myReceived);
 
-      const statusCounts: Record<LeadStatus, number> = {
+      // Compute status counts
+      const statusCounts: Record<string, number> = {
         new: 0, contacted: 0, interested: 0, not_interested: 0,
         send_info: 0, meeting_booked: 0, dead: 0
       };
       (leads || []).forEach((lead) => {
-        const s = lead.status as LeadStatus;
+        const s = lead.status;
         statusCounts[s] = (statusCounts[s] || 0) + 1;
       });
 
       if (userIsAdmin) {
-        // Admin analytics
+        // Build member stats
         const memberMap: Record<string, MemberStats> = {};
-        const EMPTY_STATUS: Record<LeadStatus, number> = {
-          new: 0, contacted: 0, interested: 0, not_interested: 0,
-          send_info: 0, meeting_booked: 0, dead: 0
-        };
-
         (profiles || []).forEach((profile) => {
           memberMap[profile.id] = {
             id: profile.id,
@@ -237,10 +161,7 @@ export default function AnalyticsPage() {
             leads_assigned: 0,
             leads_by_status: { ...EMPTY_STATUS },
             total_leads: 0,
-            funnel: {
-              total: 0, new: 0, contacted: 0, interested: 0,
-              send_info: 0, meeting_booked: 0, dead: 0, not_interested: 0
-            }
+            funnel: { total: 0, new: 0, contacted: 0, interested: 0, send_info: 0, meeting_booked: 0, dead: 0, not_interested: 0 },
           };
         });
 
@@ -249,58 +170,49 @@ export default function AnalyticsPage() {
           if (lead.assigned_to && memberMap[lead.assigned_to]) {
             memberMap[lead.assigned_to].leads_assigned += 1;
             memberMap[lead.assigned_to].total_leads += 1;
-            const statusKey = lead.status as LeadStatus;
-            memberMap[lead.assigned_to].leads_by_status[statusKey] =
-              (memberMap[lead.assigned_to].leads_by_status[statusKey] || 0) + 1;
-
-            if (!memberLeads[lead.assigned_to]) {
-              memberLeads[lead.assigned_to] = [];
-            }
+            memberMap[lead.assigned_to].leads_by_status[lead.status as keyof typeof EMPTY_STATUS] =
+              (memberMap[lead.assigned_to].leads_by_status[lead.status as keyof typeof EMPTY_STATUS] || 0) + 1;
+            if (!memberLeads[lead.assigned_to]) memberLeads[lead.assigned_to] = [];
             memberLeads[lead.assigned_to].push(lead);
           }
         });
 
-        // Compute funnel for each member
         Object.keys(memberMap).forEach((id) => {
           memberMap[id].funnel = computeFunnel(memberLeads[id] || []);
         });
 
-        const memberArray = Object.values(memberMap).sort((a, b) => {
-          return b.leads_assigned - a.leads_assigned;
-        });
+        const memberArray = Object.values(memberMap).sort((a, b) => b.leads_assigned - a.leads_assigned);
         setMemberStats(memberArray);
 
         const totalLeads = leads?.length || 1;
-        const statusDist = Object.entries(statusCounts).map(([status, count]) => ({
-          status: status as LeadStatus,
-          count,
-          percentage: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0
-        })).filter(s => s.count > 0);
+        const statusDist: StatusDistribution[] = Object.entries(statusCounts)
+          .filter(([_, count]) => count > 0)
+          .map(([status, count]) => ({
+            status: status as keyof typeof EMPTY_STATUS,
+            count,
+            percentage: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0,
+          }));
         setStatusDistribution(statusDist);
 
-        // Source distribution (admin view)
         const sourceCounts: Record<string, number> = {};
         (leads || []).forEach((lead) => {
           const src = lead.source || 'unknown';
           sourceCounts[src] = (sourceCounts[src] || 0) + 1;
         });
-        const sourceDist = Object.entries(sourceCounts)
+        const sourceDist: SourceDistribution[] = Object.entries(sourceCounts)
           .map(([source, count]) => ({
             source,
             count,
-            percentage: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0
+            percentage: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0,
           }))
           .sort((a, b) => b.count - a.count);
         setSourceDistribution(sourceDist);
       } else {
-        // Member analytics - only their own data
         setMemberStats([]);
         setStatusDistribution([]);
         setSourceDistribution([]);
-        // Compute personal funnel
         setPersonalFunnel(computeFunnel(leads || []));
       }
-
     } catch (err: any) {
       console.error('Error fetching analytics:', err);
       setError('Failed to load analytics data.');
@@ -309,45 +221,17 @@ export default function AnalyticsPage() {
     }
   };
 
-  const STATUS_LABELS_DISPLAY: Record<LeadStatus, string> = {
-    new: 'New',
-    contacted: 'Contacted',
-    interested: 'Interested',
-    not_interested: 'Not Interested',
-    send_info: 'Send Info',
-    meeting_booked: 'Meeting Booked',
-    dead: 'Dead',
+  const STATUS_COLORS_MAP: Record<string, string> = {
+    new: 'bg-gray-400', contacted: 'bg-blue-400', interested: 'bg-green-400',
+    not_interested: 'bg-red-400', send_info: 'bg-yellow-400',
+    meeting_booked: 'bg-purple-400', dead: 'bg-gray-600',
   };
 
-  const STATUS_COLORS: Record<LeadStatus, string> = {
-    new: 'bg-gray-400',
-    contacted: 'bg-blue-400',
-    interested: 'bg-green-400',
-    not_interested: 'bg-red-400',
-    send_info: 'bg-yellow-400',
-    meeting_booked: 'bg-purple-400',
-    dead: 'bg-gray-600',
+  const STATUS_LABELS_MAP: Record<string, string> = {
+    new: 'New', contacted: 'Contacted', interested: 'Interested',
+    not_interested: 'Not Interested', send_info: 'Send Info',
+    meeting_booked: 'Meeting Booked', dead: 'Dead',
   };
-
-  const SOURCE_LABELS: Record<string, string> = {
-    google_maps: 'Google Maps',
-    manual: 'Manual',
-    csv_import: 'CSV Import',
-    apify_n8n: 'Apify/n8n',
-    linkedin: 'LinkedIn',
-    other: 'Other',
-  };
-
-  const FUNNEL_STEPS = [
-    { key: 'total', label: 'Total Leads', icon: null, color: 'text-white' },
-    { key: 'new', label: 'New', icon: null, color: 'text-gray-400' },
-    { key: 'contacted', label: 'Contacted', icon: Phone, color: 'text-blue-400' },
-    { key: 'interested', label: 'Interested', icon: TrendingUp, color: 'text-green-400' },
-    { key: 'send_info', label: 'Send Info', icon: Mail, color: 'text-yellow-400' },
-    { key: 'meeting_booked', label: 'Meeting Booked', icon: Calendar, color: 'text-purple-400' },
-    { key: 'not_interested', label: 'Not Interested', icon: XCircle, color: 'text-red-400' },
-    { key: 'dead', label: 'Dead', icon: Target, color: 'text-gray-600' },
-  ];
 
   if (loading) {
     return (
@@ -370,34 +254,14 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Analytics</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {isAdmin ? 'Team performance and lead distribution overview' : 'Your personal lead performance'}
-          </p>
-        </div>
-        {!isAdmin && (
-          <span className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5">
-            Member View
-          </span>
-        )}
-      </div>
+      <AnalyticsHeader
+        isAdmin={isAdmin}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        leadsCount={memberStats.reduce((sum, m) => sum + m.leads_assigned, 0) || (personalFunnel?.total || 0)}
+      />
 
-      <div className="mt-4 flex items-center gap-3">
-        <select
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          className="px-3 py-1.5 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Time</option>
-          <option value="30d">Last 30 Days</option>
-          <option value="7d">Last 7 Days</option>
-          <option value="24h">Last 24 Hours</option>
-        </select>
-      </div>
-
-      {/* Admin Team Performance Cards */}
+      {/* Team Performance Cards */}
       {isAdmin && memberStats.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -405,384 +269,102 @@ export default function AnalyticsPage() {
             Team Performance
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {memberStats.map((member) => {
-              const hasLeads = member.leads_assigned > 0;
-              const calledCount = member.funnel.contacted + member.funnel.interested + member.funnel.send_info + member.funnel.meeting_booked;
-              const bookedCount = member.funnel.meeting_booked;
-              const conversionRate = hasLeads
-                ? Math.round(
-                    ((member.funnel.meeting_booked +
-                      member.funnel.interested +
-                      member.funnel.send_info) /
-                      member.leads_assigned) *
-                      100
-                  )
-                : 0;
-
-              return (
-                <div
-                  key={member.id}
-                  className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-300 flex-shrink-0">
-                      {member.full_name
-                        ? member.full_name.charAt(0).toUpperCase()
-                        : (member.email?.charAt(0).toUpperCase() ?? '?')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">
-                        {member.full_name || member.email || 'Unknown'}
-                      </p>
-                      {member.role && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          member.role === 'admin'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                            : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-                        }`}>
-                          {member.role}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-center mb-3">
-                    <div>
-                      <p className="text-2xl font-bold text-white">{member.leads_assigned}</p>
-                      <p className="text-xs text-gray-500">Assigned Leads</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-green-400">{conversionRate}%</p>
-                      <p className="text-xs text-gray-500">Est. Conversion</p>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-center gap-1">
-                        <Phone className="w-4 h-4 text-blue-400" />
-                        <p className="text-xl font-bold text-white">{calledCount}</p>
-                      </div>
-                      <p className="text-xs text-gray-500">Called</p>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-center gap-1">
-                        <Calendar className="w-4 h-4 text-purple-400" />
-                        <p className="text-xl font-bold text-purple-400">{bookedCount}</p>
-                      </div>
-                      <p className="text-xs text-gray-500">Booked</p>
-                    </div>
-                  </div>
-
-                  {hasLeads && Object.values(member.leads_by_status).some(v => v > 0) && (
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(member.leads_by_status).map(([status, count]) => {
-                        if (count === 0) return null;
-                        const s = status as LeadStatus;
-                        return (
-                          <div
-                            key={status}
-                            className="flex items-center gap-1 text-xs"
-                            title={`${STATUS_LABELS_DISPLAY[s]}: ${count}`}
-                          >
-                            <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[s]}`} />
-                            <span className="text-gray-400">{count}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {memberStats.map((member) => (
+              <TeamPerformanceCard key={member.id} member={member} allFunnelData={member.funnel} />
+            ))}
           </div>
         </div>
+      )}
+
+      {/* Team Conversion Funnel */}
+      {isAdmin && memberStats.length > 0 && (
+        <TeamConversionFunnel memberStats={memberStats} />
       )}
 
       {/* Member Personal Stats */}
       {!isAdmin && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-gray-400" />
-            My Performance
-          </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Your lead assignment statistics and performance overview.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="bg-[#27272a] rounded-xl p-4 text-center">
-              <p className="text-3xl font-bold text-white">{memberStats.reduce((sum, m) => sum + m.leads_assigned, 0)}</p>
-              <p className="text-xs text-gray-500 mt-1">Total Leads Assigned</p>
-            </div>
-            <div className="bg-[#27272a] rounded-xl p-4 text-center">
-              <p className="text-3xl font-bold text-green-400">
-                {personalFunnel ? (personalFunnel.total > 0
-                  ? Math.round(((personalFunnel.meeting_booked +
-                               personalFunnel.interested +
-                               personalFunnel.send_info) /
-                              Math.max(1, personalFunnel.total) * 100))
-                  : 0)
-                : 0}%
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Conversion Rate</p>
-            </div>
-            <div className="bg-[#27272a] rounded-xl p-4 text-center">
-              <div className="flex items-center justify-center gap-1">
-                <Phone className="w-5 h-5 text-blue-400" />
-                <p className="text-2xl font-bold text-white">
-                  {personalFunnel ? (personalFunnel.contacted + personalFunnel.interested + personalFunnel.send_info + personalFunnel.meeting_booked) : 0}
-                </p>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Called</p>
-            </div>
-            <div className="bg-[#27272a] rounded-xl p-4 text-center">
-              <div className="flex items-center justify-center gap-1">
-                <Calendar className="w-5 h-5 text-purple-400" />
-                <p className="text-2xl font-bold text-purple-400">
-                  {personalFunnel?.meeting_booked || 0}
-                </p>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Booked Meetings</p>
-            </div>
-          </div>
-        </div>
-      )}
-      {isAdmin && memberStats.length > 0 && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-            <Target className="w-5 h-5 text-gray-400" />
-            Team Conversion Funnel
-          </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Lead pipeline from new to meeting booked across your team.
-          </p>
-
-          <div className="space-y-4">
-            {memberStats.map((member) => {
-              const total = member.funnel.total;
-              if (total === 0) return null;
-
-              return (
-                <div key={member.id} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">
-                      {member.full_name || member.email}
-                    </span>
-                    <span className="text-sm text-gray-400">
-                      {member.funnel.meeting_booked}/{total} booked ({Math.round((member.funnel.meeting_booked / total) * 100)}%)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {FUNNEL_STEPS.filter(step => step.key !== 'total').map((step) => {
-                      const val = step.key === 'meeting_booked' ? member.funnel.meeting_booked :
-                        step.key === 'interested' ? member.funnel.interested :
-                        step.key === 'send_info' ? member.funnel.send_info :
-                        step.key === 'contacted' ? member.funnel.contacted :
-                        step.key === 'not_interested' ? member.funnel.not_interested :
-                        step.key === 'dead' ? member.funnel.dead :
-                        step.key === 'new' ? member.funnel.new : 0;
-                      const pct = total > 0 ? Math.round((val / total) * 100) : 0;
-                      return (
-                        <div key={step.key} className="flex-1 flex flex-col items-center">
-                          {step.icon && <step.icon className={`w-4 h-4 mb-1 ${step.color}`} />}
-                          <p className={`text-xs font-medium ${step.color}`}>{val}</p>
-                          <p className="text-[10px] text-gray-600">{pct}%</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="w-full bg-[#27272a] rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full bg-purple-500"
-                      style={{
-                        width: `${total > 0 ? (member.funnel.meeting_booked / total) * 100 : 0}%`
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Member Conversion Funnel */}
-      {!isAdmin && personalFunnel && personalFunnel.total > 0 && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-            <Target className="w-5 h-5 text-gray-400" />
-            My Conversion Funnel
-          </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Your lead pipeline from new to meeting booked.
-          </p>
-
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">{personalFunnel.total}</p>
-                <p className="text-xs text-gray-500">Total</p>
-              </div>
-              <span className="text-gray-500">→</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="text-center">
-                <Phone className="w-5 h-5 text-blue-400 mx-auto" />
-                <p className="text-xl font-bold text-blue-400">{personalFunnel.contacted + personalFunnel.interested + personalFunnel.send_info + personalFunnel.meeting_booked}</p>
-                <p className="text-xs text-gray-500">Called</p>
-              </div>
-              <span className="text-gray-500">→</span>
-            </div>
-            <div className="text-center">
-              <CheckCircle className="w-6 h-6 text-green-400 mx-auto" />
-              <p className="text-xl font-bold text-green-400">{personalFunnel.interested + personalFunnel.send_info + personalFunnel.meeting_booked}</p>
-              <p className="text-xs text-gray-500">Interested</p>
-            </div>
-            <div className="text-center">
-              <Calendar className="w-6 h-6 text-purple-400 mx-auto" />
-              <p className="text-2xl font-bold text-purple-400">{personalFunnel.meeting_booked}</p>
-              <p className="text-xs text-gray-500">Booked</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {FUNNEL_STEPS.map((step) => {
-              if (step.key === 'total') return null;
-              const val = (personalFunnel[step.key as keyof ConversionFunnel] || 0) as number;
-              const pct = personalFunnel.total > 0 ? Math.round((val / personalFunnel.total) * 100) : 0;
-              return (
-                <div key={step.key} className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 w-32">
-                    {step.icon && <step.icon className={`w-4 h-4 ${step.color}`} />}
-                    <span className={`text-sm font-medium ${step.color}`}>{step.label}</span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="w-full bg-[#27272a] rounded-full h-4">
-                      <div
-                        className="h-4 rounded-full transition-all"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor: step.color === 'text-gray-400' ? '#9ca3af' :
-                            step.color === 'text-blue-400' ? '#60a5fa' :
-                            step.color === 'text-green-400' ? '#4ade80' :
-                            step.color === 'text-yellow-400' ? '#facc15' :
-                            step.color === 'text-purple-400' ? '#a78bfa' :
-                            step.color === 'text-red-400' ? '#f87171' :
-                            step.color === 'text-gray-600' ? '#6b7280' : '#fff'
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="w-16 text-right">
-                    <span className={`text-sm font-medium ${step.color}`}>{val}</span>
-                    <span className="text-xs text-gray-500 ml-2">({pct}%)</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <MemberFunnel funnel={personalFunnel || {
+          total: 0, new: 0, contacted: 0, interested: 0,
+          send_info: 0, meeting_booked: 0, dead: 0, not_interested: 0,
+        }} />
       )}
 
       {/* Admin Status Distribution */}
       {isAdmin && statusDistribution.length > 0 && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-4">Lead Status Distribution</h2>
-          <div className="space-y-3">
-            {statusDistribution.map((item) => (
-              <div key={item.status}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-gray-300">{STATUS_LABELS_DISPLAY[item.status]}</span>
-                  <span className="text-sm text-gray-400">{item.count} ({item.percentage}%)</span>
-                </div>
-                <div className="w-full bg-[#27272a] rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full ${STATUS_COLORS[item.status]}`}
-                    style={{ width: `${item.percentage}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <DistributionSection
+          title="Lead Status Distribution"
+          items={statusDistribution}
+          renderBar={(item) => (
+            <BarWithColor
+              label={STATUS_LABELS_MAP[item.status] || item.status}
+              count={item.count}
+              percentage={item.percentage}
+              colorClass={STATUS_COLORS_MAP[item.status] || 'bg-gray-400'}
+            />
+          )}
+        />
       )}
 
       {/* Admin Source Distribution */}
       {isAdmin && sourceDistribution.length > 0 && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-4">Lead Source Distribution</h2>
-          <div className="space-y-3">
-            {sourceDistribution.map((item) => (
-              <div key={item.source}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-gray-300">
-                    {SOURCE_LABELS[item.source] || item.source.replace('_', ' ')}
-                  </span>
-                  <span className="text-sm text-gray-400">{item.count} ({item.percentage}%)</span>
-                </div>
-                <div className="w-full bg-[#27272a] rounded-full h-2">
-                  <div
-                    className="h-2 rounded-full bg-blue-500"
-                    style={{ width: `${item.percentage}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <DistributionSection
+          title="Lead Source Distribution"
+          items={sourceDistribution}
+          renderBar={(item) => (
+            <BarWithColor
+              label={item.source.replace('_', ' ')}
+              count={item.count}
+              percentage={item.percentage}
+              colorClass="bg-blue-500"
+            />
+          )}
+        />
       )}
 
-      {/* Activity Log - for both admin and member */}
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-        <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-gray-400" />
-          {isAdmin ? 'Team Activity Log' : 'Recent Activity'}
-        </h2>
-        <p className="text-xs text-gray-500 mb-4">
-          {isAdmin
+      {/* Activity Log */}
+      <ActivityLogList
+        title={isAdmin ? 'Team Activity Log' : 'Recent Activity'}
+        description={
+          isAdmin
             ? 'Recent lead assignments across your team.'
-            : 'Recent leads assigned to you by admins and your activity.'}
-        </p>
+            : 'Recent leads assigned to you by admins and your activity.'
+        }
+        activityLog={activityLog}
+        leadsReceivedLog={leadsReceivedLog}
+        showReceived={!isAdmin}
+      />
+    </div>
+  );
+}
 
-        {activityLog.length === 0 && leadsReceivedLog.length === 0 ? (
-          <p className="text-xs text-gray-500 py-4 text-center">
-            No recent activity.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {/* Show leads received by member */}
-            {!isAdmin && leadsReceivedLog.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-3 p-3 bg-[#27272a] rounded-lg">
-                <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-white">{entry.description}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {new Date(entry.timestamp).toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {/* Show team activity for admins OR personal activity for members */}
-            {activityLog.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-3 p-3 bg-[#27272a] rounded-lg">
-                <div className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-white">{entry.description}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {new Date(entry.timestamp).toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+function DistributionSection<T>({ title, items, renderBar }: {
+  title: string;
+  items: T[];
+  renderBar: (item: T) => React.ReactNode;
+}) {
+  return (
+    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+      <h2 className="text-lg font-semibold text-white mb-4">{title}</h2>
+      <div className="space-y-3">
+        {items.map((item, idx) => (
+          <div key={idx}>{renderBar(item)}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BarWithColor({
+  label, count, percentage, colorClass
+}: { label: string; count: number; percentage: number; colorClass: string }) {
+  return (
+    <div key={label}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm text-gray-300">{label}</span>
+        <span className="text-sm text-gray-400">{count} ({percentage}%)</span>
+      </div>
+      <div className="w-full bg-[#27272a] rounded-full h-2">
+        <div className={`h-2 rounded-full ${colorClass}`} style={{ width: `${percentage}%` }} />
       </div>
     </div>
   );
