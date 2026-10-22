@@ -92,7 +92,7 @@ export default function CallsPage() {
         return
       }
 
-      const response = await fetch('/api/call', {
+      const response = await fetch('/api/telnyx/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -103,14 +103,14 @@ export default function CallsPage() {
         }),
       })
 
-      const data = await response.json()
+      const data = await response.json();
       if (!response.ok) {
-        setSuccess(data.error || 'Failed to start call')
-        setSubmitting(false)
-        return
+        setSuccess(data.error || 'Failed to start call');
+        setSubmitting(false);
+        return;
       }
 
-      setSuccess('Call initiated. Ringing...')
+      setSuccess('Call initiated. Ringing...');
     } catch (err) {
       setSuccess('Failed to start call')
     } finally {

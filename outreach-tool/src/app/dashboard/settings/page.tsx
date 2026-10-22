@@ -362,6 +362,34 @@ export default function SettingsPage() {
 
 // Extracted team member row component for better readability
 function TeamMemberRow({ profile, isAdmin, currentUserId, onRemove, removingId, removeError }: any) {
+  const [phoneNumber, setPhoneNumber] = useState(profile.phone_number || '');
+  const [savingPhone, setSavingPhone] = useState(false);
+
+  const savePhoneNumber = async () => {
+    if (!profile.id || !phoneNumber) return;
+    
+    setSavingPhone(true);
+    const { error } = await supabase
+      .from('team_members')
+      .upsert({
+        user_id: profile.id,
+        full_name: profile.full_name || profile.email || '',
+        phone_number: phoneNumber,
+        phone_label: 'Assigned Number',
+        is_active: true,
+      }, {
+        onConflict: 'user_id',
+      });
+
+    if (error) {
+      console.error('Error saving phone number:', error);
+      alert('Failed to save phone number');
+    } else {
+      console.log('Phone number saved for:', profile.email);
+    }
+    setSavingPhone(false);
+  };
+
   return (
     <div className="flex items-center justify-between bg-[#27272a] hover:bg-[#2a2a32] rounded-xl px-4 py-3.5 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -384,6 +412,24 @@ function TeamMemberRow({ profile, isAdmin, currentUserId, onRemove, removingId, 
               <span className="text-xs text-gray-500">(you)</span>
             )}
           </div>
+          {isAdmin && profile.role !== 'admin' && (
+            <div className="mt-2 flex gap-2">
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="+1234567890"
+                className="flex-1 bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                onClick={savePhoneNumber}
+                disabled={savingPhone || !phoneNumber}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs text-white rounded-lg transition disabled:opacity-50"
+              >
+                {savingPhone ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
