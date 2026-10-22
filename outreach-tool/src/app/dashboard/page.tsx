@@ -9,6 +9,7 @@ import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import BulkActions from '@/components/bulk-actions';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
+import { Phone } from 'lucide-react';
 
 const STATUS_OPTIONS: { value: LeadStatus | 'all'; label: string; color: string }[] = [
   { value: 'all', label: 'All', color: 'text-gray-400' },
@@ -670,6 +671,17 @@ export default function DashboardPage() {
                         </svg>
                         {lead.phone}
                       </button>
+                    )}
+                    {lead.phone && (
+                      <Link
+                        href={`/dashboard/leads/${lead.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-green-400 hover:text-green-300 font-medium flex items-center gap-1"
+                        title="Call this lead"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        Call
+                      </Link>
                     )}
                     {lead.city && (
                       <span className="text-gray-500">{lead.city}</span>
