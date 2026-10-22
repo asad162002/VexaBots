@@ -362,6 +362,27 @@ export default function SettingsPage() {
 
 // Extracted team member row component for better readability
 function TeamMemberRow({ profile, isAdmin, currentUserId, onRemove, removingId, removeError }: any) {
+  const [phoneInput, setPhoneInput] = useState(profile.phone_number || '');
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+
+  const savePhoneNumber = async () => {
+    if (!phoneInput.trim()) return;
+    setSavingPhone(true);
+    setPhoneError('');
+    const { error } = await supabase
+      .from('profiles')
+      .update({ phone_number: phoneInput.trim() })
+      .eq('id', profile.id);
+    if (error) {
+      setPhoneError(error.message);
+    } else {
+      setPhoneError('Saved!');
+      setTimeout(() => setPhoneError(''), 2000);
+    }
+    setSavingPhone(false);
+  };
+
   return (
     <div className="flex items-center justify-between bg-[#27272a] hover:bg-[#2a2a32] rounded-xl px-4 py-3.5 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -384,6 +405,21 @@ function TeamMemberRow({ profile, isAdmin, currentUserId, onRemove, removingId, 
               <span className="text-xs text-gray-500">(you)</span>
             )}
           </div>
+          {isAdmin && (
+            <div className="mt-2">
+              <input
+                type="tel"
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                onBlur={savePhoneNumber}
+                disabled={savingPhone}
+                placeholder="+1XXXXXXXXXX"
+                className="w-full bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {phoneError && <p className="text-xs mt-1 text-green-400">{phoneError}</p>}
+              {phoneError === 'Saved!' && <p className="text-xs mt-1 text-green-400">Saved!</p>}
+            </div>
+          )}
         </div>
       </div>
 
