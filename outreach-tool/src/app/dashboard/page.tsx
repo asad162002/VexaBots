@@ -1,37 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { STATUS_LABELS, STATUS_COLORS, type Lead, type LeadStatus, type LeadSource } from '@/lib/types';
-import type { Profile } from '@/lib/types';
-import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useBulkSelection } from '@/hooks/use-bulk-selection';
-import BulkActions from '@/components/bulk-actions';
+import { supabase } from '@/lib/supabase';
+import { STATUS_COLORS, STATUS_LABELS, type Lead, type LeadStatus, type LeadSource } from '@/lib/types';
+import type { Profile } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import Link from 'next/link';
 import Spinner from '@/components/ui/spinner';
-import { Phone } from 'lucide-react';
-
-const STATUS_OPTIONS: { value: LeadStatus | 'all'; label: string; color: string }[] = [
-  { value: 'all', label: 'All', color: 'text-gray-400' },
-  { value: 'new', label: 'New', color: 'text-gray-300' },
-  { value: 'contacted', label: 'Contacted', color: 'text-blue-400' },
-  { value: 'interested', label: 'Interested', color: 'text-green-400' },
-  { value: 'not_interested', label: 'Not Interested', color: 'text-red-400' },
-  { value: 'send_info', label: 'Send Info', color: 'text-yellow-400' },
-  { value: 'meeting_booked', label: 'Meeting', color: 'text-purple-400' },
-  { value: 'dead', label: 'Dead', color: 'text-gray-500' },
-];
-
-const SOURCE_OPTIONS: { value: LeadSource | 'all'; label: string }[] = [
-  { value: 'all', label: 'All Sources' },
-  { value: 'google_maps', label: 'Google Maps' },
-  { value: 'manual', label: 'Manual' },
-  { value: 'csv_import', label: 'CSV Import' },
-  { value: 'apify_n8n', label: 'Apify/n8n' },
-  { value: 'linkedin', label: 'LinkedIn' },
-  { value: 'other', label: 'Other' },
-];
+import BulkActions from '@/components/bulk-actions';
+import { useBulkSelection } from '@/hooks/use-bulk-selection';
+import LeadFilters from '@/components/leads/LeadFilters';
+import LeadCard from '@/components/leads/LeadCard';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -51,7 +31,7 @@ export default function DashboardPage() {
   const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
 
   const bulk = useBulkSelection(leads);
-  const { selectedIds, setSelectedIds, toggleItem, selectAllOnPage, deselectAll, isSelected, isAllSelected, isPartiallySelected } = bulk;
+  const { selectedIds, setSelectedIds, toggleItem, selectAllOnPage, deselectAll, isAllSelected, isPartiallySelected } = bulk;
 
   // Debounce search input
   useEffect(() => {
@@ -113,10 +93,10 @@ export default function DashboardPage() {
 
   const fetchFollowUpReminders = async () => {
     if (!user?.id) return;
-    
+
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    
+
     const { data: reminders, error } = await supabase
       .from('leads')
       .select('*')
@@ -137,10 +117,9 @@ export default function DashboardPage() {
   const handleBulkAssign = async (userId: string, notes: string, quantity?: number) => {
     const selectedIdsArray = Array.from(selectedIds);
 
-    // Check assignment limit for this user
     const limit = assignLimits[userId]?.max_leads ?? 0;
     const currentCount = assignLimits[userId]?.current_leads ?? 0;
-    
+
     if (limit > 0) {
       const idsToAssign = quantity && quantity > 0 && quantity < selectedIdsArray.length
         ? selectedIdsArray.slice(0, quantity)
@@ -159,13 +138,11 @@ export default function DashboardPage() {
       }
     }
 
-    // If quantity is specified, only assign that many leads
     const idsToAssign = quantity && quantity > 0 && quantity < selectedIdsArray.length
       ? selectedIdsArray.slice(0, quantity)
       : selectedIdsArray;
 
     for (const id of idsToAssign) {
-      // First get the current assigned_to to record in history (previous assignee)
       const { data: currentLead, error: fetchError } = await supabase
         .from('leads')
         .select('assigned_to')
@@ -194,7 +171,6 @@ export default function DashboardPage() {
         continue;
       }
 
-      // Log to assignment_history
       await supabase.from('assignment_history').insert({
         lead_id: id,
         assigned_to: userId,
@@ -204,7 +180,6 @@ export default function DashboardPage() {
         notes: notes || null,
       });
 
-      // Update assignment_limits current_leads count
       const limit = assignLimits[userId];
       if (limit) {
         await supabase.from('assignment_limits').update({
@@ -215,12 +190,10 @@ export default function DashboardPage() {
 
     await fetchLeads();
     fetchAssignLimits();
-    // Remove assigned IDs from selection to prevent accidental reassignment
-    const remainingIds = selectedIdsArray.filter((id) => !idsToAssign.includes(id));
+    const remainingIds = idsToAssign.filter((id) => !idsToAssign.includes(id));
     if (remainingIds.length === 0) {
       deselectAll();
     } else {
-      // Keep unassigned IDs in selection
       setSelectedIds(new Set(remainingIds));
     }
   };
@@ -233,7 +206,6 @@ export default function DashboardPage() {
   const fetchLeads = async () => {
     setLoading(true);
 
-    // Get current user's profile to check role
     const { data: currentProfile } = await supabase
       .from('profiles')
       .select('role')
@@ -254,7 +226,6 @@ export default function DashboardPage() {
         { ascending: sortBy === 'follow_up' }
       );
 
-    // Non-admins only see leads assigned to them
     if (!isAdmin && user?.id) {
       query = query.eq('assigned_to', user.id);
     }
@@ -294,18 +265,7 @@ export default function DashboardPage() {
     setLoading(false);
   };
 
-  const filteredLeads = leads.filter((lead) => {
-    if (statusFilter !== 'all' && lead.status !== statusFilter) return false;
-    if (sourceFilter !== 'all' && lead.source !== sourceFilter) return false;
-    if (assignedFilter !== 'all') {
-      const isAssigned = !!lead.assigned_to;
-      if (assignedFilter === 'assigned' && !isAssigned) return false;
-      if (assignedFilter === 'unassigned' && isAssigned) return false;
-    }
-    return true;
-  });
-
-  const sortedLeads = [...filteredLeads].sort((a, b) => {
+  const sortedLeads = [...leads].sort((a, b) => {
     if (sortBy === 'icp_high') {
       return (b.icp_score ?? 0) - (a.icp_score ?? 0);
     }
@@ -337,141 +297,28 @@ export default function DashboardPage() {
           onClick={fetchLeads}
           className="bg-[#3f3f46] hover:bg-[#52525b] text-white text-sm font-medium rounded-lg px-4 py-2 transition flex items-center gap-2"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
+          <RefreshIcon />
           Refresh
         </button>
       </div>
 
       {/* Filters */}
       <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 mb-5">
-        <div className="flex flex-wrap gap-3 items-end">
-          {/* Search */}
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-              Search
-            </label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, company, phone..."
-              className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-            />
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as LeadStatus | 'all')
-              }
-              className="w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Source */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-              Source
-            </label>
-            <select
-              value={sourceFilter}
-              onChange={(e) =>
-                setSourceFilter(e.target.value as LeadSource | 'all')
-              }
-              className="w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-            >
-              {SOURCE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Category */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-              Category
-            </label>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full sm:w-[150px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-            >
-              <option value="all" className="bg-[#1a1a1a]">
-                All Categories
-              </option>
-              {availableCategories.map((cat) => (
-                <option key={cat} value={cat} className="bg-[#1a1a1a]">
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Assignment Status */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-              Assignment
-            </label>
-            <select
-              value={assignedFilter}
-              onChange={(e) => setAssignedFilter(e.target.value as 'all' | 'assigned' | 'unassigned')}
-              className="w-full sm:w-[140px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-            >
-              <option value="all" className="bg-[#1a1a1a]">All</option>
-              <option value="assigned" className="bg-[#1a1a1a]">Assigned</option>
-              <option value="unassigned" className="bg-[#1a1a1a]">Unassigned</option>
-            </select>
-          </div>
-
-          {/* Sort */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-              Sort
-            </label>
-            <select
-              value={sortBy}
-              onChange={(e) =>
-                setSortBy(e.target.value as typeof sortBy)
-              }
-              className="w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-            >
-              <option value="newest" className="bg-[#1a1a1a]">
-                Newest First
-              </option>
-              <option value="icp_high" className="bg-[#1a1a1a]">
-                ICP Score (High)
-              </option>
-              <option value="follow_up" className="bg-[#1a1a1a]">
-                Follow-up Due
-              </option>
-            </select>
-          </div>
-        </div>
+        <LeadFilters
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          sourceFilter={sourceFilter}
+          setSourceFilter={setSourceFilter}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          assignedFilter={assignedFilter}
+          setAssignedFilter={setAssignedFilter}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          availableCategories={availableCategories}
+        />
       </div>
 
       {/* Bulk select all checkbox */}
@@ -518,238 +365,23 @@ export default function DashboardPage() {
 
       {/* Follow-up Reminders */}
       {followUpReminders.length > 0 && (
-        <div className="mb-6 bg-yellow-500/5 border border-yellow-500/30 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-yellow-300 mb-3 flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m9-4a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Upcoming Follow-ups
-          </h2>
-          <div className="space-y-2">
-            {followUpReminders.map((lead) => (
-              <div key={lead.id} className="bg-[#1a1a1a] border border-[#27272a] rounded-lg p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <Link href={`/dashboard/leads/${lead.id}`} className="text-blue-400 hover:text-blue-300 font-medium text-sm truncate">
-                    {lead.title || 'Untitled Business'}
-                  </Link>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[lead.status]}`}>
-                    {STATUS_LABELS[lead.status]}
-                  </span>
-                </div>
-                {lead.next_follow_up_at && (
-                  <p className="text-xs text-yellow-400 mt-1">
-                    Due: {new Date(lead.next_follow_up_at).toLocaleString()}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <FollowUpReminders reminders={followUpReminders} />
       )}
 
       {/* Lead list */}
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="flex items-center gap-3 text-gray-500">
-            <Spinner size="md" />
-            <span>Loading leads...</span>
-          </div>
-        </div>
+        <LoadingState />
       ) : sortedLeads.length === 0 ? (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-[#27272a] flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-6 h-6 text-gray-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
-            </div>
-            <p className="text-gray-300 font-medium mb-1">
-              No leads found
-            </p>
-            <p className="text-gray-500 text-sm">
-              Try adjusting your filters or search query.
-            </p>
-          </div>
-        </div>
+        <EmptyState />
       ) : (
         <div className="space-y-2">
           {sortedLeads.map((lead) => (
-            <Link
+            <LeadCard
               key={lead.id}
-              href={`/dashboard/leads/${lead.id}`}
-              className="block bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 transition cursor-pointer group"
-            >
-              <div className="flex items-start gap-3">
-                {/* Checkbox */}
-                <div
-                  className="mt-0.5 w-5 h-5 flex items-center justify-center cursor-pointer"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleItem(lead.id);
-                  }}
-                >
-                  {isSelected(lead.id) ? (
-                    <div className="w-4 h-4 bg-blue-600 rounded flex items-center justify-center">
-                      <svg
-                        className="w-3 h-3 text-white"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  ) : (
-                    <div className="w-4 h-4 border border-[#3f3f46] rounded" />
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
-                    <h3 className="font-semibold text-white text-base truncate">
-                      {lead.title || 'Untitled Business'}
-                    </h3>
-                    <span
-                      className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${STATUS_COLORS[lead.status]} border ${STATUS_COLORS[lead.status].replace('text-', 'border-').replace('-400', '-500').replace('-500', '-400')}`}
-                    >
-                      {STATUS_LABELS[lead.status]}
-                    </span>
-                    {lead.icp_score !== null && (
-                      <span className="text-xs text-gray-400 font-semibold bg-[#27272a] px-2 py-0.5 rounded">
-                        ICP {lead.icp_score}
-                      </span>
-                    )}
-                    {lead.category_name && (
-                      <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-                        {lead.category_name}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                    {lead.owner_name && (
-                      <span className="text-gray-400">
-                        Owner:{" "}
-                        <span className="text-gray-200 font-medium">
-                          {lead.owner_name}
-                        </span>
-                      </span>
-                    )}
-                    {lead.phone && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(lead.phone!);
-                        }}
-                        className="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 text-left"
-                        title="Click to copy phone"
-                      >
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                          />
-                        </svg>
-                        {lead.phone}
-                      </button>
-                    )}
-                    {lead.phone && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/dashboard/leads/${lead.id}`);
-                        }}
-                        className="text-green-400 hover:text-green-300 font-medium flex items-center gap-1"
-                        title="Call this lead"
-                      >
-                        <Phone className="w-3.5 h-3.5" />
-                        Call
-                      </button>
-                    )}
-                    {lead.city && (
-                      <span className="text-gray-500">{lead.city}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                    {lead.total_score && (
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500/50" />
-                        {lead.total_score}★ ({lead.reviews_count || 0}{' '}
-                        reviews)
-                      </span>
-                    )}
-                    {lead.source && (
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
-                        {lead.source.replace('_', ' ')}
-                      </span>
-                    )}
-                    {lead.assigned_to && (
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500/50" />
-                        Assigned
-                      </span>
-                    )}
-                    {lead.created_at && (
-                      <span>
-                        Added {new Date(lead.created_at).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="shrink-0 flex items-center gap-1.5">
-                  {lead.website && (
-                    <svg
-                      className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                      />
-                    </svg>
-                  )}
-                  <svg
-                    className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </div>
-              </div>
-            </Link>
+              lead={lead}
+              isSelected={bulk.isSelected(lead.id)}
+              toggleItem={toggleItem}
+            />
           ))}
         </div>
       )}
@@ -763,6 +395,96 @@ export default function DashboardPage() {
         profiles={profiles}
         assignLimits={assignLimits}
       />
+    </div>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
+    </svg>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <div className="flex items-center gap-3 text-gray-500">
+        <Spinner size="md" />
+        <span>Loading leads...</span>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
+      <div className="text-center">
+        <div className="w-12 h-12 rounded-full bg-[#27272a] flex items-center justify-center mx-auto mb-4">
+          <svg
+            className="w-6 h-6 text-gray-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+            />
+          </svg>
+        </div>
+        <p className="text-gray-300 font-medium mb-1">No leads found</p>
+        <p className="text-gray-500 text-sm">Try adjusting your filters or search query.</p>
+      </div>
+    </div>
+  );
+}
+
+function FollowUpReminders({ reminders }: { reminders: Lead[] }) {
+  return (
+    <div className="mb-6 bg-yellow-500/5 border border-yellow-500/30 rounded-xl p-4">
+      <h2 className="text-sm font-semibold text-yellow-300 mb-3 flex items-center gap-2">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8v4l3 3m9-4a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+        Upcoming Follow-ups
+      </h2>
+      <div className="space-y-2">
+        {reminders.map((lead) => (
+          <div key={lead.id} className="bg-[#1a1a1a] border border-[#27272a] rounded-lg p-3">
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                href={`/dashboard/leads/${lead.id}`}
+                className="text-blue-400 hover:text-blue-300 font-medium text-sm truncate"
+              >
+                {lead.title || 'Untitled Business'}
+              </Link>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[lead.status]}`}>
+                {STATUS_LABELS[lead.status]}
+              </span>
+            </div>
+            {lead.next_follow_up_at && (
+              <p className="text-xs text-yellow-400 mt-1">
+                Due: {new Date(lead.next_follow_up_at).toLocaleString()}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
