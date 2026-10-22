@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
 
+import { Calendar, X } from 'lucide-react';
+
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
@@ -34,6 +36,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   // Activity log state
   const [activities, setActivities] = useState<any[]>([]);
   const [showActivityForm, setShowActivityForm] = useState(false);
+  const [showBookMeeting, setShowBookMeeting] = useState(false);
   const [activityType, setActivityType] = useState('call');
   const [activityContent, setActivityContent] = useState('');
   const [activityOutcome, setActivityOutcome] = useState('');
@@ -141,9 +144,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     setSaving(true);
     setError('');
 
-    const updates: Record<string, unknown> = {
+    const updates: Record<string, any> = {
       status,
       updated_at: new Date().toISOString(),
+      meeting_link: lead.meeting_link || null,
     };
 
     if (!lead.owner_id && user) {
@@ -314,9 +318,71 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   </svg>
                   Visit Website
                 </a>
+              )}{(lead.meeting_link || process.env.NEXT_PUBLIC_CALCOM_USERNAME) && (
+                <button
+                  onClick={() => setShowBookMeeting(true)}
+                  className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+                >
+                  <Calendar className="w-4 h-4" />
+                  {lead.meeting_link ? 'View Meeting' : 'Book Meeting'}
+                </button>
               )}
             </div>
           </div>
+
+          {/* Cal.com Booking Modal */}
+          {showBookMeeting && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+                <div className="p-4 border-b border-[#27272a] flex items-center justify-between">
+                  <h3 className="font-semibold text-white">
+                    {lead.meeting_link ? 'Meeting Details' : 'Book a Meeting'}
+                  </h3>
+                  <button
+                    onClick={() => setShowBookMeeting(false)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {lead.meeting_link ? (
+                    <div>
+                      <a
+                        href={lead.meeting_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 break-all"
+                      >
+                        {lead.meeting_link}
+                      </a>
+                    </div>
+                  ) : (
+                    <iframe
+                      src={`https://cal.com/${process.env.NEXT_PUBLIC_CALCOM_USERNAME || 'demo'}/${process.env.NEXT_PUBLIC_CALCOM_EVENT_TYPE || '30min'}?prefill[name]=${encodeURIComponent(lead.owner_name || '')}`}
+                      title="Book Meeting"
+                      className="w-full h-[600px] border border-[#27272a] rounded-lg"
+                      allowFullScreen
+                    />
+                  )}
+                </div>
+                {!lead.meeting_link && (
+                  <div className="p-4 border-t border-[#27272a]">
+                    <p className="text-xs text-gray-500 mb-3">
+                      Book a meeting with yourself, the client, and the cold caller via Cal.com.
+                      Set NEXT_PUBLIC_CALCOM_USERNAME and NEXT_PUBLIC_CALCOM_EVENT_TYPE in .env.local.
+                    </p>
+                    <button
+                      onClick={() => setShowBookMeeting(false)}
+                      className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Quick info */}
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
@@ -343,6 +409,18 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     <path d="M18 6L6 18M6 6l12 12" />
                   </svg>
                 </button>
+              </div>
+            )}{lead.meeting_link && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Meeting Link</p>
+                <a
+                  href={lead.meeting_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 text-sm break-all"
+                >
+                  {lead.meeting_link.replace('https://', '')}
+                </a>
               </div>
             )}
               <div>

@@ -59,6 +59,7 @@ export type Lead = {
   status: LeadStatus;
   source: LeadSource;
   notes: string | null;
+  meeting_link: string | null;
   source_details: Record<string, unknown> | null;
   last_contacted_at: string | null;
   next_follow_up_at: string | null;
