@@ -41,7 +41,7 @@ export default function CallsPage() {
       .neq('phone_number', null)
       .not('phone_number', 'is', null)
     if (error) console.error('Error fetching team members:', error)
-    else setTeamMembers(data || [])
+    else setTeamMembers((data || []) as TeamMember[])
   }
 
   const fetchLeads = async () => {
@@ -103,8 +103,8 @@ export default function CallsPage() {
         body: JSON.stringify({
           leadId: lead.id,
           callerId: member?.id,
-          fromNumber: member?.phone_number || '',
-          toNumber: lead.phone,
+          leadPhone: lead.phone,
+          leadName: lead.title || lead.owner_name || '',
         }),
       })
 

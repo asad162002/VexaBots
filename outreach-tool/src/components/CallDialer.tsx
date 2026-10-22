@@ -9,6 +9,7 @@ type Caller = {
   id: string;
   full_name: string | null;
   email: string | null;
+  phone_number?: string | null;
 };
 
 interface CallDialerProps {
@@ -48,7 +49,10 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
   const fetchCallersAndNumbers = async () => {
     try {
-      const { data: profiles, error: profilesError } = await supabase.from('profiles').select('id, full_name, email');
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, phone_number')
+        .not('phone_number', 'is', null);
       if (profilesError) {
         console.error('Error fetching profiles:', profilesError);
         return;
@@ -58,13 +62,13 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         id: p.id,
         full_name: p.full_name,
         email: p.email,
+        phone_number: p.phone_number,
       }));
 
       setCallers(callerList);
-
-      // Set default caller to the first available profile
       if (callerList.length > 0) {
         setSelectedCaller(callerList[0].id);
+        setSelectedFromNumber(callerList[0].phone_number || '');
       }
     } catch (e) {
       console.error('Unexpected error:', e);
@@ -98,14 +102,14 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     setDuration(0);
 
     try {
-      const response = await fetch('/api/call', {
+      const response = await fetch('/api/telnyx/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           leadId: lead.id,
           callerId: selectedCaller,
-          fromNumber: selectedFromNumber,
-          toNumber: lead.phone,
+          leadPhone: lead.phone,
+          leadName: lead.owner_name || '',
         }),
       });
 
@@ -207,7 +211,11 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
                     </label>
                     <select
                       value={selectedCaller}
-                      onChange={(e) => setSelectedCaller(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedCaller(e.target.value)
+                        const caller = callers.find(c => c.id === e.target.value)
+                        setSelectedFromNumber(caller?.phone_number || '')
+                      }}
                       className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       {callers.map((c) => (
@@ -227,11 +235,13 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
                       className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select call number...</option>
-                      {selectedCaller ? (
-                        <option value={selectedCaller}>{selectedCaller}</option>
-                      ) : (
-                        <option value="">No caller selected</option>
-                      )}
+                      {callers
+                        .filter((c) => c.phone_number)
+                        .map((c) => (
+                          <option key={c.id} value={c.phone_number || ''}>
+                            {c.full_name || c.email} — {c.phone_number}
+                          </option>
+                        ))}
                     </select>
                     </div>
                 </div>
