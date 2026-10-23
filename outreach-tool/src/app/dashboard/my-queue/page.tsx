@@ -151,7 +151,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
       return;
     }
     setError(null);
-    await hookStartCall(currentLead.phone, currentLead.owner_name || undefined);
+    await hookStartCall(currentLead.phone, currentLead.id);
   };
 
   const endCall = () => {

@@ -45,7 +45,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
   const handleStartCall = () => {
     if (!lead?.phone) return;
-    startCall(lead.phone, lead.owner_name || undefined);
+    startCall(lead.phone, lead.id);
   };
 
   const handleEndCall = () => {

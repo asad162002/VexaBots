@@ -39,7 +39,7 @@ export interface TelnyxCallState {
 }
 
 export interface UseTelnyxCallReturn extends TelnyxCallState {
-  startCall: (leadPhone: string, leadName?: string) => Promise<void>;
+  startCall: (leadPhone: string, leadId?: string) => Promise<void>;
   endCall: () => void;
   toggleMute: () => void;
   requestMicrophone: () => Promise<MediaStream | null>;
@@ -120,7 +120,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
   }, []);
 
-  const startCall = useCallback(async (leadPhone: string, leadName?: string) => {
+  const startCall = useCallback(async (leadPhone: string, leadId?: string) => {
     if (!user) {
       setState(s => ({ ...s, status: 'error', message: 'Authentication required.' }));
       return;
@@ -168,7 +168,29 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     answeredAtRef.current = null;
     stopDurationTimer();
 
-    try {
+  try {
+      // Create the call log row FIRST (via call-log-only endpoint — no REST)
+      const callLogRes = await authFetch('/api/telnyx/call-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_number: toNumber,
+          lead_id: leadId || null,
+        }),
+      });
+
+      if (!callLogRes.ok) {
+        const errData = await callLogRes.json();
+        throw new Error(errData.error || 'Failed to create call log');
+      }
+      const callLogData = await callLogRes.json();
+      currentCallLogIdRef.current = callLogData.callLogId ?? null;
+
+      setState(s => ({
+        ...s,
+        callLogId: callLogData.callLogId ?? null,
+      }));
+
       // Get a WebRTC login token from our backend
       const tokenRes = await authFetch('/api/telnyx/token', { method: 'GET' });
       const tokenData = await tokenRes.json();
@@ -289,28 +311,6 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
       // Connect to Telnyx signaling
       client.connect();
-
-      // Create the call log row via our API
-      const callLogRes = await authFetch('/api/telnyx/call', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leadPhone: toNumber,
-          leadName: leadName || '',
-        }),
-      });
-
-      if (!callLogRes.ok) {
-        const errData = await callLogRes.json();
-        throw new Error(errData.error || 'Failed to create call log');
-      }
-      const callLogData = await callLogRes.json();
-      currentCallLogIdRef.current = callLogData.callLogId ?? null;
-
-      setState(s => ({
-        ...s,
-        callLogId: callLogData.callLogId ?? null,
-      }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start call';
       console.error('Call error:', err);
