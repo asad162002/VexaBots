@@ -35,38 +35,38 @@
 
 ## Key Supabase Lessons (Don't Forget!)
 ### PAT Token Issues
-- The Pat token `sbp_fc3a...` works for Management API but NOT for REST API
+- The Pat token (see .env.local) works for Management API but NOT for REST API
 - The JWT service_role key works for REST API (read/write/upsert/delete)
-- The anon key (sb_publishable_...) can read + insert but NOT delete/update existing owned rows
+- The anon key (NEXT_PUBLIC_SUPABASE_ANON_KEY) can read + insert but NOT delete/update existing owned rows
 
 ### JWT Key Gotchas
-- The JWT says `iat: 1789394521` (2026) and `exp: 2104970521` (2036) - but JWT verification was failing on Management API
-- Management API requires: Bearer token format, but still got "JWT failed verification"
+- JWT verification was failing on Management API for service_role key
+- Management API requires: Bearer token format
 - REST API accepts the JWT fine for reads, writes, deletes, patches
 - BUT deletes via anon key return 204 (success) WITHOUT actually deleting - it's silently skipped due to RLS
 - Solution: Use service_role JWT for deletes, not anon key
 
 ### User Invite API
-- The Management API endpoint `https://api.supabase.com/v1/projects/{ref}/auth/users` no longer works (returns "Cannot POST")
+- The Management API endpoint no longer works
 - Use the Supabase Admin SDK (`supabase.auth.admin.inviteUserByEmail()`) with the service_role key instead
-- The service_role key is the full JWT: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpteWdjbG9meXhhbnByd2tsZW1hIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTM5NDUyMSwiZXhwIjoyMTA0OTcwNTIxfQ.2xGg6TInQhKquLcCyfVQe2oOdg_AZIl2d9VuVThPhD0`
+- The service_role key is redacted — see .env.local
 - Note: Supabase has email rate limits on invites - 3 invites per hour for the same email by default
 
 ### Execute SQL via MCP
 - MCP server's `execute_sql` works with the PAT token
-- For triggers: PostgreSQL 14 doesn't support `IF NOT EXISTS` on triggers - use `DROP TRIGGER IF EXISTS` first
+- For triggers: PostgreSQL doesn't support `IF NOT EXISTS` on triggers - use `DROP TRIGGER IF EXISTS` first
 - Column creation works via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
 
 ### Table Creation Workflow
 1. Use MCP server with `execute_sql` (not `apply_migration` - needs project permissions)
-2. Use `DROP TRIGGER IF EXISTS` instead of `CREATE TRIGGER IF NOT EXISTS`
+2. Use `DROP TRIGGER IF EXISTS` instead of `CREATE TRIGGER IF EXISTS`
 3. Run the SQL to create tables: linkedin_leads, tech_stack
 4. Add RLS policies after table creation
 5. Use `gen_random_uuid()` default instead of UUIDs
 
 ### Key Endpoints
-- Project URL: https://zmygclofyxanprwklema.supabase.co
-- REST API: https://zmygclofyxanprwklema.supabase.co/rest/v1/
+- Project URL: see .env.local
+- REST API: see .env.local
 - Database: PostgreSQL (hosted)
 
 ## Environment Notes

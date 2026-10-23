@@ -1,16 +1,9 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 import { type CallLog, type CallStatus } from '@/lib/types';
-import { Phone, AlertCircle, Clock, Loader2, CheckCircle, XCircle, PhoneOff, PhoneMissed } from 'lucide-react';
-
-type Caller = {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  phone_number?: string | null;
-};
+import { Phone, AlertCircle, Clock, Loader2, CheckCircle, XCircle } from 'lucide-react';
 
 interface CallDialerProps {
   lead: {
@@ -33,47 +26,12 @@ const STATUS_BADGE: Record<CallStatus, { label: string; className: string }> = {
 };
 
 export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
-  const [callers, setCallers] = useState<Caller[]>([]);
-  const [selectedCaller, setSelectedCaller] = useState<string>('');
-  const [selectedFromNumber, setSelectedFromNumber] = useState<string>('');
+  const { callerNumber } = useAuth();
   const [status, setStatus] = useState<CallStatus>('initiated');
   const [message, setMessage] = useState<string>('');
   const [duration, setDuration] = useState<number>(0);
   const [isCalling, setIsCalling] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchCallersAndNumbers();
-  }, [lead?.id]);
-
-  const fetchCallersAndNumbers = async () => {
-    try {
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, phone_number')
-        .not('phone_number', 'is', null);
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        return;
-      }
-
-      const callerList = (profiles ?? []).map((p: Caller) => ({
-        id: p.id,
-        full_name: p.full_name,
-        email: p.email,
-        phone_number: p.phone_number,
-      }));
-
-      setCallers(callerList);
-      if (callerList.length > 0) {
-        setSelectedCaller(callerList[0].id);
-        setSelectedFromNumber(callerList[0].phone_number || '');
-      }
-    } catch (e) {
-      console.error('Unexpected error:', e);
-    }
-  };
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -86,12 +44,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
       setError('No phone number on this lead.');
       return;
     }
-    if (!selectedCaller) {
-      setError('Select a caller first.');
-      return;
-    }
-    if (!selectedFromNumber) {
-      setError('No caller number selected. Please add a US number in settings or contact admin.');
+    if (!callerNumber) {
+      setError('No caller number configured for your account.');
       return;
     }
 
@@ -107,7 +61,6 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           leadId: lead.id,
-          callerId: selectedCaller,
           leadPhone: lead.phone,
           leadName: lead.owner_name || '',
         }),
@@ -128,41 +81,38 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
       const callEventSource = new EventSource(`/api/call/${data.callId}/events`);
 
       callEventSource.addEventListener('call-started', (e) => {
-        const evt = JSON.parse(e.data);
+        const evt = JSON.parse((e as MessageEvent).data);
         setStatus(evt.status);
         setMessage(`Calling ${lead.phone}...`);
       });
 
-      callEventSource.addEventListener('call-answered', (e) => {
-        const evt = JSON.parse(e.data);
-        setStatus(evt.status);
+      callEventSource.addEventListener('call-answered', () => {
+        setStatus('answered');
         setMessage('Connected. You can talk now.');
       });
 
-      callEventSource.addEventListener('call-busy', (e) => {
-        const evt = JSON.parse(e.data);
-        setStatus(evt.status);
+      callEventSource.addEventListener('call-busy', () => {
+        setStatus('busy');
         setMessage('Called party is busy.');
       });
 
-      callEventSource.addEventListener('call-no-answer', (e) => {
-        const evt = JSON.parse(e.data);
-        setStatus(evt.status);
+      callEventSource.addEventListener('call-no-answer', () => {
+        setStatus('no_answer');
         setMessage('No answer.');
       });
 
-      callEventSource.addEventListener('call-voicemail', (e) => {
-        const evt = JSON.parse(e.data);
-        setStatus(evt.status);
+      callEventSource.addEventListener('call-voicemail', () => {
+        setStatus('voicemail');
         setMessage('Left on voicemail.');
       });
 
-      callEventSource.addEventListener('call-disconnected', (e) => {
-        const evt = JSON.parse(e.data);
-        setStatus(evt.status);
+      callEventSource.addEventListener('call-disconnected', () => {
+        setStatus('disconnected');
         setMessage('Call ended.');
         callEventSource.close();
         clearInterval(interval);
+        setDuration(0);
+        setIsCalling(false);
       });
 
       callEventSource.onerror = () => {
@@ -170,6 +120,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         setMessage('Connection lost.');
         callEventSource.close();
         clearInterval(interval);
+        setIsCalling(false);
       };
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start call');
@@ -184,150 +135,99 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     setIsCalling(false);
   }, []);
 
-  return (
-    <div>
+  if (!lead?.phone) {
+    return (
       <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
-          {lead?.phone ? 'Phone Dialer' : 'No Phone Available'}
-        </h2>
+        <p className="text-sm text-gray-400">This lead has no phone number.</p>
+      </div>
+    );
+  }
 
-        {!lead?.phone ? (
-          <p className="text-sm text-gray-400">
-            This lead has no phone number. Dialer is disabled.
+  return (
+    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+        Phone Dialer
+      </h2>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-sm">
+          <Phone className="w-4 h-4 text-gray-500" />
+          <span className="text-gray-300">{lead.phone}</span>
+        </div>
+
+        {!callerNumber ? (
+          <p className="text-xs text-gray-500">
+            Add a US number in your Telnyx dashboard, then select it here before calling.
           </p>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Phone className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-300">{lead.phone}</span>
-            </div>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <CheckCircle className="w-3 h-3 text-green-500/60" />
+            <span>Calling from {callerNumber}</span>
+          </div>
+        )}
 
-            {callers.length > 0 && (
+        {status !== 'initiated' && status !== 'ringing' && status !== 'answered' && (
+          <button
+            onClick={startCall}
+            disabled={isCalling || !!error}
+            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 active:bg-green-700 disabled:bg-green-800 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
+          >
+            {isCalling ? (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
-                      Caller
-                    </label>
-                    <select
-                      value={selectedCaller}
-                      onChange={(e) => {
-                        setSelectedCaller(e.target.value)
-                        const caller = callers.find(c => c.id === e.target.value)
-                        setSelectedFromNumber(caller?.phone_number || '')
-                      }}
-                      className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {callers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.full_name || c.email}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
-                      From Number
-                    </label>
-                    <select
-                      value={selectedFromNumber}
-                      onChange={(e) => setSelectedFromNumber(e.target.value)}
-                      className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select call number...</option>
-                      {callers
-                        .filter((c) => c.phone_number)
-                        .map((c) => (
-                          <option key={c.id} value={c.phone_number || ''}>
-                            {c.full_name || c.email} — {c.phone_number}
-                          </option>
-                        ))}
-                    </select>
-                    </div>
-                </div>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Starting call...</span>
+              </>
+            ) : (
+              <>
+                <Phone className="w-4 h-4" />
+                <span>Call Now</span>
               </>
             )}
+          </button>
+        )}
 
-            {selectedFromNumber && (
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <CheckCircle className="w-3 h-3 text-green-500/60" />
-                <span>Calling from {selectedFromNumber}</span>
-              </div>
-            )}
+        {status === 'answered' && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={endCall}
+              className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>End Call</span>
+            </button>
+          </div>
+        )}
 
-            {!selectedFromNumber && (
-              <p className="text-xs text-gray-500">
-                Add a US number in your Telnyx dashboard, then select it here before calling.
-              </p>
-            )}
+        {(status === 'ringing' || status === 'answered' || status === 'initiated') && (
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-1.5 text-gray-400">
+              <Clock className="w-4 h-4" />
+              <span className="text-gray-300">{formatDuration(duration)}</span>
+            </div>
+          </div>
+        )}
 
-            {status !== 'initiated' && status !== 'ringing' && (
-              <button
-                onClick={startCall}
-                disabled={isCalling}
-                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 active:bg-green-700 disabled:bg-green-800 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
-              >
-                {isCalling ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Starting call...</span>
-                  </>
-                ) : (
-                  <>
-                    <Phone className="w-4 h-4" />
-                    <span>Call Now</span>
-                  </>
-                )}
-              </button>
-            )}
+        {(status === 'busy' || status === 'voicemail' || status === 'no_answer' || status === 'disconnected') && (
+          <div className="flex items-center gap-2 p-3 bg-gray-500/10 border border-gray-500/30 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-gray-400" />
+            <span className="text-sm text-gray-300">
+              {STATUS_BADGE[status].label}
+              {message && ` - ${message}`}
+            </span>
+          </div>
+        )}
 
-            {status === 'answered' && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={endCall}
-                  className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span>End Call</span>
-                </button>
-              </div>
-            )}
+        {status === 'answered' && (
+          <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+            <CheckCircle className="w-4 h-4 text-green-500/60" />
+            <span className="text-sm text-green-400">You are connected to the lead.</span>
+          </div>
+        )}
 
-            {(status === 'ringing' || status === 'answered') && (
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1.5 text-gray-400">
-                  <Clock className="w-4 h-4" />
-                  <span className="text-gray-300">{formatDuration(duration)}</span>
-                </div>
-              </div>
-            )}
-
-            {(status === 'busy' ||
-              status === 'voicemail' ||
-              status === 'no_answer' ||
-              status === 'disconnected') && (
-                <div className="flex items-center gap-2 p-3 bg-gray-500/10 border border-gray-500/30 rounded-lg">
-                  <AlertCircle className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-300">
-                    {STATUS_BADGE[status].label}
-                    {message && ` - ${message}`}
-                  </span>
-                </div>
-              )}
-
-            {status === 'answered' && (
-              <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <CheckCircle className="w-4 h-4 text-green-500/60" />
-                <span className="text-sm text-green-400">You are connected to the lead.</span>
-              </div>
-            )}
-
-            {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-400" />
-                <span className="text-sm text-red-400">{error}</span>
-              </div>
-            )}
+        {error && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-red-400" />
+            <span className="text-sm text-red-400">{error}</span>
           </div>
         )}
       </div>
