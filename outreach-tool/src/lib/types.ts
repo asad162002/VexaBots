@@ -130,6 +130,8 @@ export type CallLog = {
   recorded_url: string | null;
   recording_url: string | null;
   call_id: string | null;
+  telnyx_call_control_id: string | null;
+  telnyx_call_session_id: string | null;
   started_at: string | null;
   ended_at: string | null;
   call_control_id: string | null;

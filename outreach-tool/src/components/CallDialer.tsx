@@ -67,6 +67,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         recorded_url: null,
         recording_url: null,
         call_id: null,
+        telnyx_call_control_id: null,
+        telnyx_call_session_id: null,
         started_at: null,
         ended_at: new Date().toISOString(),
         call_control_id: null,

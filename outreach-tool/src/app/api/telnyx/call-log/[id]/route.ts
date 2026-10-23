@@ -33,7 +33,7 @@ export async function PATCH(
 
   // Only allow updating specific fields — ignore caller_id override attempts
   const allowedFields: Record<string, any> = {};
-  const allowedKeys = ['status', 'duration_seconds', 'ended_at', 'recording_url', 'recorded_url'];
+  const allowedKeys = ['status', 'duration_seconds', 'ended_at', 'recording_url', 'recorded_url', 'telnyx_call_control_id', 'telnyx_call_session_id'];
   for (const key of allowedKeys) {
     if (key in updates) {
       allowedFields[key] = updates[key];

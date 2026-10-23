@@ -62,6 +62,16 @@ alter table public.profiles
   add column if not exists telnyx_credential_id text;
 
 -- ============================================================
+-- Add Telnyx SDK call identifiers to call_logs
+-- Populated by the webhook or PATCH /api/telnyx/call-log/[id]
+-- ============================================================
+alter table public.call_logs
+  add column if not exists telnyx_call_control_id text;
+
+alter table public.call_logs
+  add column if not exists telnyx_call_session_id text;
+
+-- ============================================================
 -- Trigger function: blocks non-admin profile edits to
 -- role / phone_number. Uses NEW for row-level trigger.
 -- ============================================================
@@ -469,8 +479,11 @@ $$;
 -- ============================================================
 -- log_call_outcome: security definer function
 -- Atomically updates lead status + inserts activity.
--- Verifies the caller is assigned to the lead OR owns the call log.
--- p_status is text (validated against the allowed enum values).
+-- Authorization: admin OR (lead is assigned_to = auth.uid()
+--   AND, when p_call_log_id is given, that call_log has
+--   caller_id = auth.uid() AND lead_id = p_lead_id).
+-- A call-log owner alone does NOT authorize (prevents cross-team access).
+-- p_status is text (validated against the LeadStatus enum values).
 -- ============================================================
 create or replace function public.log_call_outcome(
   p_lead_id uuid,
@@ -487,27 +500,33 @@ set search_path = public
 as $$
 begin
   -- Verify the caller is authorized:
-  -- admin, OR assigned to the lead, OR owns the call log
+  --   admin, OR
+  --   (lead assigned to caller AND, if a call_log_id was given,
+  --    that call log belongs to the caller AND references this lead)
   if not (public.is_admin()
-    or exists (
-      select 1 from public.leads l
-      where l.id = p_lead_id
-      and l.assigned_to = auth.uid()
-    )
-    or (p_call_log_id is not null
-      and exists (
-        select 1 from public.call_logs cl
-        where cl.id = p_call_log_id
-        and cl.caller_id = auth.uid()
+    or (
+      exists (
+        select 1 from public.leads l
+        where l.id = p_lead_id
+        and l.assigned_to = auth.uid()
+      )
+      and (
+        p_call_log_id is null
+        or exists (
+          select 1 from public.call_logs cl
+          where cl.id = p_call_log_id
+          and cl.caller_id = auth.uid()
+          and cl.lead_id = p_lead_id
+        )
       )
     )
   ) then
-    raise exception 'Unauthorized: you are not assigned to this lead or call log';
+    raise exception 'Unauthorized: you are not assigned to this lead';
   end if;
 
-  -- Validate status against the allowed enum if provided
+  -- Validate status against the LeadStatus enum values
   if p_status is not null then
-    if p_status not in ('new', 'contacted', 'interested', 'not_interested', 'meeting_booked', 'dnc') then
+    if p_status not in ('new', 'contacted', 'interested', 'not_interested', 'send_info', 'meeting_booked', 'dead') then
       raise exception 'Invalid lead status: %', p_status;
     end if;
   end if;
@@ -547,14 +566,6 @@ begin
       set duration_seconds = p_duration_seconds
     where id = p_call_log_id;
   end if;
-
-  -- If the lead was unassigned, assign it to the caller
-  update public.leads
-    set assigned_to = auth.uid(),
-        assigned_at = now(),
-        assigned_by = auth.uid()
-  where id = p_lead_id
-    and assigned_to is null;
 end;
 $$;
 
