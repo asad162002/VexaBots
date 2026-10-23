@@ -17,7 +17,7 @@ interface AssignLimit {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
@@ -133,7 +133,6 @@ export default function SettingsPage() {
     fetchProfiles();
   };
 
-  const isAdmin = user?.email ? profiles.find(p => p.id === user.id)?.role === 'admin' : false;
   const currentUserProfile = profiles.find(p => p.id === user?.id);
 
   return (

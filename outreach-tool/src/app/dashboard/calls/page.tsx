@@ -8,7 +8,7 @@ import { CallControls, CallLeadRow } from '@/components/calls/calls-types';
 import type { LeadWithCallStatus, CallLog } from '@/components/calls/calls-types';
 
 function CallsPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string | null; email: string | null; phone_number: string | null }>>([]);
   const [leads, setLeads] = useState<LeadWithCallStatus[]>([]);
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
@@ -40,7 +40,17 @@ function CallsPage() {
         }
       }
 
-      const { data: leadsData, error: leadsError } = await supabase.from('leads').select('*');
+      const { data: leadsData, error: leadsError } = await supabase
+        .from('leads')
+        .select('*')
+        .then(({ data, error }) => {
+          if (error) throw error;
+          // Members only see their own assigned leads
+          if (!isAdmin) {
+            return { data: data?.filter(l => l.assigned_to === user?.id) ?? [], error };
+          }
+          return { data, error };
+        });
       if (leadsError) console.error('Error fetching leads:', leadsError);
 
       const { data: logsData, error: logsError } = await supabase
@@ -48,7 +58,11 @@ function CallsPage() {
         .select('*')
         .order('created_at', { ascending: false });
       if (logsError) console.error('Error fetching call logs:', logsError);
-      else setCallLogs(logsData ?? []);
+      else {
+        // Members only see their own call logs
+        const memberLogs = isAdmin ? logsData : (logsData ?? []).filter(l => l.caller_id === user?.id);
+        setCallLogs(memberLogs ?? []);
+      }
 
       if (leadsData) {
         const leadsWithCalls = (leadsData ?? []).map((lead: any) => {
@@ -67,7 +81,6 @@ function CallsPage() {
   const handleCall = async (leadId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead?.phone) { setMessage('Lead has no phone number'); return; }
-    if (!selectedProfile) { setMessage('Select a caller first'); return; }
 
     setSubmitting(true);
     setMessage('');
@@ -118,6 +131,7 @@ function CallsPage() {
   return (
     <CallsPageContent
       leads={leads}
+      isAdmin={isAdmin}
       filteredLeads={filteredLeads}
       profiles={profiles}
       selectedProfile={selectedProfile}
@@ -135,10 +149,11 @@ function CallsPage() {
 }
 
 function CallsPageContent({
-  leads, filteredLeads, profiles, selectedProfile, onCallerChange, filterStatus, onFilterStatusChange,
+  leads, isAdmin, filteredLeads, profiles, selectedProfile, onCallerChange, filterStatus, onFilterStatusChange,
   searchQuery, onSearchChange, submitting, message, onCall, onRefresh,
-}: {
+  }: {
   leads: LeadWithCallStatus[];
+  isAdmin: boolean;
   filteredLeads: LeadWithCallStatus[];
   profiles: Array<{ id: string; full_name: string | null; email: string | null; phone_number: string | null }>;
   selectedProfile: string;
@@ -162,6 +177,7 @@ function CallsPageContent({
       </div>
 
       <CallControls
+        isAdmin={isAdmin}
         selectedProfile={selectedProfile}
         profiles={profiles}
         filterStatus={filterStatus}
@@ -198,7 +214,6 @@ function CallsPageContent({
                 <CallLeadRow
                   key={lead.id}
                   lead={lead}
-                  selectedProfile={selectedProfile}
                   submitting={submitting}
                   onCall={onCall}
                 />

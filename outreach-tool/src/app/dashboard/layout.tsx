@@ -21,9 +21,9 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true },
   { href: '/dashboard/calls', label: 'Call Dialer', icon: Phone },
   { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users },
-  { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard },
-  { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
-  { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload },
+  { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard, adminOnly: true },
+  { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus, adminOnly: true },
+  { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload, adminOnly: true },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/dashboard/activity-feed', label: 'Activity Feed', icon: Clock },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
@@ -34,7 +34,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, isAdmin, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -42,7 +42,13 @@ export default function DashboardLayout({
     if (!loading && !user) {
       router.push('/');
     }
-  }, [user, loading, router]);
+    // Redirect non-admins away from admin-only pages
+    const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/leads/new', '/dashboard/import'];
+    const isCurrentAdminOnly = adminOnlyPaths.some(p => pathname.startsWith(p));
+    if (!loading && user && isCurrentAdminOnly && !isAdmin) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router, isAdmin, pathname]);
 
   if (loading) {
     return (
@@ -73,7 +79,7 @@ export default function DashboardLayout({
 
         {/* Navigation */}
         <nav className="flex-1 py-4 px-3 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map((item) => {
             const Icon = item.icon;
             const isActive = item.exact
               ? pathname === item.href

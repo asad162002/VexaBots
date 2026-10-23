@@ -1,20 +1,27 @@
-import { Phone, Clock, CheckCircle, XCircle, PlayCircle, ExternalLink } from 'lucide-react';
+import {
+  Phone,
+  Clock,
+  CheckCircle,
+  XCircle,
+  PlayCircle,
+  ExternalLink,
+} from 'lucide-react';
 
-type CallStatus = 'answered' | 'busy' | 'no_answer' | 'voicemail' | 'initiated' | 'ringing' | 'disconnected' | string;
-
-interface CallLog {
+export interface CallLog {
   id: string;
-  lead_id: string;
+  lead_id: string | null;
   caller_id: string;
   from_number: string;
   to_number: string;
   status: string;
   duration_seconds: number | null;
   recorded_url: string | null;
+  recording_url: string | null;
+  call_id: string | null;
   created_at: string;
 }
 
-interface LeadWithCallStatus {
+export interface LeadWithCallStatus {
   id: string;
   title: string | null;
   owner_name: string | null;
@@ -26,8 +33,6 @@ interface LeadWithCallStatus {
   last_call?: CallLog | null;
 }
 
-export type { CallLog, LeadWithCallStatus };
-
 export const STATUS_COLORS: Record<string, string> = {
   answered: 'bg-green-500/20 text-green-400 border-green-500/30',
   busy: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
@@ -36,6 +41,7 @@ export const STATUS_COLORS: Record<string, string> = {
   initiated: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
   ringing: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   disconnected: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
+  completed: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
   default: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
 };
 
@@ -47,6 +53,7 @@ export const STATUS_LABELS: Record<string, string> = {
   initiated: 'Dialing',
   ringing: 'Ringing',
   disconnected: 'Disconnected',
+  completed: 'Completed',
 };
 
 export const getStatusColor = (status: string | null): string => {
@@ -62,6 +69,7 @@ export const getStatusLabel = (status: string | null): string => {
 interface CallControlsProps {
   selectedProfile: string;
   profiles: { id: string; full_name: string | null; email: string | null; phone_number: string | null }[];
+  isAdmin: boolean;
   filterStatus: 'all' | 'called' | 'not_called';
   onCallerChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   onFilterChange: (v: 'all' | 'called' | 'not_called') => void;
@@ -73,27 +81,29 @@ interface CallControlsProps {
 }
 
 export function CallControls({
-  selectedProfile, profiles, filterStatus, onCallerChange, onFilterChange,
+  selectedProfile, profiles, isAdmin, filterStatus, onCallerChange, onFilterChange,
   searchQuery, onSearchChange, leadsCount, calledCount, pendingCount,
 }: CallControlsProps) {
   return (
     <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 mb-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Caller</label>
-          <select
-            value={selectedProfile}
-            onChange={onCallerChange}
-            className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Select caller...</option>
-            {profiles.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.full_name || p.email} ({p.phone_number})
-              </option>
-            ))}
-          </select>
-        </div>
+        {isAdmin && (
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Caller</label>
+            <select
+              value={selectedProfile}
+              onChange={onCallerChange}
+              className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select caller...</option>
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.email} ({p.phone_number})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">Filter</label>
           <select
@@ -140,12 +150,11 @@ export function CallControls({
 
 interface CallLeadRowProps {
   lead: LeadWithCallStatus;
-  selectedProfile: string;
   submitting: boolean;
   onCall: (id: string) => void;
 }
 
-export function CallLeadRow({ lead, selectedProfile, submitting, onCall }: CallLeadRowProps) {
+export function CallLeadRow({ lead, submitting, onCall }: CallLeadRowProps) {
   const lastCall = lead.last_call;
   const hasCalled = lastCall !== null && lastCall?.status !== 'initiated';
 
@@ -187,7 +196,7 @@ export function CallLeadRow({ lead, selectedProfile, submitting, onCall }: CallL
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          {lead.phone && selectedProfile && (
+          {lead.phone && (
             <button
               onClick={() => onCall(lead.id)}
               disabled={submitting}
@@ -208,15 +217,13 @@ export function CallLeadRow({ lead, selectedProfile, submitting, onCall }: CallL
               <PlayCircle className="w-4 h-4" />
             </a>
           )}
-          {lead.id && (
-            <a
-              href={`/dashboard/leads/${lead.id}`}
-              className="text-gray-400 hover:text-gray-300 transition"
-              title="View lead details"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          )}
+          <a
+            href={`/dashboard/leads/${lead.id}`}
+            className="text-gray-400 hover:text-gray-300 transition"
+            title="View lead details"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
         </div>
       </td>
     </tr>
