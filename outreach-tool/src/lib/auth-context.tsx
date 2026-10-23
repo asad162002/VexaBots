@@ -11,6 +11,7 @@ interface Profile {
   role: string | null;
   phone_number: string | null;
   avatar_url: string | null;
+  telnyx_credential_id?: string | null;
   created_at: string;
   updated_at: string;
 }

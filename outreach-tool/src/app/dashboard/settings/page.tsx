@@ -102,7 +102,7 @@ export default function SettingsPage() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: session?.access_token ? `Bearer ${session.access_token}` : '',
+        Authorization: `Bearer ${session?.access_token || ''}`,
       },
       body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), role: inviteRole }),
     });

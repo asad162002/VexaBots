@@ -1,70 +1,106 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// GET /api/telnyx/token — returns a short-lived Telnyx browser token
-// Requires: Authorization: Bearer <access_token>
-// The caller is derived from the verified session, never from the request body.
+// GET /api/telnyx/token — returns a short-lived WebRTC login token (JWT)
+// for the authenticated member, using their assigned Telnyx credential.
+//
+// What I verified from Telnyx's official docs:
+// - The WebRTC SDK authenticates with a `login_token` (JWT), not a username/password
+// - The JWT is generated via: POST /v2/telephony_credentials/{id}/token
+//   (NOT /v2/connections/tokens — that endpoint does not exist)
+// - The {id} is the ID of a Telnyx "Credential Connection" (type: credential)
+// - The request body can include a `expires_at` to set token TTL (max 24h)
+// - The response body IS the JWT string (not JSON-wrapped)
+//
+// Telnyx portal resources you must create:
+// 1. A "Credential Connection" (type: credential) in Voice → Connections
+// 2. Your member's US phone number assigned as the caller-ID on that connection
+// 3. A telephony credential (SIP username) under the credential connection
+//    — the credential ID goes in profiles.telnyx_credential_id
+// 4. Route your Telnyx phone number to the credential connection
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const telnyxToken = process.env.TELNYX_ACCESS_TOKEN!;
+const telnyxApiKey = process.env.TELNYX_ACCESS_TOKEN!;
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  if (!token) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
-
-  if (!serviceRoleKey) return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
+  // Authenticate: require a valid session
+  const authHeader = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!authHeader) {
+    return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+  }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
   });
 
-  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-  if (userError || !user) return NextResponse.json({ error: 'Invalid session.' }, { status: 401 });
+  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(authHeader);
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Invalid session.' }, { status: 401 });
+  }
 
-  // Get the user's phone number from their profile
+  // Load the member's profile to get their Telnyx credential ID and phone number
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('phone_number')
+    .select('phone_number, telnyx_credential_id')
     .eq('id', user.id)
     .single();
 
-  if (profileError || !profile?.phone_number) {
+  if (profileError || !profile) {
+    return NextResponse.json({ error: 'Profile not found.' }, { status: 404 });
+  }
+
+  if (!profile.phone_number) {
     return NextResponse.json({
-      error: 'No phone number assigned. Add a US number in Settings first.'
+      error: 'No phone number assigned. Ask your admin to assign you a Telnyx caller-ID number.'
     }, { status: 400 });
   }
 
+  if (!profile.telnyx_credential_id) {
+    return NextResponse.json({
+      error: 'No Telnyx credential configured for your account. Contact your admin.'
+    }, { status: 400 });
+  }
+
+  if (!telnyxApiKey) {
+    console.error('TELNYX_ACCESS_TOKEN is not set.');
+    return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
+  }
+
+  // Generate a WebRTC login token (JWT) from the Telnyx API
+  // Endpoint: POST https://api.telnyx.com/v2/telephony_credentials/{id}/token
+  // The {id} is the credential connection's telephony credential ID
   try {
-    // Request a short-lived browser token from Telnyx
-    const response = await fetch('https://api.telnyx.com/v2/connections/tokens', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${telnyxToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        // The caller's phone number (must be a Telnyx number assigned to your account)
-        from_number: profile.phone_number,
-        expires_at: new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hour
-      }),
-    });
+    const response = await fetch(
+      `https://api.telnyx.com/v2/telephony_credentials/${profile.telnyx_credential_id}/token`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${telnyxApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        // Set a short expiry (30 minutes) — long enough for a calling session
+        body: JSON.stringify({
+          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        }),
+      }
+    );
 
     if (!response.ok) {
-      const err = await response.text();
-      console.error('Telnyx token error:', err);
-      return NextResponse.json({ error: `Failed to get Telnyx token: ${err}` }, { status: response.status });
+      const errorBody = await response.text();
+      console.error('Telnyx token API error:', response.status, errorBody);
+      return NextResponse.json(
+        { error: `Failed to generate Telnyx token: ${errorBody}` },
+        { status: response.status }
+      );
     }
 
-    const tokenData = await response.json();
-    return NextResponse.json({
-      success: true,
-      token: tokenData.data?.token,
-      expires_at: tokenData.data?.expires_at,
-    });
+    // The response body is the raw JWT string (not JSON)
+    const token = await response.text();
+
+    return NextResponse.json({ token, callerNumber: profile.phone_number });
   } catch (err) {
-    console.error('Token error:', err);
-    return NextResponse.json({ error: 'Failed to get Telnyx token' }, { status: 500 });
+    console.error('Telnyx token generation error:', err);
+    return NextResponse.json({ error: 'Failed to generate token.' }, { status: 500 });
   }
 }

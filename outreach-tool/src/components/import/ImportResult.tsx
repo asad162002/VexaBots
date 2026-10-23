@@ -3,13 +3,14 @@ import { type LeadSource } from '@/lib/types';
 
 interface ImportResultProps {
   success: { total: number; inserted: number; skipped: number; enriched?: number } | null;
+  skippedDetails?: string[];
   onImport: () => void;
   onReset: () => void;
   importing: boolean;
   file: File | null;
 }
 
-export default function ImportResult({ success, onImport, onReset, importing, file }: ImportResultProps) {
+export default function ImportResult({ success, skippedDetails, onImport, onReset, importing, file }: ImportResultProps) {
   if (success) {
     return (
       <div className="text-center py-4">
@@ -21,6 +22,16 @@ export default function ImportResult({ success, onImport, onReset, importing, fi
           {success.total} rows processed — {success.inserted} added, {success.skipped} skipped
           {success.enriched ? ` (${success.enriched} enriched leads added)` : ''}
         </p>
+        {skippedDetails && skippedDetails.length > 0 && (
+          <details className="mt-3 text-left">
+            <summary className="text-xs text-gray-500 cursor-pointer mb-1">View skipped rows</summary>
+            <ul className="text-xs text-gray-500 space-y-0.5 max-h-32 overflow-y-auto">
+              {skippedDetails.map((detail, i) => (
+                <li key={i} className="py-0.5">{detail}</li>
+              ))}
+            </ul>
+          </details>
+        )}
         <button
           onClick={() => window.location.assign('/dashboard')}
           className="mt-4 text-blue-400 hover:text-blue-300 text-sm"

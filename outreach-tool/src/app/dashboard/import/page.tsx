@@ -86,6 +86,7 @@ function ImportPageContent() {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState<{ total: number; inserted: number; skipped: number; enriched?: number } | null>(null);
+  const [skippedDetails, setSkippedDetails] = useState<string[]>([]);
 
   const parseCSVLine = (line: string): string[] => {
     const result: string[] = [];
@@ -112,6 +113,14 @@ function ImportPageContent() {
     return result;
   };
 
+  // Normalize phone for dedup: strip non-digits, remove leading + or 1
+  const normalizePhoneForDedup = (phone: unknown): string => {
+    if (!phone) return '';
+    const digits = String(phone).replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('1')) return digits.substring(1);
+    return digits;
+  };
+
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -133,6 +142,7 @@ function ImportPageContent() {
     setFile(selectedFile);
     setFileType(isJson ? 'json' : 'csv');
     setSuccess(null);
+    setSkippedDetails([]);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -142,7 +152,6 @@ function ImportPageContent() {
         try {
           const jsonData = JSON.parse(text);
           const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
-
           const preview = dataArray.slice(0, 3).map((item: Record<string, unknown>) => {
             const row: Record<string, string> = {};
             for (const [key, value] of Object.entries(item)) {
@@ -152,7 +161,6 @@ function ImportPageContent() {
             }
             return row;
           });
-
           setHeaders(Object.keys(preview[0] || {}));
           setPreviewRows(preview);
           setMappings([]);
@@ -234,6 +242,8 @@ function ImportPageContent() {
     let inserted = 0;
     let skipped = 0;
     let enriched = 0;
+    const skipDetails: string[] = [];
+    const seenKeys = new Set<string>();
 
     for (const item of dataArray as Record<string, unknown>[]) {
       const detailed_address = item.detailed_address as Record<string, string> | undefined;
@@ -279,6 +289,16 @@ function ImportPageContent() {
         if (lead[key] === '') lead[key] = null;
       }
 
+      // Deduplicate: normalized phone + title
+      const normalizedPhoneJson = normalizePhoneForDedup(lead.phone);
+      const dedupKeyJson = `${normalizedPhoneJson}|${(lead.title as string).toLowerCase().trim()}`;
+      if (seenKeys.has(dedupKeyJson)) {
+        skipped++;
+        skipDetails.push(`Skipped duplicate in file: ${lead.title}`);
+        continue;
+      }
+      seenKeys.add(dedupKeyJson);
+
       const { error: upsertError } = await supabase
         .from('leads')
         .upsert(lead, { onConflict: 'place_id' });
@@ -290,6 +310,7 @@ function ImportPageContent() {
           .eq('place_id', lead.place_id);
         if (patchError) {
           skipped++;
+          skipDetails.push(`Skipped ${lead.title}: duplicate or error`);
           continue;
         }
       }
@@ -347,14 +368,15 @@ function ImportPageContent() {
       }
     }
 
-    return { total: dataArray.length, inserted, skipped, enriched };
+    return { total: dataArray.length, inserted, skipped, enriched, skipDetails: skipDetails };
   };
 
-  const handleCsvImport = async () => {
+  const handleCsvImport = useCallback(async () => {
     if (!file || headers.length === 0) return;
-
     setImporting(true);
     setError('');
+    setSkippedDetails([]);
+
     const text = await file.text();
     const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
     const rows = lines.slice(1);
@@ -370,10 +392,12 @@ function ImportPageContent() {
     let inserted = 0;
     let skipped = 0;
     const batchSize = 50;
+    const seenKeys = new Set<string>();
+    const skipDetails: string[] = [];
 
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize);
-      const leads: Record<string, unknown>[] = [];
+      const leadsToInsert: Record<string, unknown>[] = [];
 
       for (const line of batch) {
         const values = parseCSVLine(line);
@@ -402,29 +426,58 @@ function ImportPageContent() {
         }
 
         if (!lead.title) continue;
-        leads.push(lead);
+
+        // Deduplicate: normalized phone + title (case-insensitive)
+        const normalizedPhone = normalizePhoneForDedup(lead.phone);
+        const dedupKey = `${normalizedPhone}|${(lead.title as string).toLowerCase().trim()}`;
+
+        if (seenKeys.has(dedupKey)) {
+          skipped++;
+          skipDetails.push(`Skipped duplicate in file: ${lead.title}`);
+          continue;
+        }
+        seenKeys.add(dedupKey);
+
+        // Check if a lead with this phone already exists in the DB
+        if (normalizedPhone) {
+          const { data: existing } = await supabase
+            .from('leads')
+            .select('id')
+            .eq('phone', normalizedPhone)
+            .maybeSingle();
+          if (existing) {
+            skipped++;
+            skipDetails.push(`Skipped existing lead (same phone): ${lead.title}`);
+            continue;
+          }
+        }
+
+        leadsToInsert.push(lead);
       }
 
-      if (leads.length === 0) continue;
+      if (leadsToInsert.length === 0) continue;
 
-      const { error: insertError } = await supabase.from('leads').insert(leads);
+      // Batch insert the deduplicated leads
+      const { error: insertError } = await supabase.from('leads').insert(leadsToInsert);
       if (insertError) {
-        for (const lead of leads) {
+        for (const lead of leadsToInsert) {
           const { error: singleError } = await supabase.from('leads').insert([lead]);
           if (singleError) {
             skipped++;
+            skipDetails.push(`Skipped (insert error): ${(lead.title as string)}`);
           } else {
             inserted++;
           }
         }
       } else {
-        inserted += leads.length;
+        inserted += leadsToInsert.length;
       }
     }
 
     setSuccess({ total: rows.length, inserted, skipped });
+    setSkippedDetails(skipDetails);
     setImporting(false);
-  };
+  }, [file, headers, mappings, source, category]);
 
   const handleImport = async () => {
     if (!file) return;
@@ -443,6 +496,7 @@ function ImportPageContent() {
             skipped: result.skipped,
             enriched: result.enriched,
           });
+          setSkippedDetails(result.skipDetails);
         }
         setImporting(false);
       } catch (e) {
@@ -461,6 +515,7 @@ function ImportPageContent() {
     setMappings([]);
     setError('');
     setSuccess(null);
+    setSkippedDetails([]);
   };
 
   return (
@@ -501,34 +556,67 @@ function ImportPageContent() {
           />
         )}
 
-        {/* JSON preview data */}
-        {fileType === 'json' && previewRows.length > 0 && (
-          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-white mb-2">Data Preview</h2>
-            <p className="text-sm text-gray-400 mb-3">
-              {previewRows.length} rows detected. The script will auto-map all fields:
-            </p>
-            <ul className="text-xs text-gray-400 space-y-1">
-              <li>• Basic business info → <span className="text-white">leads</span> table</li>
-              <li>• Owner/LinkedIn/Apollo contacts → <span className="text-white">linkedin_leads</span> table</li>
-              <li>• Tech stack data → <span className="text-white">tech_stack</span> table</li>
-            </ul>
+        {/* Step 3: Import button */}
+        {file && (
+          <div className="flex items-center gap-3">
+            {fileType === 'csv' && headers.length > 0 && (
+              <button
+                onClick={handleImport}
+                disabled={importing}
+                className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {importing ? (
+                  <>
+                    <Spinner size="sm" />
+                    <span>Importing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>Import Leads</span>
+                  </>
+                )}
+              </button>
+            )}
+            {fileType === 'json' && (
+              <button
+                onClick={handleImport}
+                disabled={importing}
+                className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {importing ? (
+                  <>
+                    <Spinner size="sm" />
+                    <span>Importing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>Import JSON</span>
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              onClick={handleReset}
+              disabled={importing}
+              className="text-gray-400 hover:text-white text-sm font-medium transition"
+            >
+              Reset
+            </button>
           </div>
         )}
 
-        {/* Step 3: Import */}
-        {file && (
-          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">3. Import</h2>
-            <ImportResult
-              success={success}
-              onImport={handleImport}
-              onReset={handleReset}
-              importing={importing}
-              file={file}
-            />
-            {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
-          </div>
+        {/* Show import result */}
+        {success && (
+          <ImportResult
+            success={success}
+            skippedDetails={skippedDetails}
+            onImport={handleImport}
+            onReset={handleReset}
+            importing={importing}
+            file={file}
+          />
         )}
       </div>
     </div>

@@ -9,10 +9,13 @@ import {
   PhoneOff,
   Clock,
   CheckCircle,
-  AlertCircle,
-  Mic,
   Search,
+  Mic,
+  MicOff,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
+import { useTelnyxCall } from '@/hooks/use-telnyx-call';
 
 // Outcome mapping: numeric key -> (label, LeadStatus, optional validation)
 interface OutcomeOption {
@@ -40,14 +43,12 @@ interface MyQueuePageProps {
 }
 
 export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
-  const { user, callerNumber, isAdmin } = useAuth();
+  const { user, callerNumber, isAdmin, loading: authLoading } = useAuth();
   const [leads, setLeads] = useState<Lead[]>(initialLeads ?? []);
   const [calledSet, setCalledSet] = useState<Set<string>>(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(!initialLeads);
+  const [loading, setLoading] = useState(!initialLeads || authLoading);
   const [error, setError] = useState<string | null>(null);
-  const [callPhase, setCallPhase] = useState<CallPhase>('idle');
-  const [callDuration, setCallDuration] = useState(0);
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeOption | null>(null);
   const [notes, setNotes] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
@@ -56,7 +57,22 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Use the shared Telnyx call hook
+  const {
+    status: callStatus,
+    message: callMessage,
+    durationSeconds,
+    isMuted,
+    callLogId,
+    startCall: hookStartCall,
+    endCall: hookEndCall,
+    toggleMute,
+  } = useTelnyxCall();
+
+  // Map hook status to the page's callPhase
+  const callPhase: CallPhase =
+    callStatus === 'connecting' || callStatus === 'ringing' ? 'ringing' :
+    callStatus === 'in-call' ? 'in-call' : 'idle';
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -96,11 +112,13 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
       })
     : activeLeads;
 
+  // currentLead should be based on activeLeads (not filteredQueue)
+  // so that we don't skip leads when the filter hides them
   const currentLead = activeLeads[currentIndex];
   const progress = calledSet.size;
 
   useEffect(() => {
-    if (!initialLeads) fetchQueue();
+    if (!initialLeads && !authLoading) fetchQueue();
   }, []);
 
   const fetchQueue = async () => {
@@ -129,45 +147,15 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
   const startCall = async () => {
     if (!currentLead?.phone) return;
     if (!callerNumber) {
-      setError('No caller number configured. Add one in Settings.');
+      setError('No caller number configured. Ask your admin to assign you a Telnyx caller-ID number.');
       return;
     }
-
     setError(null);
-    setCallPhase('ringing');
-    setCallDuration(0);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/telnyx/call', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token || ''}`,
-        },
-        body: JSON.stringify({
-          leadId: currentLead.id,
-          leadPhone: currentLead.phone,
-          leadName: currentLead.owner_name || '',
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to start call');
-
-      setCallPhase('in-call');
-      durationIntervalRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start call');
-      setCallPhase('idle');
-    }
+    await hookStartCall(currentLead.phone, currentLead.owner_name || undefined);
   };
 
   const endCall = () => {
-    if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current);
-      durationIntervalRef.current = null;
-    }
-    setCallPhase('idle');
+    hookEndCall();
   };
 
   const selectOutcome = (outcome: OutcomeOption) => {
@@ -175,42 +163,47 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     setSelectedOutcome(outcome);
   };
 
+  // Save handler: uses the log_call_outcome Postgres function
+  // This performs the lead update + activity insert atomically
   const handleSave = async () => {
     if (!selectedOutcome || !currentLead || saving) return;
+    if (!user) return;
 
     if (selectedOutcome.requiresFollowUp && !followUpDate) {
       setSaveError('Follow-up date is required for "Call back"');
       return;
     }
-    if (followUpDate && new Date(followUpDate) < today) {
-      setSaveError('Follow-up date cannot be in the past.');
-      return;
+    // Validate follow-up date: today or later (using local day, not timestamp)
+    if (followUpDate) {
+      const selected = new Date(followUpDate);
+      selected.setHours(0, 0, 0, 0);
+      if (selected < today) {
+        setSaveError('Follow-up date cannot be in the past.');
+        return;
+      }
     }
 
     setSaving(true);
     setSaveError(null);
 
     try {
-      const updates: Record<string, unknown> = {
-        status: selectedOutcome.status,
-        last_contacted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      if (selectedOutcome.requiresFollowUp && followUpDate) {
-        updates.next_follow_up_at = new Date(followUpDate).toISOString();
-      }
-
-      await supabase.from('leads').update(updates).eq('id', currentLead.id);
-      await supabase.from('lead_activities').insert({
-        lead_id: currentLead.id,
-        profile_id: user?.id,
-        activity_type: 'call',
-        content: notes || selectedOutcome.label,
-        outcome: selectedOutcome.label,
-        next_follow_up_at: selectedOutcome.requiresFollowUp && followUpDate
+      const { data, error: fnError } = await supabase.rpc('log_call_outcome', {
+        p_lead_id: currentLead.id,
+        p_outcome_status: selectedOutcome.status,
+        p_notes: notes || selectedOutcome.label,
+        p_follow_up_at: selectedOutcome.requiresFollowUp && followUpDate
           ? new Date(followUpDate).toISOString()
           : null,
+        p_call_log_id: callLogId || null,
+        p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
       });
+
+      if (fnError) {
+        console.error('log_call_outcome error:', fnError);
+        setSaveError(fnError.message || 'Failed to save. Check RLS permissions.');
+        setSaving(false);
+        return; // Do NOT advance to next lead
+      }
 
       setCalledSet(s => new Set([...s, currentLead.id]));
       setToast(`Saved: ${selectedOutcome.label}`);
@@ -241,12 +234,9 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     const handler = (e: KeyboardEvent) => {
       if (loading || saving) return;
 
+      // Ignore shortcuts when a textarea or input is focused
       const active = document.activeElement;
-      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || (active as HTMLElement)?.contentEditable === 'true')) {
-        if (e.key === 'Enter' && active.tagName !== 'TEXTAREA') {
-          e.preventDefault();
-          handleSave();
-        }
+      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
         return;
       }
 
@@ -256,7 +246,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
         if (outcome) selectOutcome(outcome);
       }
 
-      if (e.key === 'Enter' && callPhase === 'idle') {
+      if (e.key === 'Enter' && callPhase === 'idle' && selectedOutcome) {
         e.preventDefault();
         handleSave();
       }
@@ -264,16 +254,12 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [callPhase, selectedOutcome, notes, followUpDate, saving, loading]);
+  }, [callPhase, selectedOutcome, notes, followUpDate, saving, loading, currentIndex]);
 
   const canSave = callPhase === 'idle' && selectedOutcome !== null;
 
-  if (loading) {
-    return (
-      <div className="p-6 min-h-screen bg-[#0f0f0f] flex items-center justify-center">
-        <div className="text-gray-400">Loading queue...</div>
-      </div>
-    );
+  if (loading || authLoading) {
+    return null;
   }
 
   if (currentIndex >= activeLeads.length) {
@@ -308,6 +294,12 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
         </div>
       )}
 
+      {callStatus === 'error' && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+          {callMessage}
+        </div>
+      )}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50">
           {toast}
@@ -333,16 +325,14 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
               <button
                 key={l.id}
                 onClick={() => {
-                  if (callPhase === 'idle') setCurrentIndex(idx);
+                  if (callPhase === 'idle') setCurrentIndex(activeLeads.indexOf(l));
                 }}
                 disabled={callPhase !== 'idle'}
                 className={`w-full text-left p-2.5 rounded-lg text-sm transition ${
                   idx === currentIndex
                     ? 'border-l-2 border-blue-500 bg-[#27272a]/30'
                     : 'hover:bg-[#27272a]/20'
-                } ${
-                  calledSet.has(l.id) ? 'opacity-50' : ''
-                }`}
+                } ${calledSet.has(l.id) ? 'opacity-50' : ''}`}
               >
                 <div className="font-medium text-white truncate">{l.title || 'Untitled'}</div>
                 {l.owner_name && (
@@ -384,7 +374,9 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
                   <div className="text-sm text-gray-400">🌐 {currentLead.website}</div>
                 )}
                 {currentLead.reviews_count && (
-                  <div className="text-sm text-gray-400">⭐ {currentLead.total_score} ({currentLead.reviews_count} reviews)</div>
+                  <div className="text-sm text-gray-400">
+                    ⭐ {currentLead.total_score} ({currentLead.reviews_count} reviews)
+                  </div>
                 )}
                 {currentLead.icp_score !== null && currentLead.icp_score !== undefined && (
                   <div className="text-sm text-gray-400">ICP Score: {currentLead.icp_score}</div>
@@ -403,36 +395,49 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
               <div className="mt-4 pt-4 border-t border-[#27272a]">
                 {!callerNumber && (
                   <p className="text-xs text-gray-500 mb-2">
-                    Add a US number in Settings to enable calling.
+                    No caller number configured. Ask your admin to assign you one.
                   </p>
                 )}
-                {callPhase === 'idle' && !saveError && (
+                {callPhase === 'idle' && (
                   <button
                     onClick={startCall}
-                    disabled={!callerNumber}
+                    disabled={!callerNumber || callStatus === 'connecting'}
                     className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 active:bg-green-700 disabled:bg-gray-600 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
                   >
-                    <Phone className="w-4 h-4" />
-                    <span>Call {currentLead.phone || 'lead'}</span>
+                    {callStatus === 'connecting' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Connecting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Phone className="w-4 h-4" />
+                        <span>Call {currentLead.phone || 'lead'}</span>
+                      </>
+                    )}
                   </button>
                 )}
-                {callPhase === 'ringing' && (
+                {(callPhase === 'ringing' || callStatus === 'connecting') && (
                   <div className="flex items-center justify-center gap-2 text-yellow-400">
                     <Clock className="w-4 h-4 animate-pulse" />
-                    <span>Connecting...</span>
+                    <span>{callMessage || 'Connecting...'}</span>
                   </div>
                 )}
                 {callPhase === 'in-call' && (
                   <div className="flex items-center justify-center gap-4">
                     <div className="flex items-center gap-2 text-gray-300 font-mono">
                       <Clock className="w-4 h-4" />
-                      {formatDuration(callDuration)}
+                      {formatDuration(durationSeconds)}
                     </div>
                     <button
-                      onClick={() => {}}
-                      className="p-2 rounded-lg bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]"
+                      onClick={toggleMute}
+                      className={`p-2 rounded-lg transition ${
+                        isMuted
+                          ? 'bg-red-600 text-white'
+                          : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+                      }`}
                     >
-                      <Mic className="w-4 h-4" />
+                      {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                     </button>
                     <button
                       onClick={endCall}
@@ -502,18 +507,27 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
             </div>
 
             {saveError && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-400" />
-                <span className="text-sm text-red-400">{saveError}</span>
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-sm text-red-400">{saveError}</p>
               </div>
             )}
 
             <button
               onClick={handleSave}
               disabled={!canSave || saving}
-              className="w-full mt-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-gray-600 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
             >
-              {saving ? 'Saving...' : 'Save and next lead'}
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Save &amp; Next</span>
+                </>
+              )}
             </button>
           </div>
         </div>

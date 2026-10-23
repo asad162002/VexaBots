@@ -5,6 +5,7 @@ export type Profile = {
   role: string | null;
   phone_number: string | null;
   avatar_url: string | null;
+  telnyx_credential_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -129,6 +130,9 @@ export type CallLog = {
   recorded_url: string | null;
   recording_url: string | null;
   call_id: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  call_control_id: string | null;
   created_at: string;
   updated_at: string;
 };

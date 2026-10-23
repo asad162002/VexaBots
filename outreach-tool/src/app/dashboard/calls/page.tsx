@@ -8,7 +8,7 @@ import { CallControls, CallLeadRow } from '@/components/calls/calls-types';
 import type { LeadWithCallStatus, CallLog } from '@/components/calls/calls-types';
 
 function CallsPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string | null; email: string | null; phone_number: string | null }>>([]);
   const [leads, setLeads] = useState<LeadWithCallStatus[]>([]);
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
@@ -117,15 +117,9 @@ function CallsPage() {
     return matchesSearch;
   });
 
-  if (loading) {
-    return (
-      <div className="p-6 min-h-screen bg-[#0f0f0f]">
-        <div className="flex items-center gap-3 text-gray-400">
-          <RefreshCw className="w-5 h-5 animate-spin" />
-          <span>Loading calls...</span>
-        </div>
-      </div>
-    );
+  // Don't render until auth is loaded to avoid flash of member UI for admins
+  if (loading || authLoading) {
+    return null;
   }
 
   return (
