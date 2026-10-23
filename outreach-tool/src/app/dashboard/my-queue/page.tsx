@@ -11,8 +11,10 @@ import {
   CheckCircle,
   AlertCircle,
   Mic,
+  Search,
 } from 'lucide-react';
 
+// Outcome mapping: numeric key -> (label, LeadStatus, optional validation)
 interface OutcomeOption {
   key: number;
   label: string;
@@ -44,7 +46,6 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(!initialLeads);
   const [error, setError] = useState<string | null>(null);
-
   const [callPhase, setCallPhase] = useState<CallPhase>('idle');
   const [callDuration, setCallDuration] = useState(0);
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeOption | null>(null);
@@ -53,12 +54,14 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // Sort: callbacks due today first, then 'new', then the rest
   const sortedLeads = [...leads].sort((a, b) => {
     const aDueToday = a.next_follow_up_at
       ? new Date(a.next_follow_up_at).setHours(0, 0, 0, 0) === today.getTime()
@@ -76,9 +79,22 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     return 0;
   });
 
+  // Filter out terminal statuses
   const activeLeads = sortedLeads.filter(l =>
     !['not_interested', 'meeting_booked', 'dead'].includes(l.status)
   );
+
+  // Search filter on the queue list
+  const filteredQueue = searchQuery.trim()
+    ? activeLeads.filter(l => {
+        const q = searchQuery.toLowerCase();
+        return (
+          (l.title?.toLowerCase() || '').includes(q) ||
+          (l.owner_name?.toLowerCase() || '').includes(q) ||
+          (l.phone?.toLowerCase() || '').includes(q)
+        );
+      })
+    : activeLeads;
 
   const currentLead = activeLeads[currentIndex];
   const progress = calledSet.size;
@@ -220,6 +236,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     setCurrentIndex(remaining.length === 0 ? activeLeads.length : currentIndex + 1);
   };
 
+  // Keyboard shortcuts: 1-7 select outcomes, Enter saves
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (loading || saving) return;
@@ -298,11 +315,21 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Queue */}
+        {/* Left: Queue with search filter */}
         <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 overflow-y-auto max-h-[600px]">
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Queue</h2>
+          <div className="relative mb-3">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search name, phone..."
+              className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-7 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
           <div className="space-y-1">
-            {activeLeads.map((l, idx) => (
+            {filteredQueue.map((l, idx) => (
               <button
                 key={l.id}
                 onClick={() => {
