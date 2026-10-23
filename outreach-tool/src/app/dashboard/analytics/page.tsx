@@ -17,8 +17,7 @@ import {
 import { BarChart3 } from 'lucide-react';
 
 export default function AnalyticsPage() {
-  const { user } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user, isAdmin } = useAuth();
   const [memberStats, setMemberStats] = useState<MemberStats[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
   const [sourceDistribution, setSourceDistribution] = useState<SourceDistribution[]>([]);
@@ -38,19 +37,6 @@ export default function AnalyticsPage() {
     setError(null);
 
     try {
-      // Check if user is admin
-      const { data: currentProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user?.id)
-        .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error checking admin status:', profileError);
-      }
-      const userIsAdmin = currentProfile?.role === 'admin';
-      setIsAdmin(userIsAdmin);
-
       // Fetch profiles and leads
       const { data: profiles, error: profilesError } = await supabase.from('profiles').select('*');
       if (profilesError) throw profilesError;
@@ -59,7 +45,7 @@ export default function AnalyticsPage() {
         .from('leads')
         .select('id, title, status, source, category_name, assigned_to, assigned_at, assigned_by, updated_at');
 
-      if (!userIsAdmin && user?.id) {
+      if (!isAdmin && user?.id) {
         leadsQuery = leadsQuery.eq('assigned_to', user.id);
       }
 
@@ -93,7 +79,9 @@ export default function AnalyticsPage() {
 
       // Process activity entries
       const profileMap: Record<string, any> = {};
-      (profiles || []).forEach((p) => { profileMap[p.id] = p; });
+      (profiles || []).forEach((p) => {
+        if (!profileMap[p.id]) profileMap[p.id] = p;
+      });
 
       const myActivity: ActivityEntry[] = [];
       const myReceived: ActivityEntry[] = [];
@@ -121,7 +109,7 @@ export default function AnalyticsPage() {
       }
 
       const adminActivity: ActivityEntry[] = [];
-      if (userIsAdmin && activityData) {
+      if (isAdmin && activityData) {
         activityData.forEach(entry => {
           if (entry.assigned_by && entry.assigned_by !== entry.assigned_to) {
             const assignerName = profileMap[entry.assigned_by]?.email || 'Someone';
@@ -136,7 +124,7 @@ export default function AnalyticsPage() {
         });
       }
 
-      setActivityLog(userIsAdmin ? adminActivity : myActivity);
+      setActivityLog(isAdmin ? adminActivity : myActivity);
       setLeadsReceivedLog(myReceived);
 
       // Compute status counts
@@ -149,10 +137,17 @@ export default function AnalyticsPage() {
         statusCounts[s] = (statusCounts[s] || 0) + 1;
       });
 
-      if (userIsAdmin) {
+      if (isAdmin) {
         // Build member stats
         const memberMap: Record<string, MemberStats> = {};
-        (profiles || []).forEach((profile) => {
+        // Build deduped profile list
+        const seenIds = new Set<string>();
+        const dedupedProfiles = (profiles || []).filter(p => {
+          if (seenIds.has(p.id)) return false;
+          seenIds.add(p.id);
+          return true;
+        });
+        dedupedProfiles.forEach((profile) => {
           memberMap[profile.id] = {
             id: profile.id,
             full_name: profile.full_name,
