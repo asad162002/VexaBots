@@ -94,6 +94,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const handleLogActivity = async () => {
     if (!user || !activityContent.trim()) return;
 
+    // Validate follow-up date is not in the past
+    if (activityFollowUp && new Date(activityFollowUp) < new Date(new Date().setHours(0, 0, 0, 0))) {
+      setError('Follow-up date cannot be in the past.');
+      return;
+    }
+
     const { error: insertError } = await supabase.from('lead_activities').insert({
       lead_id: id,
       profile_id: user.id,

@@ -20,6 +20,7 @@ import {
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true },
   { href: '/dashboard/calls', label: 'Call Dialer', icon: Phone },
+  { href: '/dashboard/my-queue', label: 'My Queue', icon: Clock, members: true },
   { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users },
   { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard, adminOnly: true },
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus, adminOnly: true },

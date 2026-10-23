@@ -175,11 +175,6 @@ export function CallLeadRow({ lead, submitting, onCall }: CallLeadRowProps) {
         ) : <span className="text-xs text-gray-500">N/A</span>}
       </td>
       <td className="px-4 py-3">
-        {lead.icp_score !== null ? (
-          <span className="text-sm text-white">{lead.icp_score}</span>
-        ) : <span className="text-xs text-gray-500">N/A</span>}
-      </td>
-      <td className="px-4 py-3">
         {hasCalled && lastCall ? (
           <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${getStatusColor(lastCall.status)}`}>
             {getStatusLabel(lastCall.status)}
@@ -206,9 +201,9 @@ export function CallLeadRow({ lead, submitting, onCall }: CallLeadRowProps) {
               <Phone className="w-4 h-4" />
             </button>
           )}
-          {lastCall?.recorded_url && (
+          {(lastCall?.recorded_url || lastCall?.recording_url) && (
             <a
-              href={lastCall.recorded_url}
+              href={lastCall?.recorded_url || lastCall?.recording_url || ''}
               target="_blank"
               rel="noopener noreferrer"
               className="text-purple-400 hover:text-purple-300 transition"

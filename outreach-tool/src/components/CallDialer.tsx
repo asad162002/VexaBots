@@ -252,7 +252,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
         {!callerNumber ? (
           <p className="text-xs text-gray-500">
-            Add a US number in your Telnyx dashboard, then select it here before calling.
+            No caller number configured for your account. Contact an admin to add one.
           </p>
         ) : (
           <div className="flex items-center gap-2 text-xs text-gray-500">
