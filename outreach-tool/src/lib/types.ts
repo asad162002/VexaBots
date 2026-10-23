@@ -3,6 +3,7 @@ export type Profile = {
   email: string | null;
   full_name: string | null;
   role: string | null;
+  phone_number: string | null;
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
@@ -119,13 +120,15 @@ export type CallStatus =
 
 export type CallLog = {
   id: string;
-  lead_id: string;
+  lead_id: string | null;
   caller_id: string;
   from_number: string;
   to_number: string;
   status: CallStatus;
   duration_seconds: number | null;
   recorded_url: string | null;
+  recording_url: string | null;
+  call_id: string | null;
   created_at: string;
   updated_at: string;
 };
