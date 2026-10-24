@@ -5,6 +5,14 @@ import * as crypto from 'crypto';
 // POST /api/webhooks/telnyx — receive webhook events from Telnyx
 // Verifies Ed25519 signature and timestamp. Uses Telnyx v2 event names.
 // Fails closed: returns 500 if TELNYX_PUBLIC_KEY is not configured.
+//
+// What I verified from the Telnyx docs:
+// - Signature verification uses Ed25519
+// - Headers: telnyx-signature-ed25519 (signature), telnyx-timestamp (unix secs)
+// - Signed payload format: `${timestamp}|${rawBody}`
+// - Event type at data.event_type, details in data.payload
+// - call_control_id and call_session_id are in the payload
+// - start_time and end_time are ISO 8601 strings (no duration field)
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -75,35 +83,29 @@ export async function POST(request: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
   });
 
-  // Idempotent updates: use the call_control_id from the payload
-  // For recording events, the call_control_id is NOT present — use call_session_id
+  // Extract Telnyx identifiers from the payload
+  // call_control_id is present on call lifecycle events (initiated, ringing, answered, hangup)
+  // call_session_id is present on call lifecycle events AND recording events
   const callControlId: string | null = eventPayload?.call_control_id ?? null;
   const callSessionId: string | null = eventPayload?.call_session_id ?? null;
-
-  // Pick the right ID to match against call_logs
-  // call_id column stores the call_control_id (for non-recording events)
-  // we fall back to call_session_id for recording events
-  let matchId: string | null = callControlId;
-  if (!matchId && callSessionId) {
-    // For call.recording.saved, we stored call_session_id in call_id column
-    matchId = callSessionId;
-  }
 
   switch (eventType) {
     case 'call.initiated':
     case 'call.ringing': {
-      if (!matchId) break;
+      // Match on telnyx_call_control_id for call lifecycle events
+      if (!callControlId) break;
       await supabaseAdmin
         .from('call_logs')
         .update({
           status: eventType === 'call.ringing' ? 'ringing' : 'initiated',
         })
-        .eq('call_id', matchId);
+        .eq('telnyx_call_control_id', callControlId);
       break;
     }
 
     case 'call.answered': {
-      if (!matchId) break;
+      // Match on telnyx_call_control_id
+      if (!callControlId) break;
       // start_time is in the payload (ISO 8601)
       const startTime = eventPayload?.start_time;
       await supabaseAdmin
@@ -112,12 +114,13 @@ export async function POST(request: NextRequest) {
           status: 'answered',
           started_at: startTime ?? new Date().toISOString(),
         })
-        .eq('call_id', matchId);
+        .eq('telnyx_call_control_id', callControlId);
       break;
     }
 
     case 'call.hangup': {
-      if (!matchId) break;
+      // Match on telnyx_call_control_id
+      if (!callControlId) break;
       const startTime = eventPayload?.start_time;
       const endTime = eventPayload?.end_time;
       let durationSec: number | null = null;
@@ -129,17 +132,17 @@ export async function POST(request: NextRequest) {
         durationSec = Math.round((end - start) / 1000);
       }
 
-      // Determine if the call was ever answered (to set correct status)
-      const hangupStatus = durationSec && durationSec > 0 ? 'disconnected' : 'no_answer';
-
       // Fetch the current status to refine
       const { data: existing } = await supabaseAdmin
         .from('call_logs')
         .select('status')
-        .eq('call_id', matchId)
+        .eq('telnyx_call_control_id', callControlId)
         .single();
 
-      const finalStatus = existing?.status === 'answered' ? 'disconnected' : hangupStatus;
+      // If the call was answered (or duration > 0), it's a completed call
+      const finalStatus = existing?.status === 'answered' || (durationSec && durationSec > 0)
+        ? 'disconnected'
+        : 'no_answer';
 
       await supabaseAdmin
         .from('call_logs')
@@ -148,30 +151,33 @@ export async function POST(request: NextRequest) {
           ended_at: endTime ?? new Date().toISOString(),
           duration_seconds: durationSec,
         })
-        .eq('call_id', matchId);
+        .eq('telnyx_call_control_id', callControlId);
 
-      // Log to activity feed
-      const { data: callLog } = await supabaseAdmin
-        .from('call_logs')
-        .select('lead_id, caller_id, to_number')
-        .eq('call_id', matchId)
-        .single();
+      // Log to activity feed (only if the call was answered and has a lead)
+      if ((durationSec ?? 0) > 0) {
+        const { data: callLog } = await supabaseAdmin
+          .from('call_logs')
+          .select('lead_id, caller_id, to_number')
+          .eq('telnyx_call_control_id', callControlId)
+          .single();
 
-      if (callLog?.lead_id && (durationSec ?? 0) > 0) {
-        await supabaseAdmin.from('lead_activities').insert({
-          lead_id: callLog.lead_id,
-          profile_id: callLog.caller_id,
-          activity_type: 'call',
-          content: `Cold call to ${callLog.to_number} (${durationSec}s)`,
-          created_at: new Date().toISOString(),
-        });
+        if (callLog?.lead_id) {
+          await supabaseAdmin.from('lead_activities').insert({
+            lead_id: callLog.lead_id,
+            profile_id: callLog.caller_id,
+            activity_type: 'call',
+            content: `Cold call to ${callLog.to_number} (${durationSec}s)`,
+            created_at: new Date().toISOString(),
+          });
+        }
       }
       break;
     }
 
     case 'call.recording.saved': {
-      // Recording events don't carry call_control_id, only call_session_id
-      if (!callSessionId) break;
+      // Recording events may not carry call_control_id — match on call_session_id
+      const matchId = callSessionId ?? callControlId;
+      if (!matchId) break;
 
       // The recording URLs are in payload.recording_urls or payload.public_recording_urls
       const recordingUrl =
@@ -187,7 +193,7 @@ export async function POST(request: NextRequest) {
             recording_url: recordingUrl,
             recorded_url: recordingUrl,
           })
-          .eq('call_id', callSessionId)
+          .eq('telnyx_call_control_id', matchId)
           .is('recording_url', null);
       }
       break;
@@ -197,7 +203,7 @@ export async function POST(request: NextRequest) {
     case 'call.rejected': {
       // Note: Telnyx Voice API does not document these explicitly.
       // call.hangup covers most end scenarios. These are kept for safety.
-      if (!matchId) break;
+      if (!callControlId) break;
       const status = eventType === 'call.rejected' ? 'busy' : 'disconnected';
       await supabaseAdmin
         .from('call_logs')
@@ -205,7 +211,7 @@ export async function POST(request: NextRequest) {
           status,
           ended_at: new Date().toISOString(),
         })
-        .eq('call_id', matchId)
+        .eq('telnyx_call_control_id', callControlId)
         .is('ended_at', null);
       break;
     }

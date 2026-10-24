@@ -86,13 +86,12 @@ function CallsPage() {
     setMessage('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/telnyx/call', {
+      const response = await fetch('/api/telnyx/call-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
         body: JSON.stringify({
-          leadId: lead.id,
-          leadPhone: lead.phone,
-          leadName: lead.title || lead.owner_name || 'Unknown',
+          to_number: lead.phone,
+          lead_id: lead.id,
         }),
       });
       const data = await response.json();

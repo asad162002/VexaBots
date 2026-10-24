@@ -232,12 +232,48 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
         callRef.current = call;
 
+        // Capture Telnyx SDK call identifiers from the Call object
+        // Verified from @telnyx/webrtc BaseCall.d.ts: call.telnyxIDs returns
+        // { telnyxCallControlId, telnyxSessionId, telnyxLegId }
+        let telnyxCallControlId: string | null = null;
+        let telnyxCallSessionId: string | null = null;
+        try {
+          const ids = call?.telnyxIDs;
+          telnyxCallControlId = ids?.telnyxCallControlId ?? null;
+          telnyxCallSessionId = ids?.telnyxSessionId ?? null;
+        } catch (e) {
+          console.warn('Could not read call.telnyxIDs:', e);
+        }
+
+        // PATCH the call log with the Telnyx call IDs so the webhook
+        // can match incoming events to this call_log row
+        if (currentCallLogIdRef.current && telnyxCallControlId) {
+          void updateCallLog(currentCallLogIdRef.current, {
+            telnyx_call_control_id: telnyxCallControlId,
+            telnyx_call_session_id: telnyxCallSessionId,
+          });
+        }
+
         // Track the call for state updates
         client.on('telnyx.notification', (notification: any) => {
           if (notification.type !== 'callUpdate' || !notification.call) return;
 
           const call = notification.call;
           const callState = call.state; // State enum: 0=New, 4=Ringing, 7=Active, 9=Hangup
+
+          // Also try to capture telnyx IDs from the notification call object
+          // (they may not have been available immediately after newCall())
+          try {
+            const ids = call?.telnyxIDs;
+            if (ids?.telnyxCallControlId && currentCallLogIdRef.current) {
+              void updateCallLog(currentCallLogIdRef.current, {
+                telnyx_call_control_id: ids.telnyxCallControlId,
+                telnyx_call_session_id: ids.telnyxSessionId ?? null,
+              });
+            }
+          } catch (e) {
+            // telnyxIDs not available yet — already captured in newCall callback
+          }
 
           // State enum: New=0, Trying=1, Ringing=4, Answering=5, Early=6, Active=7, Held=8, Hangup=9
           if (callState >= 7) {
