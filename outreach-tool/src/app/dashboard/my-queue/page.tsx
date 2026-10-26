@@ -15,6 +15,10 @@ import {
   Loader2,
   AlertCircle,
   Volume2,
+  Pause,
+  Play,
+  Keyboard,
+  Speaker,
 } from 'lucide-react';
 import { useTelnyxCall } from '@/hooks/use-telnyx-call';
 
@@ -36,6 +40,9 @@ const OUTCOMES: OutcomeOption[] = [
   { key: 6, label: 'Booked meeting', status: 'meeting_booked', requiresFollowUp: false, shortcut: '6' },
   { key: 7, label: 'Wrong number', status: 'dead', requiresFollowUp: false, shortcut: '7' },
 ];
+
+// DTMF buttons shown during an active call (0-9, *, #)
+const DTMF_BUTTONS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
 type CallPhase = 'idle' | 'ringing' | 'in-call';
 
@@ -64,12 +71,16 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     message: callMessage,
     durationSeconds,
     isMuted,
+    isHeld,
     callLogId,
+    callerNumber: hookCallerNumber,
     remoteVolume,
     micVolume,
     startCall: hookStartCall,
     endCall: hookEndCall,
     toggleMute,
+    toggleHold,
+    sendDTMF,
     setVolume: hookSetVolume,
     setMicVolume: hookSetMicVolume,
   } = useTelnyxCall();
@@ -77,7 +88,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
   // Map hook status to the page's callPhase
   const callPhase: CallPhase =
     callStatus === 'connecting' || callStatus === 'ringing' ? 'ringing' :
-    callStatus === 'in-call' ? 'in-call' : 'idle';
+    callStatus === 'in-call' || callStatus === 'held' ? 'in-call' : 'idle';
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -151,7 +162,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
 
   const startCall = async () => {
     if (!currentLead?.phone) return;
-    if (!callerNumber) {
+    if (!hookCallerNumber) {
       setError('No caller number configured. Ask your admin to assign you a Telnyx caller-ID number.');
       return;
     }
@@ -398,7 +409,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
               )}
 
               <div className="mt-4 pt-4 border-t border-[#27272a]">
-                {!callerNumber && (
+                {!hookCallerNumber && (
                   <p className="text-xs text-gray-500 mb-2">
                     No caller number configured. Ask your admin to assign you one.
                   </p>
@@ -406,7 +417,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
                 {callPhase === 'idle' && (
                   <button
                     onClick={startCall}
-                    disabled={!callerNumber || callStatus === 'connecting'}
+                    disabled={!hookCallerNumber || callStatus === 'connecting'}
                     className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 active:bg-green-700 disabled:bg-gray-600 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
                   >
                     {callStatus === 'connecting' ? (
@@ -447,6 +458,31 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
                     >
                       {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                     </button>
+
+                    {/* Hold / Resume */}
+                    <button
+                      onClick={toggleHold}
+                      className={`p-2 rounded-lg transition ${
+                        isHeld
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+                      }`}
+                      title={isHeld ? 'Resume call' : 'Hold call'}
+                    >
+                      {isHeld ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                    </button>
+
+                    {/* DTMF Keypad */}
+                    {DTMF_BUTTONS.map((btn) => (
+                      <button
+                        key={btn}
+                        onClick={() => sendDTMF(btn)}
+                        className="px-2 py-1 text-xs bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 rounded transition"
+                        aria-label={`DTMF ${btn}`}
+                      >
+                        {btn}
+                      </button>
+                    ))}
 
                     {/* Speaker volume control */}
                     <div className="flex items-center gap-2 w-full max-w-xs">

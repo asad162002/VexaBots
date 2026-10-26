@@ -6,24 +6,63 @@ import { type CallLog } from '@/lib/types';
 // Hook for making Telnyx WebRTC calls using the @telnyx/webrtc SDK.
 //
 // What I verified from the installed @telnyx/webrtc (v2.28.0) package:
-// - The SDK exports `TelnyxRTC` which takes `IClientOptions.login_token` (a JWT)
-// - `client.connect()` initiates the WebSocket connection to rtc.telnyx.com
-// - The `telnyx.ready` event fires when the client is registered and can make calls
-// - `client.newCall({ destinationNumber, callerNumber })` creates an outbound call
-// - `client.on('telnyx.notification', cb)` receives all events; call state changes
-//   come as `{ type: 'callUpdate', call }` where `call.state` maps to the State enum:
-//   New=0, Ringing=4, Active=7, Hangup=9
-// - `call.hangup()` ends the call, `call.muteAudio()` toggles mic
+//
+// CLIENT (TelnyxRTC class — src/TelnyxRTC.d.ts, src/Modules/Verto/BaseSession.d.ts):
+//   - constructor({ login_token: string, hangupOnBeforeUnload?: boolean, ... })
+//   - connect(): Promise<void> — opens WebSocket to rtc.telnyx.com
+//   - disconnect(): Promise<void> — closes WebSocket, cleans up all calls
+//   - newCall(ICallOptions): Call — creates outbound call
+//   - on(event, cb) / off(event, cb) / removeAllListeners()
+//   - Events: 'telnyx.ready', 'telnyx.error', 'telnyx.notification'
+//     (BaseSession.d.ts lines 62-65)
+//   - NO device enumeration helpers on the client (enumerateDevices, setAudioOutDevice)
+//     — those come from standard browser APIs: navigator.mediaDevices
+//
+// CALL (Call/BaseCall class — src/Modules/Verto/webrtc/BaseCall.d.ts):
+//   - invite(): Promise<void> — starts the outbound call
+//   - hangup(): Promise<void> — ends the call (async in v2.28, was sync in v2.25)
+//     (verified from docs: "SDK 2.26.x — await call.hangup()")
+//   - muteAudio(): void / unmuteAudio(): void / toggleAudioMute(): void
+//   - isAudioMuted: boolean (getter)
+//   - hold(): Promise<any> / unhold(): Promise<any> / toggleHold(): Promise<any>
+//   - dtmf(digit: string): void — sends DTMF (0-9, *, #)
+//   - setAudioInDevice(deviceId: string, muted?: boolean): Promise<void>
+//     — switches microphone during an active call without dropping
+//   - getStats(callback: Function, constraints: any): void — WebRTC stats
+//   - state: State enum value (0-11, see constants below)
+//   - id: string — unique call ID
+//   - localStream: MediaStream (getter)
+//   - remoteStream: MediaStream (getter)
+//   - telnyxIDs: { telnyxCallControlId, telnyxSessionId, telnyxLegId } (getter)
+//   - peerConnection: RTCPeerConnection (for advanced use / stats)
+//
+// State enum (src/Modules/Verto/webrtc/constants.d.ts lines 50-63):
+//   New=0, Requesting=1, Trying=2, Recovering=3, Ringing=4,
+//   Answering=5, Early=6, Active=7, Held=8, Hangup=9, Destroy=10, Purge=11
+//
+// ICallOptions (src/utils/interfaces.d.ts lines 59-95):
+//   destinationNumber (required), audio (required=true), callerNumber, callerName,
+//   micId, speakerId, localElement, remoteElement, localStream, customHeaders,
+//   iceServers, trickleIce, forceRelayCandidate
+//
+// IClientOptions (src/utils/interfaces.d.ts lines 12-58):
+//   login_token, debug, hangupOnBeforeUnload (auto-hangup on page close!),
+//   keepConnectionAliveOnSocketClose, mediaPermissionsRecovery, etc.
+//
+// Browser APIs used (SDK does NOT provide these):
+//   - navigator.mediaDevices.enumerateDevices() for mic/speaker dropdowns
+//   - HTMLMediaElement.setSinkId(deviceId) for speaker switching (not in Safari)
+//   - window.AudioContext for mic level meter (AnalyserNode)
 //
 // The JWT login_token is obtained from /api/telnyx/token (which calls
-// POST /v2/telephony_credentials/{id}/token — NOT the non-existent
-// /v2/connections/tokens endpoint).
+// POST /v2/telephony_credentials/{credential_id}/token).
 
 export type CallStatus =
   | 'idle'
   | 'connecting'
   | 'ringing'
   | 'in-call'
+  | 'held'
   | 'ended'
   | 'error';
 
@@ -32,22 +71,57 @@ export interface TelnyxCallState {
   message: string;
   durationSeconds: number;
   isMuted: boolean;
+  isHeld: boolean;
   callLogId: string | null;
   fromNumber: string | null;
   toNumber: string | null;
   callerNumber: string | null;
+  remoteMutedForMoreThan10s: boolean;
 }
 
 export interface UseTelnyxCallReturn extends TelnyxCallState {
+  // Volume state
   remoteVolume: number;
   micVolume: number;
+  // Device state
+  availableInputDevices: MediaDeviceInfo[];
+  availableOutputDevices: MediaDeviceInfo[];
+  selectedInputDevice: string | null;
+  selectedOutputDevice: string | null;
+  canChangeOutputDevice: boolean;
+  micPermission: 'granted' | 'denied' | 'prompt';
+  // Audio level (0-1) from the input analyser
+  micLevel: number;
+  // Call controls
   startCall: (leadPhone: string, leadId?: string) => Promise<void>;
   endCall: () => void;
   toggleMute: () => void;
-  setVolume: (volume: number) => void;        // 0-1, controls remote audio output
-  setMicVolume: (volume: number) => void;     // 0-1, controls local mic input gain (when supported)
+  setVolume: (volume: number) => void;
+  setMicVolume: (volume: number) => void;
+  toggleHold: () => void;
+  sendDTMF: (digit: string) => void;
+  selectInputDevice: (deviceId: string | null) => void;
+  selectOutputDevice: (deviceId: string | null) => void;
   requestMicrophone: () => Promise<MediaStream | null>;
+  testMicrophone: () => Promise<void>;
+  stopTestMicrophone: () => void;
 }
+
+// --- State enum mappings (from @telnyx/webrtc constants.d.ts) ---
+const STATE = {
+  NEW: 0,
+  REQUESTING: 1,
+  TRYING: 2,
+  RECOVERING: 3,
+  RINGING: 4,
+  ANSWERING: 5,
+  EARLY: 6,
+  ACTIVE: 7,
+  HELD: 8,
+  HANGUP: 9,
+  DESTROY: 10,
+  PURGE: 11,
+} as const;
 
 const E164_US_REGEX = /^\+1\d{10}$/;
 
@@ -59,34 +133,76 @@ function normalizeToE164(phone: string): string {
   return `+${digits}`;
 }
 
+// LocalStorage helpers (all wrapped in try/catch)
+function saveDevicePref(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch { /* ignore */ }
+}
+function loadDevicePref(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+const LS_INPUT_KEY = 'telnyx_preferred_input_device';
+const LS_OUTPUT_KEY = 'telnyx_preferred_output_device';
+const LS_VOLUME_KEY = 'telnyx_remote_volume';
+const LS_MIC_VOLUME_KEY = 'telnyx_mic_volume';
+
 export function useTelnyxCall(): UseTelnyxCallReturn {
   const { user, callerNumber } = useAuth();
+
   const [state, setState] = useState<TelnyxCallState>({
     status: 'idle',
     message: '',
     durationSeconds: 0,
     isMuted: false,
+    isHeld: false,
     callLogId: null,
     fromNumber: null,
     toNumber: null,
     callerNumber: callerNumber ?? null,
+    remoteMutedForMoreThan10s: false,
   });
 
-  const [remoteVolume, setRemoteVolumeState] = useState(1);
-  const [micVolume, setMicVolumeState] = useState(1);
+  const [remoteVolume, setRemoteVolumeState] = useState(() => {
+    const saved = loadDevicePref(LS_VOLUME_KEY);
+    return saved ? parseFloat(saved) : 1;
+  });
+  const [micVolume, setMicVolumeState] = useState(() => {
+    const saved = loadDevicePref(LS_MIC_VOLUME_KEY);
+    return saved ? parseFloat(saved) : 1;
+  });
 
+  // Device state
+  const [availableInputDevices, setAvailableInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [availableOutputDevices, setAvailableOutputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedInputDevice, setSelectedInputDevice] = useState<string | null>(
+    () => loadDevicePref(LS_INPUT_KEY)
+  );
+  const [selectedOutputDevice, setSelectedOutputDevice] = useState<string | null>(
+    () => loadDevicePref(LS_OUTPUT_KEY)
+  );
+  const [canChangeOutputDevice, setCanChangeOutputDevice] = useState(false);
+  const [micPermission, setMicPermission] = useState<'granted' | 'denied' | 'prompt'>('prompt');
+  const [micLevel, setMicLevel] = useState(0);
+
+  // Refs
   const clientRef = useRef<any>(null);
   const callRef = useRef<any>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const answeredAtRef = useRef<number | null>(null);
   const currentCallLogIdRef = useRef<string | null>(null);
+  const muteWarningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const isCleaningUpRef = useRef(false);
 
   // Keep callerNumber in sync from auth context
   useEffect(() => {
     setState(s => ({ ...s, callerNumber: callerNumber ?? null }));
   }, [callerNumber]);
 
+  // --- Duration timer ---
   const startDurationTimer = useCallback(() => {
     if (durationIntervalRef.current) {
       clearInterval(durationIntervalRef.current);
@@ -108,6 +224,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
   }, []);
 
+  // --- Call log updater ---
   const updateCallLog = useCallback(async (
     callLogId: string,
     updates: Partial<CallLog>
@@ -127,46 +244,248 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
   }, []);
 
-  // Set the remote audio output volume (0-1)
-  // Uses the audio element's volume property. Also applies gain via the
-  // Web Audio API if the browser supports it on the audio element directly.
+  // --- Audio element setup ---
+  const setupAudioElement = useCallback(() => {
+    if (audioElementRef.current) return audioElementRef.current;
+
+    const audioEl = document.createElement('audio') as HTMLAudioElement & { playsInline: boolean };
+    audioEl.autoplay = true;
+    audioEl.playsInline = true;
+    audioEl.id = 'telnyx-remote-audio';
+    audioEl.style.display = 'none';
+    document.body.appendChild(audioEl);
+    audioElementRef.current = audioEl;
+    return audioEl;
+  }, []);
+
+  // --- Volume control ---
   const setVolume = useCallback((volume: number) => {
     const v = Math.max(0, Math.min(1, volume));
     setRemoteVolumeState(v);
+    saveDevicePref(LS_VOLUME_KEY, v.toString());
     if (audioElementRef.current) {
       audioElementRef.current.volume = v;
     }
   }, []);
 
-  // Set the microphone input gain (0-1)
-  // Uses the Web Audio API GainNode on the local stream's audio track.
-  // If the browser doesn't support this, it's a no-op (gain stays at 1).
   const setMicVolume = useCallback((volume: number) => {
     const v = Math.max(0, Math.min(1, volume));
     setMicVolumeState(v);
-    if (audioElementRef.current && audioElementRef.current.srcObject) {
-      const stream = audioElementRef.current.srcObject as MediaStream;
-      const audioTracks = stream.getAudioTracks();
-      audioTracks.forEach(track => {
-        try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const source = ctx.createMediaStreamSource(stream);
-          const gainNode = ctx.createGain();
-          gainNode.gain.value = v;
-          source.connect(gainNode);
-          // Note: for full mic-level control, the Telnyx SDK would need to
-          // accept a pre-processed stream. This adjusts the output playback
-          // volume of the local stream as a best-effort control.
-        } catch (e) {
-          console.warn('Could not set mic volume:', e);
-        }
-      });
+    saveDevicePref(LS_MIC_VOLUME_KEY, v.toString());
+  }, []);
+
+  // --- Device enumeration ---
+  const enumerateDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter(d => d.kind === 'audioinput');
+      const outputs = devices.filter(d => d.kind === 'audiooutput');
+      setAvailableInputDevices(inputs);
+      setAvailableOutputDevices(outputs);
+
+      // Check if setSinkId is supported (Safari does not support it)
+      const supportsSinkId = typeof HTMLMediaElement.prototype.setSinkId === 'function';
+      setCanChangeOutputDevice(supportsSinkId);
+
+      // Load saved device prefs and verify they still exist
+      const savedInput = loadDevicePref(LS_INPUT_KEY);
+      const savedOutput = loadDevicePref(LS_OUTPUT_KEY);
+      if (savedInput && inputs.some(d => d.deviceId === savedInput)) {
+        setSelectedInputDevice(savedInput);
+      }
+      if (savedOutput && supportsSinkId && outputs.some(d => d.deviceId === savedOutput)) {
+        setSelectedOutputDevice(savedOutput);
+      }
+    } catch (err) {
+      console.warn('Could not enumerate devices:', err);
     }
   }, []);
 
+  const selectInputDevice = useCallback((deviceId: string | null) => {
+    setSelectedInputDevice(deviceId);
+    saveDevicePref(LS_INPUT_KEY, deviceId ?? '');
+    // If a call is active, switch the mic on the Call object
+    // Verified from BaseCall.d.ts: call.setAudioInDevice(deviceId, muted?)
+    if (callRef.current && deviceId) {
+      try {
+        callRef.current.setAudioInDevice(deviceId);
+      } catch (e) {
+        console.warn('Could not switch input device on active call:', e);
+      }
+    }
+  }, []);
+
+  const selectOutputDevice = useCallback((deviceId: string | null) => {
+    if (!canChangeOutputDevice || !deviceId) return;
+    setSelectedOutputDevice(deviceId);
+    saveDevicePref(LS_OUTPUT_KEY, deviceId);
+    // Apply to the audio element via setSinkId (standard browser API)
+    if (audioElementRef.current) {
+      try {
+        audioElementRef.current.setSinkId(deviceId);
+      } catch (e) {
+        console.warn('Could not set sink ID:', e);
+      }
+    }
+  }, [canChangeOutputDevice]);
+
+  // --- Microphone test (Web Audio API level meter) ---
+  const stopTestMicrophone = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (analyserRef.current) {
+      try { analyserRef.current.disconnect(); } catch { /* */ }
+      analyserRef.current = null;
+    }
+  }, []);
+
+  const testMicrophone = useCallback(async () => {
+    stopTestMicrophone();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: selectedInputDevice ? { deviceId: selectedInputDevice } : true,
+      });
+      setMicPermission('granted');
+      localStreamRef.current = stream;
+
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      analyserRef.current = analyser;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setMicLevel(avg / 255);
+        animationFrameRef.current = requestAnimationFrame(updateLevel);
+      };
+      updateLevel();
+    } catch (err: any) {
+      console.error('Mic test failed:', err);
+      if (err?.name === 'NotAllowedError') {
+        setMicPermission('denied');
+      }
+    }
+  }, [selectedInputDevice, stopTestMicrophone]);
+
+  // --- Mute warning ---
+  const clearMuteWarningTimeout = useCallback(() => {
+    if (muteWarningTimeoutRef.current) {
+      clearTimeout(muteWarningTimeoutRef.current);
+      muteWarningTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleMuteWarning = useCallback(() => {
+    clearMuteWarningTimeout();
+    muteWarningTimeoutRef.current = setTimeout(() => {
+      setState(s => ({ ...s, remoteMutedForMoreThan10s: true }));
+    }, 10000);
+  }, [clearMuteWarningTimeout]);
+
+  // --- Cleanup ---
+  const cleanup = useCallback(() => {
+    if (isCleaningUpRef.current) return;
+    isCleaningUpRef.current = true;
+
+    stopDurationTimer();
+    stopTestMicrophone();
+    clearMuteWarningTimeout();
+
+    // Hangup the call
+    if (callRef.current) {
+      try {
+        callRef.current.hangup();
+      } catch (e) {
+        // Call may already be hung up
+      }
+    }
+    // Disconnect the client
+    if (clientRef.current) {
+      try {
+        clientRef.current.disconnect();
+      } catch (e) {
+        // Best effort
+      }
+    }
+    // Release local media tracks
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        try { track.stop(); } catch { /* */ }
+      });
+      localStreamRef.current = null;
+    }
+    // Detach audio element
+    if (audioElementRef.current) {
+      audioElementRef.current.srcObject = null;
+    }
+
+    callRef.current = null;
+    clientRef.current = null;
+    answeredAtRef.current = null;
+    isCleaningUpRef.current = false;
+  }, [stopDurationTimer, stopTestMicrophone, clearMuteWarningTimeout]);
+
+  // --- beforeunload / pagehide: auto-hangup ---
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (['connecting', 'ringing', 'in-call', 'held'].includes(state.status)) {
+        try { callRef.current?.hangup?.(); } catch { /* */ }
+        try { clientRef.current?.disconnect?.(); } catch { /* */ }
+      }
+      e.preventDefault();
+      e.returnValue = 'You have an active call. Are you sure you want to leave?';
+    };
+
+    const handlePageHide = () => {
+      if (['connecting', 'ringing', 'in-call', 'held'].includes(state.status)) {
+        try { callRef.current?.hangup?.(); } catch { /* */ }
+        try { clientRef.current?.disconnect?.(); } catch { /* */ }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [state.status]);
+
+  // --- devicechange listener ---
+  useEffect(() => {
+    const handleDeviceChange = () => {
+      enumerateDevices();
+    };
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
+    };
+  }, [enumerateDevices]);
+
+  // --- Cleanup on unmount ---
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
+
+  // --- startCall ---
   const startCall = useCallback(async (leadPhone: string, leadId?: string) => {
     if (!user) {
       setState(s => ({ ...s, status: 'error', message: 'Authentication required.' }));
+      return;
+    }
+    if (['connecting', 'ringing', 'in-call', 'held'].includes(state.status)) {
+      // Prevent double-dial
       return;
     }
 
@@ -185,17 +504,26 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       return;
     }
 
-    // Request microphone access BEFORE dialing
-    // Per Telnyx best practice: get permission before creating the call
+    // Request microphone access
     let stream: MediaStream | null = null;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err) {
-      setState(s => ({
-        ...s,
-        status: 'error',
-        message: 'Microphone access denied. Check your browser permissions.',
-      }));
+      const constraints: MediaStreamConstraints = {
+        audio: selectedInputDevice ? { deviceId: selectedInputDevice } : true,
+      };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setMicPermission('granted');
+      localStreamRef.current = stream;
+    } catch (err: any) {
+      setMicPermission('denied');
+      let msg = 'Microphone access denied.';
+      if (err?.name === 'NotAllowedError') {
+        msg = 'Microphone access denied. Click the lock icon in your browser\'s address bar and allow microphone access, then try again.';
+      } else if (err?.name === 'NotFoundError') {
+        msg = 'No microphone found. Please connect one and try again.';
+      } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        msg = 'Microphone access requires HTTPS. Your local server must use https:// or localhost.';
+      }
+      setState(s => ({ ...s, status: 'error', message: msg }));
       return;
     }
 
@@ -207,13 +535,17 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       fromNumber: callerNumber,
       callerNumber,
       durationSeconds: 0,
+      isMuted: false,
+      isHeld: false,
+      remoteMutedForMoreThan10s: false,
     }));
 
     answeredAtRef.current = null;
     stopDurationTimer();
+    clearMuteWarningTimeout();
 
-  try {
-      // Create the call log row FIRST (via call-log-only endpoint — no REST)
+    try {
+      // Create the call log row FIRST
       const callLogRes = await authFetch('/api/telnyx/call-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,12 +562,9 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       const callLogData = await callLogRes.json();
       currentCallLogIdRef.current = callLogData.callLogId ?? null;
 
-      setState(s => ({
-        ...s,
-        callLogId: callLogData.callLogId ?? null,
-      }));
+      setState(s => ({ ...s, callLogId: callLogData.callLogId ?? null }));
 
-      // Get a WebRTC login token from our backend
+      // Get WebRTC login token
       const tokenRes = await authFetch('/api/telnyx/token', { method: 'GET' });
       const tokenData = await tokenRes.json();
       if (!tokenRes.ok) {
@@ -247,38 +576,40 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       // Dynamically import the Telnyx SDK
       const { TelnyxRTC } = await import('@telnyx/webrtc');
 
-      // Create the TelnyxRTC client with the login_token (JWT)
+      // Build ICallOptions with device IDs if available
+      // Verified from ICallOptions: micId, speakerId, audio, destinationNumber, callerNumber, localStream
+      const callOptions: any = {
+        destinationNumber: toNumber,
+        audio: true,
+        callerNumber: callerNumber,
+      };
+      if (selectedInputDevice) callOptions.micId = selectedInputDevice;
+      if (selectedOutputDevice) callOptions.speakerId = selectedOutputDevice;
+      if (stream) callOptions.localStream = stream;
+
+      // Create the TelnyxRTC client
+      // Verified from IClientOptions: hangupOnBeforeUnload auto-hangs up on page close
       const client = new TelnyxRTC({
         login_token: jwt,
+        debug: false,
+        hangupOnBeforeUnload: true,
       } as any);
 
       clientRef.current = client;
+      isCleaningUpRef.current = false;
 
       // Set up remote audio element
-      if (!audioElementRef.current) {
-        const audioEl = document.createElement('audio') as HTMLAudioElement & { playsInline: boolean };
-        audioEl.autoplay = true;
-        audioEl.playsInline = true;
-        audioEl.id = 'telnyx-remote-audio';
-        document.body.appendChild(audioEl);
-        audioElementRef.current = audioEl;
-      }
-      // The SDK can attach the remote stream via the remoteStream property
-      // of the Call object
+      const audioEl = setupAudioElement();
+      // Apply saved volume
+      audioEl.volume = remoteVolume;
 
       // Register event listeners
       client.on('telnyx.ready', () => {
-        // Client is registered — now create the call
-        const call = client.newCall({
-          destinationNumber: toNumber,
-          callerNumber: callerNumber,
-        }) as any;
-
+        // Client is registered — create the call
+        const call = client.newCall(callOptions) as any;
         callRef.current = call;
 
-        // Capture Telnyx SDK call identifiers from the Call object
-        // Verified from @telnyx/webrtc BaseCall.d.ts: call.telnyxIDs returns
-        // { telnyxCallControlId, telnyxSessionId, telnyxLegId }
+        // Capture Telnyx SDK call identifiers
         let telnyxCallControlId: string | null = null;
         let telnyxCallSessionId: string | null = null;
         try {
@@ -289,8 +620,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
           console.warn('Could not read call.telnyxIDs:', e);
         }
 
-        // PATCH the call log with the Telnyx call IDs so the webhook
-        // can match incoming events to this call_log row
+        // PATCH the call log with Telnyx call IDs
         if (currentCallLogIdRef.current && telnyxCallControlId) {
           void updateCallLog(currentCallLogIdRef.current, {
             telnyx_call_control_id: telnyxCallControlId,
@@ -298,82 +628,11 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
           });
         }
 
-        // Track the call for state updates
-        client.on('telnyx.notification', (notification: any) => {
-          if (notification.type !== 'callUpdate' || !notification.call) return;
-
-          const call = notification.call;
-          const callState = call.state; // State enum: 0=New, 4=Ringing, 7=Active, 9=Hangup
-
-          // Also try to capture telnyx IDs from the notification call object
-          // (they may not have been available immediately after newCall())
+        // Attach remote stream from the call object
+        // Verified from BaseCall.d.ts: call.remoteStream is a getter returning MediaStream
+        if (audioEl) {
           try {
-            const ids = call?.telnyxIDs;
-            if (ids?.telnyxCallControlId && currentCallLogIdRef.current) {
-              void updateCallLog(currentCallLogIdRef.current, {
-                telnyx_call_control_id: ids.telnyxCallControlId,
-                telnyx_call_session_id: ids.telnyxSessionId ?? null,
-              });
-            }
-          } catch (e) {
-            // telnyxIDs not available yet — already captured in newCall callback
-          }
-
-          // State enum: New=0, Trying=1, Ringing=4, Answering=5, Early=6, Active=7, Held=8, Hangup=9
-          if (callState >= 7) {
-            // Active call
-            if (answeredAtRef.current === null) {
-              answeredAtRef.current = Date.now();
-              startDurationTimer();
-            }
-            setState(s => ({
-              ...s,
-              status: 'in-call',
-              message: 'Connected. You are live.',
-              isMuted: false,
-            }));
-          } else if (callState === 4) {
-            // Ringing
-            setState(s => ({
-              ...s,
-              status: 'ringing',
-              message: 'Ringing...',
-            }));
-          } else if (callState === 9 || callState === 10) {
-            // Hangup or Destroy
-            stopDurationTimer();
-            let duration = 0;
-            if (answeredAtRef.current !== null) {
-              duration = Math.floor((Date.now() - answeredAtRef.current) / 1000);
-            }
-
-            // Update the call log with final status and duration
-            if (currentCallLogIdRef.current) {
-              const finalStatus = duration > 0 ? 'answered' : 'no_answer';
-              void updateCallLog(currentCallLogIdRef.current, {
-                status: finalStatus,
-                duration_seconds: duration > 0 ? duration : null,
-                ended_at: new Date().toISOString(),
-              });
-            }
-
-            setState(s => ({
-              ...s,
-              status: 'ended',
-              message: 'Call ended.',
-              durationSeconds: duration,
-              isMuted: false,
-            }));
-            cleanup();
-          }
-        });
-
-        // Attach the remote media stream.
-        // In @telnyx/webrtc v2.28+, the SDK exposes call.remoteStream as a getter
-        // (not an event). We set srcObject directly after creating the call.
-        if (audioElementRef.current) {
-          try {
-            audioElementRef.current.srcObject = call.remoteStream || null;
+            audioEl.srcObject = call.remoteStream || null;
           } catch (e) {
             console.warn('Could not attach remote stream:', e);
           }
@@ -381,6 +640,85 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
         // Start the call
         call.invite();
+      });
+
+      // Handle events via telnyx.notification
+      client.on('telnyx.notification', (notification: any) => {
+        if (notification.type !== 'callUpdate' || !notification.call) return;
+
+        const call = notification.call;
+        const callState = call.state as number;
+
+        // Capture telnyx IDs from notification (may differ from newCall)
+        try {
+          const ids = call?.telnyxIDs;
+          if (ids?.telnyxCallControlId && currentCallLogIdRef.current) {
+            void updateCallLog(currentCallLogIdRef.current, {
+              telnyx_call_control_id: ids.telnyxCallControlId,
+              telnyx_call_session_id: ids.telnyxSessionId ?? null,
+            });
+          }
+        } catch (e) {
+          // telnyxIDs may not be available yet
+        }
+
+        // State machine (from constants.d.ts):
+        // New=0, Ringing=4, Active=7, Held=8, Hangup=9, Destroy=10
+        if (callState >= STATE.ACTIVE) {
+          // Active call
+          if (answeredAtRef.current === null) {
+            answeredAtRef.current = Date.now();
+            startDurationTimer();
+          }
+          setState(s => ({
+            ...s,
+            status: 'in-call',
+            message: 'Connected. You are live.',
+            isMuted: call.isAudioMuted || false,
+          }));
+        } else if (callState === STATE.RINGING) {
+          setState(s => ({
+            ...s,
+            status: 'ringing',
+            message: 'Ringing...',
+          }));
+        } else if (callState === STATE.HELD) {
+          setState(s => ({
+            ...s,
+            status: 'held',
+            message: 'On hold.',
+            isHeld: true,
+          }));
+        } else if (callState >= STATE.HANGUP) {
+          // Hangup or Destroy
+          stopDurationTimer();
+          clearMuteWarningTimeout();
+
+          let duration = 0;
+          if (answeredAtRef.current !== null) {
+            duration = Math.floor((Date.now() - answeredAtRef.current) / 1000);
+          }
+
+          if (currentCallLogIdRef.current) {
+            const finalStatus = duration > 0 ? 'answered' : 'no_answer';
+            void updateCallLog(currentCallLogIdRef.current, {
+              status: finalStatus,
+              duration_seconds: duration > 0 ? duration : null,
+              ended_at: new Date().toISOString(),
+            });
+          }
+
+          setState(s => ({
+            ...s,
+            status: 'ended',
+            message: duration > 0 ? 'Call ended.' : 'Call not answered.',
+            durationSeconds: duration,
+            isMuted: false,
+            isHeld: false,
+            remoteMutedForMoreThan10s: false,
+          }));
+          cleanup();
+        }
       });
 
       client.on('telnyx.error', (err: any) => {
@@ -395,6 +733,9 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
       // Connect to Telnyx signaling
       client.connect();
+
+      // Enumerate devices after first call attempt grants mic permission
+      void enumerateDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start call';
       console.error('Call error:', err);
@@ -402,41 +743,22 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       stopDurationTimer();
       cleanup();
     }
-  }, [user, callerNumber]);
+  }, [user, callerNumber, state.status, selectedInputDevice, selectedOutputDevice, remoteVolume]);
 
-  const cleanup = useCallback(() => {
-    if (callRef.current) {
-      try {
-        callRef.current.hangup();
-      } catch (e) {
-        // Call may already be hung up
-      }
-    }
-    if (clientRef.current) {
-      try {
-        clientRef.current.disconnect();
-      } catch (e) {
-        // Best effort
-      }
-    }
-    if (audioElementRef.current) {
-      audioElementRef.current.srcObject = null;
-    }
-    callRef.current = null;
-    clientRef.current = null;
-  }, []);
-
+  // --- endCall ---
+  // Must always work: hangup + force-cleanup with timeout fallback
   const endCall = useCallback(() => {
     stopDurationTimer();
+    clearMuteWarningTimeout();
 
-    // Compute final duration from answeredAtRef (not from a stale closure)
+    // Compute final duration
     let duration = 0;
     if (answeredAtRef.current !== null) {
       duration = Math.floor((Date.now() - answeredAtRef.current) / 1000);
       answeredAtRef.current = null;
     }
 
-    // Update the call log with final duration
+    // Update call log with final duration
     if (currentCallLogIdRef.current && duration > 0) {
       updateCallLog(currentCallLogIdRef.current, {
         status: 'disconnected',
@@ -445,63 +767,176 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       });
     }
 
-    setState(s => ({
-      ...s,
-      status: 'ended',
-      message: 'Call ended.',
-      durationSeconds: duration,
-      isMuted: false,
-    }));
+    // Try graceful hangup, fall back to force cleanup after 3s
+    const forceCleanup = setTimeout(() => {
+      cleanup();
+      setState(s => ({
+        ...s,
+        status: 'ended',
+        message: 'Call ended (forced cleanup).',
+        durationSeconds: duration,
+        isMuted: false,
+        isHeld: false,
+        remoteMutedForMoreThan10s: false,
+      }));
+    }, 3000);
 
-    cleanup();
-  }, [updateCallLog, stopDurationTimer, cleanup]);
-
-  const toggleMute = useCallback(() => {
-    if (callRef.current) {
+    const doHangup = async () => {
       try {
-        callRef.current.toggleAudioMute();
-      } catch (e) {
-        console.warn('toggleAudioMute failed, trying muteAudio:', e);
-        try {
-          if (state.isMuted) {
-            callRef.current.unmuteAudio();
-          } else {
-            callRef.current.muteAudio();
-          }
-        } catch (e2) {
-          console.warn('Audio mute toggle failed:', e2);
+        if (callRef.current) {
+          await callRef.current.hangup();
         }
+      } catch (e) {
+        console.warn('hangup failed:', e);
+      }
+      clearTimeout(forceCleanup);
+      cleanup();
+      setState(s => ({
+        ...s,
+        status: 'ended',
+        message: 'Call ended.',
+        durationSeconds: duration,
+        isMuted: false,
+        isHeld: false,
+        remoteMutedForMoreThan10s: false,
+      }));
+    };
+
+    void doHangup();
+  }, [updateCallLog, stopDurationTimer, clearMuteWarningTimeout, cleanup]);
+
+  // --- toggleMute ---
+  // Reads actual state from SDK: call.isAudioMuted (verified from BaseCall.d.ts)
+  const toggleMute = useCallback(() => {
+    if (!callRef.current) return;
+
+    try {
+      // Verified from BaseCall.d.ts: toggleAudioMute(): void
+      // Also has muteAudio() / unmuteAudio() / isAudioMuted getter
+      callRef.current.toggleAudioMute();
+      // Read the actual state from the SDK
+      const nowMuted = callRef.current.isAudioMuted === true;
+      setState(s => ({ ...s, isMuted: nowMuted }));
+
+      if (!nowMuted) {
+        // Just unmuted
+        clearMuteWarningTimeout();
+        setState(s => ({ ...s, remoteMutedForMoreThan10s: false }));
+      } else {
+        scheduleMuteWarning();
+      }
+    } catch (e) {
+      console.warn('toggleAudioMute failed, trying muteAudio/unmuteAudio:', e);
+      try {
+        if (state.isMuted) {
+          callRef.current.unmuteAudio();
+        } else {
+          callRef.current.muteAudio();
+        }
+        const nowMuted = !state.isMuted;
+        setState(s => ({ ...s, isMuted: nowMuted }));
+        if (nowMuted) scheduleMuteWarning();
+        else { clearMuteWarningTimeout(); setState(s => ({ ...s, remoteMutedForMoreThan10s: false })); }
+      } catch (e2) {
+        console.warn('Audio mute toggle failed:', e2);
       }
     }
-    setState(s => ({ ...s, isMuted: !s.isMuted }));
-  }, [state.isMuted]);
+  }, [state.isMuted, scheduleMuteWarning, clearMuteWarningTimeout]);
 
+  // --- toggleHold ---
+  // Verified from BaseCall.d.ts: hold(): Promise, unhold(): Promise, toggleHold(): Promise
+  const toggleHold = useCallback(() => {
+    if (!callRef.current || state.status !== 'in-call') return;
+
+    try {
+      if (state.isHeld) {
+        callRef.current.unhold();
+        setState(s => ({ ...s, status: 'in-call', isHeld: false, message: 'Connected. You are live.' }));
+      } else {
+        callRef.current.hold();
+        setState(s => ({ ...s, status: 'held', isHeld: true, message: 'On hold.' }));
+      }
+    } catch (e) {
+      console.warn('Toggle hold failed:', e);
+    }
+  }, [state.isHeld, state.status]);
+
+  // --- sendDTMF ---
+  // Verified from BaseCall.d.ts: dtmf(dtmf: string): void
+  const sendDTMF = useCallback((digit: string) => {
+    if (!callRef.current || (state.status !== 'in-call' && state.status !== 'held')) return;
+    try {
+      callRef.current.dtmf(digit);
+    } catch (e) {
+      console.warn('DTMF send failed:', e);
+    }
+  }, [state.status]);
+
+  // --- requestMicrophone ---
   const requestMicrophone = useCallback(async (): Promise<MediaStream | null> => {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: selectedInputDevice ? { deviceId: selectedInputDevice } : true,
+      });
+      setMicPermission('granted');
+      return stream;
     } catch (err) {
       console.error('Microphone access failed:', err);
+      setMicPermission('denied');
       return null;
     }
-  }, []);
+  }, [selectedInputDevice]);
 
-  // Cleanup on unmount
+  // --- Keyboard shortcuts ---
+  // M toggles mute during a call (not while typing in inputs)
   useEffect(() => {
-    return () => {
-      cleanup();
-      stopDurationTimer();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if focused in an input/textarea
+      const activeEl = document.activeElement;
+      const isInput = activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || activeEl?.hasAttribute('contenteditable');
+
+      if (e.key.toLowerCase() === 'm' && !isInput) {
+        const activeStatus = state.status;
+        if (activeStatus === 'ringing' || activeStatus === 'in-call' || activeStatus === 'held') {
+          e.preventDefault();
+          toggleMute();
+        }
+      }
     };
-  }, [cleanup, stopDurationTimer]);
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [state.status, toggleMute]);
+
+  // Load saved volume on mount
+  useEffect(() => {
+    if (audioElementRef.current) {
+      audioElementRef.current.volume = remoteVolume;
+    }
+  }, [remoteVolume]);
 
   return {
     ...state,
     remoteVolume,
     micVolume,
+    availableInputDevices,
+    availableOutputDevices,
+    selectedInputDevice,
+    selectedOutputDevice,
+    canChangeOutputDevice,
+    micPermission,
+    micLevel,
     startCall,
     endCall,
     toggleMute,
     setVolume,
     setMicVolume,
+    toggleHold,
+    sendDTMF,
+    selectInputDevice,
+    selectOutputDevice,
     requestMicrophone,
+    testMicrophone,
+    stopTestMicrophone,
   };
 }

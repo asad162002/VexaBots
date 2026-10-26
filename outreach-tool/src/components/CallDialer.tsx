@@ -13,6 +13,8 @@ import {
   MicOff,
   PhoneOff,
   Volume2,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { useTelnyxCall } from '@/hooks/use-telnyx-call';
 
@@ -27,7 +29,7 @@ interface CallDialerProps {
 }
 
 export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
-  const { callerNumber, user } = useAuth();
+  const { callerNumber: hookCallerNumber, user } = useAuth();
   const [callEnded, setCallEnded] = useState(false);
 
   const {
@@ -35,18 +37,21 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     message,
     durationSeconds,
     isMuted,
+    isHeld,
     callLogId,
     remoteVolume,
     micVolume,
     startCall,
     endCall,
     toggleMute,
+    toggleHold,
+    sendDTMF,
     setVolume,
     setMicVolume,
   } = useTelnyxCall();
 
-  const isCalling = status === 'connecting' || status === 'ringing' || status === 'in-call';
-  const inCall = status === 'ringing' || status === 'in-call';
+  const isCalling = ['connecting', 'ringing', 'in-call', 'held'].includes(status);
+  const inCall = status === 'ringing' || status === 'in-call' || status === 'held';
 
   const handleStartCall = () => {
     if (!lead?.phone) return;
@@ -65,7 +70,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         id: callLogId || '',
         lead_id: lead?.id || '',
         caller_id: user?.id || '',
-        from_number: callerNumber || '',
+        from_number: hookCallerNumber || '',
         to_number: lead?.phone || '',
         status: 'disconnected',
         duration_seconds: durationSeconds,
@@ -81,7 +86,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         updated_at: new Date().toISOString(),
       });
     }
-  }, [status, callEnded, callLogId, durationSeconds, callerNumber, lead, user, onCallEnd]);
+  }, [status, callEnded, callLogId, durationSeconds, hookCallerNumber, lead, user, onCallEnd]);
 
   // Reset callEnded when starting a new call
   useEffect(() => {
@@ -118,18 +123,18 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
           <span className="text-gray-300">{lead.phone}</span>
         </div>
 
-        {!callerNumber ? (
+        {!hookCallerNumber ? (
           <p className="text-xs text-gray-500">
             No caller number configured for your account. Ask your admin to assign you a Telnyx caller-ID number.
           </p>
         ) : (
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <CheckCircle className="w-3 h-3 text-green-500/60" />
-            <span>Calling from {callerNumber}</span>
+            <span>Calling from {hookCallerNumber}</span>
           </div>
         )}
 
-        {!inCall && !callEnded && callerNumber && (
+        {!inCall && !callEnded && hookCallerNumber && (
           <button
             onClick={handleStartCall}
             disabled={isCalling}
@@ -156,7 +161,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
               {formatDuration(durationSeconds)}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center flex-wrap justify-center gap-2">
+              {/* Mute */}
               <button
                 onClick={toggleMute}
                 className={`p-2 rounded-lg transition ${
@@ -169,50 +175,76 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
                 {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
 
-              {/* Speaker volume */}
-              <div className="flex items-center gap-2">
-                <Volume2 className="w-4 h-4 text-gray-500" />
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={remoteVolume}
-                  onChange={(e) => setVolume(parseFloat(e.target.value))}
-                  className="w-24 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
-                  aria-label="Speaker volume"
-                />
-                <span className="text-xs text-gray-500 w-8 text-right">
-                  {Math.round(remoteVolume * 100)}%
-                </span>
-              </div>
-
-              {/* Mic volume */}
-              <div className="flex items-center gap-2">
-                <Mic className="w-4 h-4 text-gray-500" />
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={micVolume}
-                  onChange={(e) => setMicVolume(parseFloat(e.target.value))}
-                  className="w-24 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
-                  aria-label="Microphone volume"
-                />
-                <span className="text-xs text-gray-500 w-8 text-right">
-                  {Math.round(micVolume * 100)}%
-                </span>
-              </div>
-
+              {/* Hold / Resume */}
               <button
-                onClick={endCall}
-                className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition"
-                title="End call"
+                onClick={toggleHold}
+                className={`p-2 rounded-lg transition ${
+                  isHeld
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+                }`}
+                title={isHeld ? 'Resume call' : 'Hold call'}
               >
-                <PhoneOff className="w-4 h-4" />
+                {isHeld ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
               </button>
+
+              {/* DTMF Keypad */}
+              {['1','2','3','4','5','6','7','8','9','*','0','#'].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => sendDTMF(d)}
+                  className="px-2 py-1 text-xs bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 rounded transition"
+                  aria-label={`DTMF ${d}`}
+                >
+                  {d}
+                </button>
+              ))}
             </div>
+
+            {/* Speaker volume */}
+            <div className="flex items-center gap-2 w-full max-w-xs">
+              <Volume2 className="w-4 h-4 text-gray-500" />
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={remoteVolume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
+                aria-label="Speaker volume"
+              />
+              <span className="text-xs text-gray-500 w-8 text-right">
+                {Math.round(remoteVolume * 100)}%
+              </span>
+            </div>
+
+            {/* Mic volume */}
+            <div className="flex items-center gap-2 w-full max-w-xs">
+              <Mic className="w-4 h-4 text-gray-500" />
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={micVolume}
+                onChange={(e) => setMicVolume(parseFloat(e.target.value))}
+                className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
+                aria-label="Microphone volume"
+              />
+              <span className="text-xs text-gray-500 w-8 text-right">
+                {Math.round(micVolume * 100)}%
+              </span>
+            </div>
+
+            {/* End call */}
+            <button
+              onClick={endCall}
+              className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition"
+              title="End call"
+            >
+              <PhoneOff className="w-4 h-4" />
+            </button>
           </div>
         )}
 
