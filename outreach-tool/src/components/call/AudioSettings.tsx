@@ -65,8 +65,12 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
       setShowLevelMeter(false);
     } else {
       if (micPermission !== 'granted') {
-        await testMicrophone();
+        await refreshDevices();
       }
+      if (micPermission === 'denied') {
+        return;
+      }
+      await testMicrophone();
       setIsTesting(true);
       setShowLevelMeter(true);
       // Auto-stop after 10 seconds
@@ -154,6 +158,15 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
               {getPermissionIcon()}
               <span className="text-gray-400">{getPermissionStatusText()}</span>
             </div>
+
+            {micPermission !== 'granted' && (
+              <button
+                onClick={refreshDevices}
+                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition"
+              >
+                Allow microphone access
+              </button>
+            )}
           </div>
 
           {/* Microphone test / level meter */}

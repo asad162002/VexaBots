@@ -304,15 +304,21 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
   const refreshDevices = useCallback(async () => {
     // Request mic permission first so browsers return device labels
+    let tempStream: MediaStream | null = null;
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err: any) {
       if (err?.name === 'NotAllowedError') {
         setMicPermission('denied');
       }
+      // still attempt enumerate on failure
     }
     // Then enumerate — labels will be available now
-    void enumerateDevices();
+    await enumerateDevices();
+    // Release the temporary stream so the mic isn’t kept open just for permission
+    if (tempStream) {
+      tempStream.getTracks().forEach(track => track.stop());
+    }
   }, [enumerateDevices]);
 
   const selectInputDevice = useCallback((deviceId: string | null) => {
