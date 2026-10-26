@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vexabots – My Queue (design reference)</title>
+<style>
+:root{--bg:#0e0f12;--panel:#17181c;--line:#2a2c33;--tx:#eceef2;--mut:#8b90a0;--ac:#2f6bff;--ok:#22c55e;--bad:#f87171;--warn:#eab308;--pu:#7c3aed;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#f4f5f8;--panel:#fff;--line:#dde0e8;--tx:#15171c;--mut:#667085;--ac:#1f5eff;--ok:#16a34a;--bad:#dc2626;--warn:#b7791f}}
+:root[data-theme="light"]{--bg:#f4f5f8;--panel:#fff;--line:#dde0e8;--tx:#15171c;--mut:#667085;--ac:#1f5eff;--ok:#16a34a;--bad:#dc2626;--warn:#b7791f}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
+button,input,select,textarea{font:inherit;color:var(--tx)}
+h1{font-size:22px;margin:0}.sub{color:var(--mut);margin:2px 0 16px}
+.grid{display:grid;grid-template-columns:250px minmax(0,1fr) 280px;gap:14px;max-width:1180px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;position:relative}
+.lbl{font-size:11px;letter-spacing:.08em;color:var(--mut);text-transform:uppercase;margin:0 0 8px}
+input,textarea,select{width:100%;padding:9px;border-radius:8px;border:1px solid var(--line);background:var(--bg)}
+textarea{min-height:80px;resize:vertical}
+.q{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.q button{all:unset;cursor:pointer;padding:9px 10px;border:1px solid var(--line);border-radius:8px}
+.q button.on{border-color:var(--ac);box-shadow:inset 3px 0 0 var(--ac)}.q button.dn{opacity:.45}
+.q small{display:block;color:var(--mut)}
+.name{font-size:20px;font-weight:650}.tag{font-size:12px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut);margin-left:6px;vertical-align:middle}
+.info a,.info span.r{display:flex;gap:8px;align-items:center;margin:7px 0;color:var(--tx);text-decoration:none;word-break:break-all}
+.info a{color:#6aa0ff}.info a:hover{text-decoration:underline}
+.box{border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:12px}
+.from{color:var(--ok);font-size:13px;margin:6px 0 10px}
+.call{width:100%;padding:12px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:650;font-size:15px;cursor:pointer}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cb{padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:transparent;cursor:pointer;min-width:74px}
+.cb.a{background:var(--bad);border-color:var(--bad);color:#fff}.cb.h{background:var(--warn);border-color:var(--warn);color:#fff}
+.cb:disabled,.o:disabled,.save:disabled{opacity:.4;cursor:not-allowed}
+.end{margin-left:auto;padding:10px 16px;border:0;border-radius:9px;background:#dc2626;color:#fff;font-weight:650;cursor:pointer}
+.tm{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.st{font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
+.bk{width:100%;margin-top:10px;padding:11px;border:0;border-radius:10px;background:var(--pu);color:#fff;font-weight:650;cursor:pointer}
+.vb,.bk2{display:inline-flex;gap:6px;align-items:center;padding:10px 14px;border:0;border-radius:10px;color:#fff;font-weight:650;cursor:pointer;text-decoration:none}.vb{background:#2563eb}.bk2{background:var(--pu)}.dg{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-top:10px}.dg span{display:block}.chipb{margin-top:10px;padding:10px;border-radius:10px;border:1px solid var(--ok);color:var(--ok)}
+.chipb a{color:inherit}
+.warnb{margin-top:10px;padding:8px 10px;border-radius:8px;border:1px solid var(--bad);color:var(--bad);font-weight:600}
+.o{display:block;width:100%;text-align:left;padding:10px;margin-bottom:6px;border-radius:8px;border:1px solid var(--line);background:transparent;cursor:pointer}
+.o.s{background:var(--ac);border-color:var(--ac);color:#fff}
+.save{width:100%;margin-top:10px;padding:12px;border:0;border-radius:10px;background:var(--ac);color:#fff;font-weight:650;cursor:pointer}
+.pop{position:absolute;z-index:5;left:14px;right:14px;margin-top:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.pad button{padding:10px;border-radius:8px;border:1px solid var(--line);background:transparent;cursor:pointer}
+.mt{display:flex;gap:3px;height:20px;align-items:flex-end;margin-top:6px}.mt i{flex:1;background:var(--line);height:20%;border-radius:2px}.mt i.on{background:var(--ok)}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.md{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;width:440px;max-width:100%}
+.days{display:flex;gap:6px;margin:8px 0}.days button,.slots button{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;cursor:pointer}
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.on2{background:var(--pu)!important;border-color:var(--pu)!important;color:#fff}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30}.toast.show{opacity:1}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+@media (max-width:1000px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>My Queue</h1><p class="sub" id="prog" style="margin-bottom:2px"></p><p class="sub" style="font-size:12px">Caller menu: My Queue · Analytics (own) · Activity (own) · Settings (own). Lead detail pages are admin-only.</p>
+<div class="grid"><section class="card"><p class="lbl">Queue</p><input id="srch" placeholder="Search name, phone…" aria-label="Search leads"><div class="q" id="q"></div></section>
+<section class="card" id="lead"></section><section class="card" id="out"></section></div>
+<div id="modal"></div><div class="toast" id="toast"></div>
+<script>
+var L=[{n:"Punjabi Dhaba",o:"Raj Patel",p:"+1 408-555-0123",c:"Cupertino, CA",cat:"Indian restaurant",w:"https://www.punjabidhaba.com",m:"https://maps.google.com/?q=Punjabi+Dhaba+Cupertino",r:"4.5 (512 reviews)",src:"Google Maps",tz:"PT",off:13,e:""},
+{n:"Starbucks Coffee Company",o:"Jessica Foust",p:"+1 916-482-1205",c:"Sacramento, CA",cat:"Coffee shop",w:"https://www.starbucks.com",li:"https://www.linkedin.com/in/example",src:"LinkedIn",tz:"PT",off:13,e:"jessica@example.com"},
+{n:"Hakashi Japanese Sushi Bar & Grill",o:"Masaru Saito",p:"+1 916-555-0199",c:"Sacramento, CA",cat:"Japanese restaurant",w:"https://hakashisushi.example",m:"https://maps.google.com/?q=Hakashi+Sacramento",r:"4.2 (231 reviews)",src:"Google Maps",tz:"PT",off:13,e:""}];
+var OUT=["No answer","Voicemail","Not interested","Call back","Interested","Booked meeting","Wrong number"];
+var i=0,ph="idle",mu=false,hd=false,sec=0,tm=null,mt=null,pop=null,sel=null,done={},bk={},dg="",vol=100,mod=null,q="";
+function $(x){return document.getElementById(x)}
+function f(s){return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0")}
+function safe(u){return /^https?:\/\//i.test(u)?u:"#"}
+function toast(t){var e=$("toast");e.textContent=t;e.classList.add("show");setTimeout(function(){e.classList.remove("show")},1800)}
+function drawQ(){var h="";L.forEach(function(l,k){if(q&&(l.n+l.p).toLowerCase().indexOf(q)<0)return;h+='<button data-a="sel" data-k="'+k+'" class="'+(k===i?"on ":"")+(done[k]?"dn":"")+'">'+l.n+'<small>'+l.o+' · '+l.p+(done[k]?' · '+done[k]:'')+'</small></button>'});$("q").innerHTML=h;$("prog").textContent=Object.keys(done).length+" of "+L.length+" called today"}
+function drawLead(){var l=L[i],b=bk[i],live=ph==="live",h='<div class="name">'+l.n+'<span class="tag">'+l.src+'</span></div><div class="sub" style="margin:2px 0 8px">'+l.o+' — General Manager</div><div class="row" style="margin:0 0 8px"><a class="vb" href="'+safe(l.w)+'" target="_blank" rel="noopener noreferrer">↗ Visit Website</a><button class="bk2" data-a="book">'+(b?"📅 Reschedule":"📅 Book Meeting")+'</button></div><div class="info">';
+h+='<a href="tel:'+l.p.replace(/[^+\d]/g,"")+'" data-a="call">📞 '+l.p+'</a><span class="r">📍 '+l.c+'</span><span class="r">🏷️ '+l.cat+'</span>';
+h+='<a href="'+safe(l.w)+'" target="_blank" rel="noopener noreferrer">🌐 '+l.w+'</a>';
+if(l.m)h+='<a href="'+safe(l.m)+'" target="_blank" rel="noopener noreferrer">🗺️ Open in Google Maps</a>';
+if(l.li)h+='<a href="'+safe(l.li)+'" target="_blank" rel="noopener noreferrer">💼 LinkedIn profile</a>';
+if(l.r)h+='<span class="r">⭐ '+l.r+'</span>';h+='</div>';
+h+='<div class="box"><p class="lbl">Phone dialer</p><div class="row"><b>'+l.p+'</b>'+(ph==="ring"?'<span class="st">Ringing…</span>':live?'<span class="st" style="color:var(--ok)">'+(hd?"On hold":"Connected")+'</span>':ph==="ended"?'<span class="st" style="color:var(--bad)">Call ended</span>':'')+'</div><div class="from">✓ Calling from +1 (910) 661-0871</div>';
+if(ph==="idle")h+='<button class="call" data-a="call">Call now</button><div class="row" style="margin-top:8px"><button class="cb" data-a="aud">Audio</button></div>';
+else{h+='<div class="row"><button class="cb'+(mu?" a":"")+'" data-a="mute" '+(live?"":"disabled")+'>'+(mu?"Muted":"Mute")+'</button><button class="cb'+(hd?" h":"")+'" data-a="hold" '+(live?"":"disabled")+'>'+(hd?"Resume":"Hold")+'</button><button class="cb" data-a="pad" '+(live?"":"disabled")+'>Keypad</button><button class="cb" data-a="aud">Audio</button><span class="tm" id="tm">'+(ph==="ring"?"":f(sec))+'</span><button class="end" data-a="end" '+(ph==="ended"?"disabled":"")+'>End call</button></div>';
+if(mu)h+='<div class="warnb">You’re muted. The lead can’t hear you.</div>'}
+if(pop==="aud")h+='<div class="pop"><p class="lbl">Audio settings</p><select aria-label="Microphone"><option>Headset microphone (USB)</option><option>Built-in microphone</option></select><select aria-label="Speaker" style="margin-top:6px"><option>Headset earphones (USB)</option><option>Built-in speakers</option></select><p class="lbl" style="margin-top:10px">Volume <span id="vv">'+vol+'</span>%</p><input type="range" id="vol" min="0" max="100" value="'+vol+'" aria-label="Volume"><div class="mt" id="mtr">'+"<i></i>".repeat(14)+'</div></div>';
+if(pop==="pad"){h+='<div class="pop"><div style="font-size:18px;min-height:26px;letter-spacing:2px">'+dg+'</div><div class="pad">';"123456789*0#".split("").forEach(function(d){h+='<button data-a="key" data-d="'+d+'">'+d+'</button>'});h+='</div></div>'}
+h+='</div>';
+if(b)h+='<div class="chipb">✓ Meeting booked: '+b.when+'<br><a href="#" data-a="book">Reschedule or cancel</a></div>';
+h+='<details class="box"><summary style="cursor:pointer;font-weight:600">Lead details</summary><div class="dg"><div><p class="lbl">ICP score</p>-</div><div><p class="lbl">Source</p>'+l.src+'</div><div><p class="lbl">City</p>'+l.c+'</div><div><p class="lbl">Country</p>US</div><div><p class="lbl">Size</p>Medium</div><div><p class="lbl">Contact email</p>'+(l.e||"-")+'</div></div><p class="sub" style="margin:10px 0 0;font-size:12px">Read-only. Port every field the old lead page shows that a caller needs. Assign and status editing stay admin-only.</p></details>';
+$("lead").innerHTML=h;meter()}
+function drawOut(){var can=ph==="ended"||bk[i],h='<p class="lbl">After the call</p><p class="lbl" style="color:var(--ac)">Outcome (1-7 keys or click)</p>';
+OUT.forEach(function(o,k){h+='<button class="o'+(sel===o?" s":"")+'" data-a="out" data-o="'+o+'" '+(can?"":"disabled")+'>'+(k+1)+'. '+o+'</button>'});
+h+='<p class="lbl" style="margin-top:10px">Notes</p><textarea id="note" placeholder="What did they say?"></textarea><p class="lbl" style="margin-top:10px">Follow-up date</p><input type="date" id="fu"><button class="save" data-a="save" '+(sel&&can?"":"disabled")+'>✓ Save &amp; next</button>';
+if(!can)h+='<p class="sub" style="margin:8px 0 0;font-size:12px">Outcome buttons unlock when the call ends or a meeting is booked.</p>';
+$("out").innerHTML=h}
+function draw(){drawQ();drawLead();drawOut()}
+function meter(){clearInterval(mt);var m=$("mtr");if(!m)return;mt=setInterval(function(){var n=m.children,v=mu?0:Math.floor(Math.random()*14);for(var k=0;k<n.length;k++){n[k].className=k<v?"on":"";n[k].style.height=(20+k*5)+"%"}},150)}
+function reset(){clearInterval(tm);ph="idle";mu=false;hd=false;sec=0;pop=null;sel=bk[i]?"Booked meeting":null;dg=""}
+function go(k){if(ph==="ring"||ph==="live")return;i=k;reset();draw()}
+function modal(){var l=L[i];mod=mod||{d:0,s:null};var days=["Mon 2","Tue 3","Wed 4"],sl=["9:00 AM","10:30 AM","1:00 PM","2:30 PM","4:00 PM","5:30 PM"],h='<div class="ov"><div class="md"><p class="lbl">Cal.com booking (reuse existing component)</p><div class="name" style="font-size:17px">Book a meeting with '+l.n+'</div><div class="sub" style="margin:2px 0 6px">'+l.o+' · times shown in '+l.tz+' (lead) and PKT (you)</div><div class="days">';
+days.forEach(function(d,k){h+='<button data-a="day" data-k="'+k+'" class="'+(mod.d===k?"on2":"")+'">'+d+'</button>'});
+h+='</div><div class="slots">';sl.forEach(function(s,k){h+='<button data-a="slot" data-k="'+k+'" class="'+(mod.s===k?"on2":"")+'">'+s+'</button>'});
+h+='</div><label class="lbl" style="margin-top:12px;display:block">Lead email (for the invite)</label><input id="em" value="'+l.e+'" placeholder="name@business.com"><div class="row" style="margin-top:14px"><button class="cb" data-a="close">Cancel</button><button class="save" style="width:auto;margin:0 0 0 auto;padding:10px 18px;background:var(--pu)" data-a="confirm">Confirm booking</button></div></div></div>';
+$("modal").innerHTML=h}
+document.addEventListener("click",function(e){var b=e.target.closest("[data-a]");if(!b)return;var a=b.dataset.a;if(a==="call"||a==="book")e.preventDefault();
+if(a==="sel")go(+b.dataset.k);
+else if(a==="call"&&ph==="idle"){ph="ring";pop=null;draw();setTimeout(function(){if(ph==="ring"){ph="live";sec=0;tm=setInterval(function(){sec++;var t=$("tm");if(t)t.textContent=f(sec)},1000);draw()}},1400)}
+else if(a==="end"){clearInterval(tm);ph="ended";pop=null;draw()}
+else if(a==="mute"){mu=!mu;draw()}else if(a==="hold"){hd=!hd;draw()}
+else if(a==="aud"||a==="pad"){pop=pop===a?null:a;draw()}
+else if(a==="key"){dg+=b.dataset.d;draw()}
+else if(a==="out"){sel=b.dataset.o;drawOut()}
+else if(a==="book"){mod=null;modal()}
+else if(a==="day"){mod.d=+b.dataset.k;modal()}else if(a==="slot"){mod.s=+b.dataset.k;modal()}
+else if(a==="close"){$("modal").innerHTML="";mod=null}
+else if(a==="confirm"){if(mod.s===null){toast("Pick a time first");return}var ds=["Mon 2","Tue 3","Wed 4"],sl=["9:00 AM","10:30 AM","1:00 PM","2:30 PM","4:00 PM","5:30 PM"];bk[i]={when:ds[mod.d]+" Nov, "+sl[mod.s]+" PT"};sel="Booked meeting";$("modal").innerHTML="";mod=null;toast("Meeting booked");draw()}
+else if(a==="save"){done[i]=sel;toast("Saved: "+sel);var n=-1;for(var k=1;k<=L.length;k++){var j=(i+k)%L.length;if(!done[j]){n=j;break}}clearInterval(tm);if(n<0){ph="idle";$("lead").innerHTML='<div class="name">Queue finished</div><p class="sub">All leads called.</p>';drawQ();drawOut();return}i=n;reset();draw()}});
+document.addEventListener("input",function(e){if(e.target.id==="vol"){vol=e.target.value;$("vv").textContent=vol}if(e.target.id==="srch"){q=e.target.value.toLowerCase();drawQ()}});
+document.addEventListener("keydown",function(e){var t=e.target.tagName;if(t==="INPUT"||t==="TEXTAREA"||t==="SELECT")return;if(ph==="live"&&e.key.toLowerCase()==="m"){mu=!mu;draw()}
+if(/^[1-7]$/.test(e.key)&&(ph==="ended"||bk[i])){sel=OUT[+e.key-1];drawOut()}});
+draw();
+</script>
+</body>
+</html>
