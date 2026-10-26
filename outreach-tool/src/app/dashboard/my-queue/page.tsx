@@ -374,25 +374,6 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
                     No caller number configured. Ask your admin to assign you one.
                   </p>
                 )}
-                {callPhase === 'idle' && (
-                  <button
-                    onClick={startCall}
-                    disabled={!hookCallerNumber || callStatus === 'connecting'}
-                    className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 active:bg-green-700 disabled:bg-gray-600 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
-                  >
-                    {callStatus === 'connecting' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Connecting...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Phone className="w-4 h-4" />
-                        <span>Call {currentLead.phone || 'lead'}</span>
-                      </>
-                    )}
-                  </button>
-                )}
 
                 <CallDialer lead={currentLead} />
               </div>
