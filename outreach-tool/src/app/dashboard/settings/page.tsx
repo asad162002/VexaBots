@@ -13,7 +13,7 @@ import { type Profile } from '@/lib/types';
 interface TelnyxNumber {
   id: string;
   phone_number: string;
-  country: string;
+  country?: string;
 }
 
 interface AssignLimit {
@@ -159,6 +159,12 @@ export default function SettingsPage() {
     fetchProfiles();
   };
 
+  const handleCallerIdChange = (profileId: string, callerId: string | null) => {
+    setProfiles(prev => prev.map(p =>
+      p.id === profileId ? { ...p, caller_id_number: callerId } : p
+    ));
+  };
+
   const currentUserProfile = profiles.find(p => p.id === user?.id);
 
   return (
@@ -227,6 +233,7 @@ export default function SettingsPage() {
                   removingId={removingId}
                   telnyxNumbers={telnyxNumbers}
                   numbersLoading={numbersLoading}
+                  onCallerIdChange={handleCallerIdChange}
                 />
               ))}
             </div>

@@ -8,7 +8,8 @@ import { createClient } from '@supabase/supabase-js';
 // - The WebRTC SDK authenticates with a `login_token` (JWT), not a username/password
 // - The JWT is generated via: POST /v2/telephony_credentials/{id}/token
 //   (NOT /v2/connections/tokens — that endpoint does not exist)
-// - The {id} is the ID of a Telnyx "Credential Connection" (type: credential)
+// - The {id} is the ID of a Telnyx "telephony credential" (created under a
+//   credential connection via POST /v2/telephony_credentials)
 // - The request body can include a `expires_at` to set token TTL (max 24h)
 // - The response body IS the JWT string (not JSON-wrapped)
 //
@@ -56,9 +57,15 @@ export async function GET(request: NextRequest) {
     }, { status: 400 });
   }
 
+  if (!telnyxApiKey) {
+    console.error('TELNYX_ACCESS_TOKEN is not set.');
+    return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
+  }
+
   // Generate a WebRTC login token (JWT) from the Telnyx API
   // Endpoint: POST https://api.telnyx.com/v2/telephony_credentials/{id}/token
-  // The {id} is the credential connection's telephony credential ID
+  // The {id} is the telephony credential's ID (not the connection ID)
+  // Verified against Telnyx docs: https://developers.telnyx.com/docs/development/webrtc/js-sdk/how-to/authenticating-your-app
   try {
     const response = await fetch(
       `https://api.telnyx.com/v2/telephony_credentials/${profile.telnyx_credential_id}/token`,

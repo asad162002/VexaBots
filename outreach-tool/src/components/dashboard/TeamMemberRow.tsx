@@ -8,7 +8,7 @@ type ProfileWithPhone = Profile & { phone_number?: string | null };
 interface TelnyxNumber {
   id: string;
   phone_number: string;
-  country: string;
+  country?: string;
 }
 
 interface TeamMemberRowProps {
@@ -19,6 +19,7 @@ interface TeamMemberRowProps {
   removingId: string | null;
   telnyxNumbers: TelnyxNumber[];
   numbersLoading: boolean;
+  onCallerIdChange: (profileId: string, callerId: string | null) => void;
 }
 
 export default function TeamMemberRow({
@@ -29,6 +30,7 @@ export default function TeamMemberRow({
   removingId,
   telnyxNumbers,
   numbersLoading,
+  onCallerIdChange,
 }: TeamMemberRowProps) {
   const [savingCallerId, setSavingCallerId] = useState(false);
   const [callerIdError, setCallerIdError] = useState('');
@@ -46,6 +48,8 @@ export default function TeamMemberRow({
     } else {
       setCallerIdError('Saved!');
       setTimeout(() => setCallerIdError(''), 2000);
+      // Update local state so the dropdown reflects the change immediately
+      onCallerIdChange(profile.id, callerId);
     }
     setSavingCallerId(false);
   };
@@ -84,13 +88,13 @@ export default function TeamMemberRow({
                   <select
                     value={profile.caller_id_number ?? ''}
                     onChange={(e) => saveCallerId(e.target.value || null)}
-                    disabled={savingCallerId || profile.id === currentUserId}
+                    disabled={savingCallerId}
                     className="w-full bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                   >
                     <option value="">No caller-ID assigned</option>
                     {telnyxNumbers.map((num) => (
                       <option key={num.id} value={num.phone_number}>
-                        {num.phone_number} ({num.country})
+                        {num.phone_number}{num.country ? ` (${num.country})` : ''}
                       </option>
                     ))}
                   </select>
