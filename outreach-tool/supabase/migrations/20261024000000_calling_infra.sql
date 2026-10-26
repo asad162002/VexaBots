@@ -48,6 +48,9 @@ alter table public.call_logs
 alter table public.profiles
   add column if not exists telnyx_credential_id text;
 
+alter table public.profiles
+  add column if not exists caller_id_number text;
+
 -- ============================================================
 -- Add Telnyx SDK call identifiers to call_logs
 -- Populated by the hook (PATCH) or the webhook

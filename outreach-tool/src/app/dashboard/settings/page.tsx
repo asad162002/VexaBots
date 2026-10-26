@@ -10,6 +10,12 @@ import AssignmentLimitRow from '@/components/dashboard/AssignmentLimitRow';
 
 import { type Profile } from '@/lib/types';
 
+interface TelnyxNumber {
+  id: string;
+  phone_number: string;
+  country: string;
+}
+
 interface AssignLimit {
   profile_id: string;
   max_leads: number;
@@ -31,11 +37,16 @@ export default function SettingsPage() {
   const [invitePassword, setInvitePassword] = useState('');
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState('');
+  const [telnyxNumbers, setTelnyxNumbers] = useState<TelnyxNumber[]>([]);
+  const [numbersLoading, setNumbersLoading] = useState(false);
 
   useEffect(() => {
     fetchProfiles();
     fetchLimits();
-  }, []);
+    if (isAdmin) {
+      fetchTelnyxNumbers();
+    }
+  }, [isAdmin]);
 
   const fetchProfiles = async () => {
     setLoading(true);
@@ -66,6 +77,21 @@ export default function SettingsPage() {
       setAssignLimits(limitMap);
     }
     setLimitsLoading(false);
+  };
+
+  const fetchTelnyxNumbers = async () => {
+    setNumbersLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/telnyx/phone-numbers', {
+      headers: {
+        Authorization: `Bearer ${session?.access_token || ''}`,
+      },
+    });
+    if (res.ok) {
+      const result = await res.json();
+      setTelnyxNumbers(result.data || []);
+    }
+    setNumbersLoading(false);
   };
 
   const updateLimit = async (profileId: string, maxLeads: number) => {
@@ -199,6 +225,8 @@ export default function SettingsPage() {
                   currentUserId={user?.id}
                   onRemove={handleRemove}
                   removingId={removingId}
+                  telnyxNumbers={telnyxNumbers}
+                  numbersLoading={numbersLoading}
                 />
               ))}
             </div>

@@ -6,6 +6,7 @@ export type Profile = {
   phone_number: string | null;
   avatar_url: string | null;
   telnyx_credential_id: string | null;
+  caller_id_number: string | null;
   created_at: string;
   updated_at: string;
 };
