@@ -219,7 +219,7 @@ export default function MyQueuePage() {
     // noop: CallPanel handles its own state
   };
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
         <div className="text-gray-400 text-sm">Loading...</div>
@@ -235,7 +235,24 @@ export default function MyQueuePage() {
     );
   }
 
-  if (!isAdmin) {
+  if (isAdmin) {
+    return (
+      <div className="p-6 min-h-screen bg-[#0f0f0f]">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold text-white mb-4">Admin Lead Workspace</h1>
+          <p className="text-sm text-gray-400">Admins should use the lead detail pages.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
+        <div className="text-gray-400 text-sm">Loading queue...</div>
+      </div>
+    );
+  }
     return (
       <div className="p-6 min-h-screen bg-[#0f0f0f]">
         <div className="max-w-6xl mx-auto">

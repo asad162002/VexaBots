@@ -61,30 +61,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
-    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
-      if (cancelled) return;
-      setSession(sess);
-      setUser(sess?.user ?? null);
-      if (sess?.user) {
-        try {
-          await loadProfile(sess.user.id);
-        } catch {
-          // ignore profile load failure; still clear loading so UI can render
+    const finish = () => {
+      if (!cancelled) setLoading(false);
+    };
+
+    timeoutId = setTimeout(finish, 4000);
+
+    const init = async () => {
+      try {
+        const { data: { session: sess } } = await supabase.auth.getSession();
+        if (cancelled) return;
+        setSession(sess);
+        setUser(sess?.user ?? null);
+        if (sess?.user) {
+          try {
+            await loadProfile(sess.user.id);
+          } catch {
+            // ignore profile failure
+          }
+        } else {
+          setProfile(null);
+          setIsAdmin(false);
+          setCallerNumber(null);
         }
-      } else {
-        setProfile(null);
-        setIsAdmin(false);
-        setCallerNumber(null);
+      } catch {
+        // ignore auth init failure
+      } finally {
+        clearTimeout(timeoutId);
+        finish();
       }
-      if (!cancelled) {
-        setLoading(false);
-      }
-    });
+    };
+
+    init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, sess) => {
         if (cancelled) return;
+        clearTimeout(timeoutId);
         setSession(sess);
         setUser(sess?.user ?? null);
         if (sess?.user) {
@@ -98,14 +113,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsAdmin(false);
           setCallerNumber(null);
         }
-        if (!cancelled) {
-          setLoading(false);
-        }
+        finish();
       }
     );
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
