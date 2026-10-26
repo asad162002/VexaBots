@@ -31,6 +31,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
     selectOutputDevice,
     testMicrophone,
     stopTestMicrophone,
+    refreshDevices,
   } = useTelnyxCall();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -242,9 +243,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
 
           {/* Refresh devices */}
           <button
-            onClick={() => {
-              navigator.mediaDevices.enumerateDevices().then(() => {});
-            }}
+            onClick={refreshDevices}
             className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 rounded transition"
           >
             <RefreshCw className="w-3 h-3" />

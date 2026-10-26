@@ -102,6 +102,7 @@ export interface UseTelnyxCallReturn extends TelnyxCallState {
   sendDTMF: (digit: string) => void;
   selectInputDevice: (deviceId: string | null) => void;
   selectOutputDevice: (deviceId: string | null) => void;
+  refreshDevices: () => Promise<void>;
   requestMicrophone: () => Promise<MediaStream | null>;
   testMicrophone: () => Promise<void>;
   stopTestMicrophone: () => void;
@@ -274,7 +275,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     saveDevicePref(LS_MIC_VOLUME_KEY, v.toString());
   }, []);
 
-  // --- Device enumeration ---
+  // --- Device management ---
   const enumerateDevices = useCallback(async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -300,6 +301,19 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       console.warn('Could not enumerate devices:', err);
     }
   }, []);
+
+  const refreshDevices = useCallback(async () => {
+    // Request mic permission first so browsers return device labels
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') {
+        setMicPermission('denied');
+      }
+    }
+    // Then enumerate — labels will be available now
+    void enumerateDevices();
+  }, [enumerateDevices]);
 
   const selectInputDevice = useCallback((deviceId: string | null) => {
     setSelectedInputDevice(deviceId);
@@ -938,6 +952,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     sendDTMF,
     selectInputDevice,
     selectOutputDevice,
+    refreshDevices,
     requestMicrophone,
     testMicrophone,
     stopTestMicrophone,
