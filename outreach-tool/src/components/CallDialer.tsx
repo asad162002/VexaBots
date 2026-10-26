@@ -62,7 +62,6 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     endCall();
   };
 
-  // Notify parent when call ends
   useEffect(() => {
     if (status === 'ended' && !callEnded) {
       setCallEnded(true);
@@ -88,7 +87,6 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     }
   }, [status, callEnded, callLogId, durationSeconds, hookCallerNumber, lead, user, onCallEnd]);
 
-  // Reset callEnded when starting a new call
   useEffect(() => {
     if (status === 'idle') {
       setCallEnded(false);
@@ -154,6 +152,43 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
           </button>
         )}
 
+        {/* Volume controls always visible before and during a call */}
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2 w-full max-w-xs">
+            <Volume2 className="w-4 h-4 text-gray-500" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={remoteVolume}
+              onChange={(e) => setVolume(parseFloat(e.target.value))}
+              className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer"
+              aria-label="Speaker volume"
+            />
+            <span className="text-xs text-gray-500 w-8 text-right">
+              {Math.round(remoteVolume * 100)}%
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 w-full max-w-xs">
+            <Mic className="w-4 h-4 text-gray-500" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={micVolume}
+              onChange={(e) => setMicVolume(parseFloat(e.target.value))}
+              className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer"
+              aria-label="Microphone volume"
+            />
+            <span className="text-xs text-gray-500 w-8 text-right">
+              {Math.round(micVolume * 100)}%
+            </span>
+          </div>
+        </div>
+
         {inCall && (
           <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-2 text-gray-300 font-mono">
@@ -201,45 +236,9 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
               ))}
             </div>
 
-            {/* Speaker volume */}
-            <div className="flex items-center gap-2 w-full max-w-xs">
-              <Volume2 className="w-4 h-4 text-gray-500" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={remoteVolume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
-                aria-label="Speaker volume"
-              />
-              <span className="text-xs text-gray-500 w-8 text-right">
-                {Math.round(remoteVolume * 100)}%
-              </span>
-            </div>
-
-            {/* Mic volume */}
-            <div className="flex items-center gap-2 w-full max-w-xs">
-              <Mic className="w-4 h-4 text-gray-500" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={micVolume}
-                onChange={(e) => setMicVolume(parseFloat(e.target.value))}
-                className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
-                aria-label="Microphone volume"
-              />
-              <span className="text-xs text-gray-500 w-8 text-right">
-                {Math.round(micVolume * 100)}%
-              </span>
-            </div>
-
             {/* End call */}
             <button
-              onClick={endCall}
+              onClick={handleEndCall}
               className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition"
               title="End call"
             >
