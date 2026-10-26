@@ -1,29 +1,20 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
-import { type Lead, type LeadStatus } from '@/lib/types';
+import { type Lead, LeadStatus } from '@/lib/types';
 import {
   Phone,
-  PhoneOff,
-  Clock,
   CheckCircle,
   Search,
-  Mic,
-  MicOff,
   Loader2,
   AlertCircle,
-  Volume2,
-  Pause,
-  Play,
-  Keyboard,
-  Speaker,
 } from 'lucide-react';
 import { useTelnyxCall } from '@/hooks/use-telnyx-call';
 import AudioSettings from '@/components/call/AudioSettings';
+import CallControls from '@/components/call/CallControls';
 
-// Outcome mapping: numeric key -> (label, LeadStatus, optional validation)
 interface OutcomeOption {
   key: number;
   label: string;
@@ -41,9 +32,6 @@ const OUTCOMES: OutcomeOption[] = [
   { key: 6, label: 'Booked meeting', status: 'meeting_booked', requiresFollowUp: false, shortcut: '6' },
   { key: 7, label: 'Wrong number', status: 'dead', requiresFollowUp: false, shortcut: '7' },
 ];
-
-// DTMF buttons shown during an active call (0-9, *, #)
-const DTMF_BUTTONS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
 type CallPhase = 'idle' | 'ringing' | 'in-call';
 
@@ -66,27 +54,19 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Use the shared Telnyx call hook
   const {
     status: callStatus,
     message: callMessage,
     durationSeconds,
-    isMuted,
-    isHeld,
     callLogId,
     callerNumber: hookCallerNumber,
     remoteVolume,
     micVolume,
     startCall: hookStartCall,
-    endCall: hookEndCall,
-    toggleMute,
-    toggleHold,
-    sendDTMF,
     setVolume: hookSetVolume,
     setMicVolume: hookSetMicVolume,
   } = useTelnyxCall();
 
-  // Map hook status to the page's callPhase
   const callPhase: CallPhase =
     callStatus === 'connecting' || callStatus === 'ringing' ? 'ringing' :
     callStatus === 'in-call' || callStatus === 'held' ? 'in-call' : 'idle';
@@ -94,7 +74,6 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Sort: callbacks due today first, then 'new', then the rest
   const sortedLeads = [...leads].sort((a, b) => {
     const aDueToday = a.next_follow_up_at
       ? new Date(a.next_follow_up_at).setHours(0, 0, 0, 0) === today.getTime()
@@ -112,12 +91,10 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     return 0;
   });
 
-  // Filter out terminal statuses
   const activeLeads = sortedLeads.filter(l =>
     !['not_interested', 'meeting_booked', 'dead'].includes(l.status)
   );
 
-  // Search filter on the queue list
   const filteredQueue = searchQuery.trim()
     ? activeLeads.filter(l => {
         const q = searchQuery.toLowerCase();
@@ -129,8 +106,6 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
       })
     : activeLeads;
 
-  // currentLead should be based on activeLeads (not filteredQueue)
-  // so that we don't skip leads when the filter hides them
   const currentLead = activeLeads[currentIndex];
   const progress = calledSet.size;
 
@@ -155,12 +130,6 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     }
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const startCall = async () => {
     if (!currentLead?.phone) return;
     if (!hookCallerNumber) {
@@ -171,17 +140,11 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     await hookStartCall(currentLead.phone, currentLead.id);
   };
 
-  const endCall = () => {
-    hookEndCall();
-  };
-
   const selectOutcome = (outcome: OutcomeOption) => {
     if (callPhase !== 'idle') return;
     setSelectedOutcome(outcome);
   };
 
-  // Save handler: uses the log_call_outcome Postgres function
-  // This performs the lead update + activity insert atomically
   const handleSave = async () => {
     if (!selectedOutcome || !currentLead || saving) return;
     if (!user) return;
@@ -190,7 +153,6 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
       setSaveError('Follow-up date is required for "Call back"');
       return;
     }
-    // Validate follow-up date: today or later (using local day, not timestamp)
     if (followUpDate) {
       const selected = new Date(followUpDate);
       selected.setHours(0, 0, 0, 0);
@@ -219,14 +181,16 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
         console.error('log_call_outcome error:', fnError);
         setSaveError(fnError.message || 'Failed to save. Check RLS permissions.');
         setSaving(false);
-        return; // Do NOT advance to next lead
+        return;
       }
 
       setCalledSet(s => new Set([...s, currentLead.id]));
       setToast(`Saved: ${selectedOutcome.label}`);
       setTimeout(() => setToast(null), 2000);
 
-      resetCallState();
+      setSelectedOutcome(null);
+      setNotes('');
+      setFollowUpDate('');
       loadNextLead();
     } catch {
       setSaveError('Failed to save. Try again.');
@@ -235,23 +199,15 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     }
   };
 
-  const resetCallState = () => {
-    setSelectedOutcome(null);
-    setNotes('');
-    setFollowUpDate('');
-  };
-
   const loadNextLead = () => {
     const remaining = activeLeads.slice(currentIndex + 1);
     setCurrentIndex(remaining.length === 0 ? activeLeads.length : currentIndex + 1);
   };
 
-  // Keyboard shortcuts: 1-7 select outcomes, Enter saves
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (loading || saving) return;
 
-      // Ignore shortcuts when a textarea or input is focused
       const active = document.activeElement;
       if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
         return;
@@ -437,105 +393,8 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
                     )}
                   </button>
                 )}
-                {(callPhase === 'ringing' || callStatus === 'connecting') && (
-                  <div className="flex items-center justify-center gap-2 text-yellow-400">
-                    <Clock className="w-4 h-4 animate-pulse" />
-                    <span>{callMessage || 'Connecting...'}</span>
-                  </div>
-                )}
-                {callPhase === 'in-call' && (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="flex items-center gap-2 text-gray-300 font-mono">
-                      <Clock className="w-4 h-4" />
-                      {formatDuration(durationSeconds)}
-                    </div>
 
-                    {/* Mic mute / unmute */}
-                    <button
-                      onClick={toggleMute}
-                      className={`p-2 rounded-lg transition ${
-                        isMuted
-                          ? 'bg-red-600 text-white'
-                          : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
-                      }`}
-                      title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-                    >
-                      {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </button>
-
-                    {/* Hold / Resume */}
-                    <button
-                      onClick={toggleHold}
-                      className={`p-2 rounded-lg transition ${
-                        isHeld
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
-                      }`}
-                      title={isHeld ? 'Resume call' : 'Hold call'}
-                    >
-                      {isHeld ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-                    </button>
-
-                    {/* DTMF Keypad */}
-                    {DTMF_BUTTONS.map((btn) => (
-                      <button
-                        key={btn}
-                        onClick={() => sendDTMF(btn)}
-                        className="px-2 py-1 text-xs bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 rounded transition"
-                        aria-label={`DTMF ${btn}`}
-                      >
-                        {btn}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Volume controls available before and during a call */}
-                <div className="flex flex-col items-center gap-3">
-                  <div className="flex items-center gap-2 w-full max-w-xs">
-                    <Volume2 className="w-4 h-4 text-gray-500" />
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={remoteVolume}
-                      onChange={(e) => hookSetVolume(parseFloat(e.target.value))}
-                      className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer"
-                      aria-label="Speaker volume"
-                    />
-                    <span className="text-xs text-gray-500 w-8 text-right">
-                      {Math.round(remoteVolume * 100)}%
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full max-w-xs">
-                    <Mic className="w-4 h-4 text-gray-500" />
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={micVolume}
-                      onChange={(e) => hookSetMicVolume(parseFloat(e.target.value))}
-                      className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer"
-                      aria-label="Microphone volume"
-                    />
-                    <span className="text-xs text-gray-500 w-8 text-right">
-                      {Math.round(micVolume * 100)}%
-                    </span>
-                  </div>
-
-                  {(callPhase === 'ringing' || callPhase === 'in-call') && (
-                    <button
-                      onClick={endCall}
-                      className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white"
-                      title="End call"
-                    >
-                      <PhoneOff className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+                <CallControls layout="vertical" showTimer={true} showPreCallVolume={true} />
               </div>
             </>
           )}
@@ -614,7 +473,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
               ) : (
                 <>
                   <CheckCircle className="w-4 h-4" />
-                  <span>Save &amp; Next</span>
+                  <span>Save & Next</span>
                 </>
               )}
             </button>

@@ -15,11 +15,13 @@ import { useTelnyxCall } from '@/hooks/use-telnyx-call';
 interface CallControlsProps {
   showTimer?: boolean;
   layout?: 'horizontal' | 'vertical';
+  showPreCallVolume?: boolean;
 }
 
 export default function CallControls({
   showTimer = true,
   layout = 'horizontal',
+  showPreCallVolume = false,
 }: CallControlsProps) {
   const {
     status,
@@ -29,7 +31,9 @@ export default function CallControls({
     isHeld,
     remoteMutedForMoreThan10s,
     remoteVolume,
+    micVolume,
     setVolume,
+    setMicVolume,
     toggleMute,
     toggleHold,
     endCall,
@@ -147,6 +151,40 @@ export default function CallControls({
           <PhoneOff className="w-4 h-4" />
           <span className="text-xs">End call</span>
         </button>
+      )}
+
+      {/* Pre-call volume controls */}
+      {showPreCallVolume && !callInProgress && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <Volume2 className="w-3 h-3" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={remoteVolume}
+              onChange={(e) => setVolume(parseFloat(e.target.value))}
+              className="w-16 h-1.5 bg-[#27272a] rounded appearance-none cursor-pointer slider"
+              aria-label="Speaker volume"
+            />
+            <span className="w-8 text-right">{Math.round(remoteVolume * 100)}%</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <Mic className="w-3 h-3" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={micVolume}
+              onChange={(e) => setMicVolume(parseFloat(e.target.value))}
+              className="w-16 h-1.5 bg-[#27272a] rounded appearance-none cursor-pointer slider"
+              aria-label="Microphone volume"
+            />
+            <span className="w-8 text-right">{Math.round(micVolume * 100)}%</span>
+          </div>
+        </div>
       )}
     </div>
   );
