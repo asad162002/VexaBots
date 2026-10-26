@@ -21,6 +21,7 @@ import {
   Speaker,
 } from 'lucide-react';
 import { useTelnyxCall } from '@/hooks/use-telnyx-call';
+import AudioSettings from '@/components/call/AudioSettings';
 
 // Outcome mapping: numeric key -> (label, LeadStatus, optional validation)
 interface OutcomeOption {
@@ -302,6 +303,9 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
             {progress} of {activeLeads.length} called today
           </p>
         </div>
+        {callPhase === 'idle' && (
+          <AudioSettings />
+        )}
       </div>
 
       {error && (
