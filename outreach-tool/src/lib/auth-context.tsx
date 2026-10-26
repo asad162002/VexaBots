@@ -10,6 +10,7 @@ interface Profile {
   full_name: string | null;
   role: string | null;
   phone_number: string | null;
+  caller_id_number: string | null;
   avatar_url: string | null;
   telnyx_credential_id?: string | null;
   created_at: string;
@@ -47,14 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role, phone_number, avatar_url, created_at, updated_at')
+      .select('id, email, full_name, role, phone_number, caller_id_number, avatar_url, created_at, updated_at')
       .eq('id', userId)
       .single();
 
     if (!error && data) {
       setProfile(data);
       setIsAdmin(data.role === 'admin');
-      setCallerNumber(data.phone_number);
+      setCallerNumber(data.caller_id_number);
     }
   };
 
