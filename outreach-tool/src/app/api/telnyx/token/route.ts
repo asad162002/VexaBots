@@ -39,10 +39,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid session.' }, { status: 401 });
   }
 
-  // Load the member's profile to get their Telnyx credential ID and phone number
+  // Load the member's profile to get their Telnyx credential ID and assigned caller-ID number
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('phone_number, telnyx_credential_id')
+    .select('caller_id_number, telnyx_credential_id')
     .eq('id', user.id)
     .single();
 
@@ -50,21 +50,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Profile not found.' }, { status: 404 });
   }
 
-  if (!profile.phone_number) {
-    return NextResponse.json({
-      error: 'No phone number assigned. Ask your admin to assign you a Telnyx caller-ID number.'
-    }, { status: 400 });
-  }
-
   if (!profile.telnyx_credential_id) {
     return NextResponse.json({
       error: 'No Telnyx credential configured for your account. Contact your admin.'
     }, { status: 400 });
-  }
-
-  if (!telnyxApiKey) {
-    console.error('TELNYX_ACCESS_TOKEN is not set.');
-    return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
   }
 
   // Generate a WebRTC login token (JWT) from the Telnyx API
@@ -98,7 +87,7 @@ export async function GET(request: NextRequest) {
     // The response body is the raw JWT string (not JSON)
     const token = await response.text();
 
-    return NextResponse.json({ token, callerNumber: profile.phone_number });
+    return NextResponse.json({ token, callerNumber: profile.caller_id_number });
   } catch (err) {
     console.error('Telnyx token generation error:', err);
     return NextResponse.json({ error: 'Failed to generate token.' }, { status: 500 });

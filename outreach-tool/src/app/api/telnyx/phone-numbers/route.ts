@@ -12,13 +12,15 @@ export async function GET(request: Request) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
   const token = authHeader.substring(7);
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRole, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
   if (authError || !user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
-  const admin = createClient(supabaseUrl, supabaseServiceRole);
-  const { data: profile } = await admin
+  const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('role')
     .eq('id', user.id)
