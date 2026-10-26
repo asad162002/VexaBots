@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 // The caller is derived from the verified session.
 //
 // Required body: { to_number: string, lead_id: string }
-// The from_number is taken from the caller's profile (phone_number).
+// The from_number is taken from the caller's profile caller_id_number (their assigned Telnyx number).
 // lead_id is REQUIRED because the call_logs.lead_id column is NOT NULL.
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -44,14 +44,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'lead_id is required' }, { status: 400 });
   }
 
-  // Derive caller's phone number from the session
+  // Derive caller's assigned Telnyx number from the session profile
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('phone_number, telnyx_credential_id')
+    .select('caller_id_number, telnyx_credential_id')
     .eq('id', user.id)
     .single();
 
-  if (profileError || !profile?.phone_number) {
+  if (profileError || !profile?.caller_id_number) {
     return NextResponse.json({
       error: 'No phone number assigned to your account. Add one in Settings first.'
     }, { status: 400 });
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     .from('call_logs')
     .insert({
       caller_id: user.id,
-      from_number: profile.phone_number,
+      from_number: profile.caller_id_number,
       to_number: normalizedTo,
       lead_id: lead_id,
       status: 'initiated',
