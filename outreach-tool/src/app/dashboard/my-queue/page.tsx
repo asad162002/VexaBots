@@ -49,8 +49,6 @@ export default function MyQueuePage() {
   const [meetingMap, setMeetingMap] = useState<Record<string, { when: string }>>({});
   const [showCal, setShowCal] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
-  const [showKeypad, setShowKeypad] = useState(false);
-  const [keypadInput, setKeypadInput] = useState('');
 
   const {
     status: callStatus,
@@ -74,13 +72,8 @@ export default function MyQueuePage() {
     callStatus === 'connecting' || callStatus === 'ringing' ? 'ringing' :
     callStatus === 'in-call' || callStatus === 'held' ? 'in-call' : 'idle';
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
   const activeLeads = useMemo(() => {
-    return leads.filter(l =>
-      !['not_interested', 'meeting_booked', 'dead'].includes(l.status)
-    );
+    return leads.filter(l => !['not_interested', 'meeting_booked', 'dead'].includes(l.status));
   }, [leads]);
 
   const filteredQueue = useMemo(() => {
@@ -97,10 +90,8 @@ export default function MyQueuePage() {
   const progress = calledSet.size;
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!isAdmin) {
-      loadQueue();
-    }
+    if (authLoading || isAdmin) return;
+    loadQueue();
   }, [authLoading, isAdmin]);
 
   const loadQueue = async () => {
@@ -113,26 +104,12 @@ export default function MyQueuePage() {
       const { data, error: err } = await query;
       if (err) throw err;
       setLeads(data ?? []);
+      setCurrentIndex(0);
     } catch {
       setError('Failed to load queue.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleStartCall = async () => {
-    if (!currentLead?.phone) return;
-    await startCall(currentLead.phone, currentLead.id);
-  };
-
-  const handleEndCall = () => {
-    endCall();
   };
 
   const handleSelectOutcome = (outcome: OutcomeOption) => {
@@ -142,47 +119,40 @@ export default function MyQueuePage() {
 
   const handleSave = async () => {
     if (!selectedOutcome || !currentLead || saving) return;
-
     setSaving(true);
     setSaveError(null);
-
     try {
       const { data, error: fnError } = await supabase.rpc('log_call_outcome', {
         p_lead_id: currentLead.id,
         p_status: selectedOutcome.status,
         p_notes: notes || selectedOutcome.label,
-        p_follow_up_at: selectedOutcome.requiresFollowUp && followUpDate
-          ? new Date(followUpDate).toISOString()
-          : null,
+        p_follow_up_at: selectedOutcome.requiresFollowUp && followUpDate ? new Date(followUpDate).toISOString() : null,
         p_call_log_id: callLogId || null,
         p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
       });
-
       if (fnError) {
         setSaveError(fnError.message || 'Failed to save.');
         setSaving(false);
         return;
       }
-
       setCalledSet(s => new Set([...s, currentLead.id]));
       setOutcomeMap(m => ({ ...m, [currentLead.id]: selectedOutcome.label }));
       setToast(`Saved: ${selectedOutcome.label}`);
       setTimeout(() => setToast(null), 2000);
-
       setSelectedOutcome(null);
       setNotes('');
       setFollowUpDate('');
-      loadNextLead();
+      const remaining = activeLeads.slice(currentIndex + 1);
+      if (remaining.length === 0) {
+        setCurrentIndex(activeLeads.length);
+      } else {
+        setCurrentIndex(currentIndex + 1);
+      }
     } catch {
       setSaveError('Failed to save. Try again.');
     } finally {
       setSaving(false);
     }
-  };
-
-  const loadNextLead = () => {
-    const remaining = activeLeads.slice(currentIndex + 1);
-    setCurrentIndex(remaining.length === 0 ? activeLeads.length : currentIndex + 1);
   };
 
   useEffect(() => {
@@ -192,31 +162,23 @@ export default function MyQueuePage() {
       if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
         return;
       }
-
       const canSelectOutcome = callPhase === 'idle' || !!meetingMap[currentLead?.id || ''];
-
       if (e.key >= '1' && e.key <= '7' && canSelectOutcome) {
         e.preventDefault();
         const outcome = OUTCOMES.find(o => o.key === parseInt(e.key));
         if (outcome) handleSelectOutcome(outcome);
       }
-
       if (e.key.toLowerCase() === 'm' && (callPhase === 'ringing' || callPhase === 'in-call')) {
         e.preventDefault();
         toggleMute();
       }
     };
-
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [callPhase, currentLead, meetingMap, saving, authLoading, toggleMute]);
 
   const handleBookMeeting = () => {
     setShowCal(true);
-  };
-
-  const handleCallEnd = () => {
-    // noop: CallPanel handles its own state
   };
 
   if (authLoading) {
@@ -253,285 +215,266 @@ export default function MyQueuePage() {
       </div>
     );
   }
-    return (
-      <div className="p-6 min-h-screen bg-[#0f0f0f]">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-white">My Queue</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {progress} of {activeLeads.length} called today
-              </p>
+
+  return (
+    <div className="p-6 min-h-screen bg-[#0f0f0f]">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">My Queue</h1>
+            <p className="text-sm text-gray-500 mt-0.5">{progress} of {activeLeads.length} called today</p>
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setShowAudio(!showAudio)}
+              className="p-2 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 transition"
+              aria-label="Audio settings"
+              title="Audio settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            {showAudio && (
+              <div className="absolute right-0 bottom-full mb-2 w-64 bg-[#1a1a1a] border border-[#27272a] rounded-lg shadow-xl p-4 z-50">
+                <AudioSettings />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">{error}</div>
+        )}
+
+        {toast && (
+          <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400">{toast}</div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 overflow-y-auto max-h-[600px]">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Queue</p>
+            <div className="relative mb-3">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, phone..."
+                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-7 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                aria-label="Search leads"
+              />
             </div>
-            <div className="relative">
-              <button
-                onClick={() => setShowAudio(!showAudio)}
-                className="p-2 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 transition"
-                aria-label="Audio settings"
-                title="Audio settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              {showAudio && (
-                <div className="absolute right-0 bottom-full mb-2 w-64 bg-[#1a1a1a] border border-[#27272a] rounded-lg shadow-xl p-4 z-50">
-                  <AudioSettings />
-                </div>
-              )}
+            <div className="space-y-1">
+              {filteredQueue.map((l) => {
+                const originalIndex = activeLeads.findIndex(a => a.id === l.id);
+                const isDone = calledSet.has(l.id);
+                const outcomeLabel = outcomeMap[l.id];
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => setCurrentIndex(originalIndex)}
+                    disabled={callPhase !== 'idle'}
+                    className={`w-full text-left p-2.5 rounded-lg text-sm transition ${
+                      originalIndex === currentIndex ? 'border-l-2 border-blue-500 bg-[#27272a]/30' : 'hover:bg-[#27272a]/20'
+                    } ${isDone ? 'opacity-50' : ''}`}
+                  >
+                    <div className="font-medium text-white truncate">{l.title || 'Untitled'}</div>
+                    <div className="text-xs text-gray-500">{l.owner_name || ''} · {l.phone || ''}</div>
+                    {isDone && outcomeLabel && (
+                      <div className="text-xs text-green-400 mt-0.5">{outcomeLabel}</div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left: Queue */}
-            <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 overflow-y-auto max-h-[600px]">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Queue</p>
-              <div className="relative mb-3">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-500" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search name, phone..."
-                  className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-7 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  aria-label="Search leads"
-                />
-              </div>
-              <div className="space-y-1">
-                {filteredQueue.map((l, idx) => {
-                  const originalIndex = activeLeads.findIndex(a => a.id === l.id);
-                  const isDone = calledSet.has(l.id);
-                  const outcomeLabel = outcomeMap[l.id];
-                  return (
-                    <button
-                      key={l.id}
-                      onClick={() => {
-                        setCurrentIndex(originalIndex);
-                      }}
-                      disabled={callPhase !== 'idle'}
-                      className={`w-full text-left p-2.5 rounded-lg text-sm transition ${
-                        originalIndex === currentIndex
-                          ? 'border-l-2 border-blue-500 bg-[#27272a]/30'
-                          : 'hover:bg-[#27272a]/20'
-                      } ${isDone ? 'opacity-50' : ''}`}
-                    >
-                      <div className="font-medium text-white truncate">{l.title || 'Untitled'}</div>
-                      <div className="text-xs text-gray-500">{l.owner_name || ''} · {l.phone || ''}</div>
-                      {isDone && outcomeLabel && (
-                        <div className="text-xs text-green-400 mt-0.5">{outcomeLabel}</div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Center: Lead Card */}
-            <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-              {currentLead ? (
-                <>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 className="text-xl font-bold text-white">
-                        {currentLead.title || 'Untitled Business'}
-                      </h2>
-                      {currentLead.owner_name && (
-                        <p className="text-sm text-gray-400 mt-1">
-                          {currentLead.owner_name}
-                          {currentLead.owner_role && ` — ${currentLead.owner_role}`}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold bg-gray-500/20 text-gray-400 border border-gray-500/30">
-                      {currentLead.source.replace('_', ' ')}
-                    </span>
+          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+            {currentLead ? (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">{currentLead.title || 'Untitled Business'}</h2>
+                    {currentLead.owner_name && (
+                      <p className="text-sm text-gray-400 mt-1">
+                        {currentLead.owner_name}
+                        {currentLead.owner_role && ` — ${currentLead.owner_role}`}
+                      </p>
+                    )}
                   </div>
+                  <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                    {currentLead.source.replace('_', ' ')}
+                  </span>
+                </div>
 
-                  <div className="flex flex-wrap gap-3 mt-4">
-                    {currentLead.website && (
+                <div className="flex flex-wrap gap-3 mt-4">
+                  {currentLead.website && (
+                    <a
+                      href={currentLead.website.startsWith('http') ? currentLead.website : `https://${currentLead.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Visit Website
+                    </a>
+                  )}
+                  {(currentLead.meeting_link || process.env.NEXT_PUBLIC_CALCOM_USERNAME) && (
+                    <button
+                      onClick={handleBookMeeting}
+                      className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+                    >
+                      <Calendar className="w-4 h-4" />
+                      {currentLead.meeting_link ? 'View Meeting' : 'Book Meeting'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {currentLead.phone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone className="w-4 h-4 text-gray-500" />
+                      <span className="text-gray-300">{currentLead.phone}</span>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(currentLead.phone!)}
+                        className="text-xs text-blue-400 hover:text-blue-300"
+                        title="Copy phone"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                  {currentLead.city && (
+                    <div className="text-sm text-gray-400">📍 {currentLead.city}</div>
+                  )}
+                  {currentLead.category_name && (
+                    <div className="text-sm text-gray-400">🏷️ {currentLead.category_name}</div>
+                  )}
+                  {currentLead.website && (
+                    <div className="text-sm text-gray-400">
+                      🌐{' '}
                       <a
                         href={currentLead.website.startsWith('http') ? currentLead.website : `https://${currentLead.website}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+                        className="text-blue-400 hover:text-blue-300"
                       >
-                        <ExternalLink className="w-4 h-4" />
-                        Visit Website
+                        {currentLead.website}
                       </a>
-                    )}
-                    {(currentLead.meeting_link || process.env.NEXT_PUBLIC_CALCOM_USERNAME) && (
-                      <button
-                        onClick={handleBookMeeting}
-                        className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
-                      >
-                        <Calendar className="w-4 h-4" />
-                        {currentLead.meeting_link ? 'View Meeting' : 'Book Meeting'}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    {currentLead.phone && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="w-4 h-4 text-gray-500" />
-                        <span className="text-gray-300">{currentLead.phone}</span>
-                        <button
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(currentLead.phone!)}
-                          className="text-xs text-blue-400 hover:text-blue-300"
-                          title="Copy phone"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
-                    {currentLead.city && (
-                      <div className="text-sm text-gray-400">📍 {currentLead.city}</div>
-                    )}
-                    {currentLead.category_name && (
-                      <div className="text-sm text-gray-400">🏷️ {currentLead.category_name}</div>
-                    )}
-                    {currentLead.website && (
-                      <div className="text-sm text-gray-400">
-                        🌐{' '}
-                        <a
-                          href={currentLead.website.startsWith('http') ? currentLead.website : `https://${currentLead.website}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300"
-                        >
-                          {currentLead.website}
-                        </a>
-                      </div>
-                    )}
-                    {currentLead.reviews_count && (
-                      <div className="text-sm text-gray-400">
-                        ⭐ {currentLead.total_score} ({currentLead.reviews_count} reviews)
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-4">
-                    <CallPanel lead={currentLead} />
-                  </div>
-
-                  {meetingMap[currentLead.id] && (
-                    <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400">
-                      ✓ Meeting booked: {meetingMap[currentLead.id].when}
-                      <button
-                        onClick={handleBookMeeting}
-                        className="ml-2 text-xs text-green-300 underline"
-                      >
-                        Reschedule
-                      </button>
                     </div>
                   )}
-
-                  <LeadDetails lead={currentLead} />
-                </>
-              ) : (
-                <p className="text-sm text-gray-400">Select a lead from the queue.</p>
-              )}
-            </div>
-
-            {/* Right: After-call panel */}
-            <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">After the Call</p>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
-                    Outcome (1-7 keys or click)
-                  </label>
-                  <div className="grid grid-cols-1 gap-1.5 mt-1">
-                    {OUTCOMES.map((outcome) => (
-                      <button
-                        key={outcome.key}
-                        onClick={() => handleSelectOutcome(outcome)}
-                        disabled={callPhase !== 'idle'}
-                        className={`text-left px-3 py-2 rounded-lg text-sm transition ${
-                          selectedOutcome?.key === outcome.key
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46] hover:text-white'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      >
-                        <span className="font-medium">{outcome.shortcut}</span>. {outcome.label}
-                      </button>
-                    ))}
-                  </div>
+                  {currentLead.reviews_count && (
+                    <div className="text-sm text-gray-400">
+                      ⭐ {currentLead.total_score} ({currentLead.reviews_count} reviews)
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
-                    Notes
-                  </label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="What did they say?"
-                    className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                    rows={3}
-                  />
+                <div className="mt-4">
+                  <CallPanel lead={currentLead} />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
-                    Follow-up date
-                  </label>
-                  <input
-                    type="date"
-                    value={followUpDate}
-                    onChange={(e) => setFollowUpDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                {saveError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                    <p className="text-sm text-red-400">{saveError}</p>
+                {meetingMap[currentLead.id] && (
+                  <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400">
+                    ✓ Meeting booked: {meetingMap[currentLead.id].when}
+                    <button
+                      onClick={handleBookMeeting}
+                      className="ml-2 text-xs text-green-300 underline"
+                    >
+                      Reschedule
+                    </button>
                   </div>
                 )}
 
-                <button
-                  onClick={handleSave}
-                  disabled={!selectedOutcome || saving || callPhase !== 'idle'}
-                  className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Save & Next</span>
-                    </>
-                  )}
-                </button>
+                <LeadDetails lead={currentLead} />
+              </>
+            ) : (
+              <p className="text-sm text-gray-400">Select a lead from the queue.</p>
+            )}
+          </div>
+
+          <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">After the Call</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+                  Outcome (1-7 keys or click)
+                </label>
+                <div className="grid grid-cols-1 gap-1.5 mt-1">
+                  {OUTCOMES.map((outcome) => (
+                    <button
+                      key={outcome.key}
+                      onClick={() => handleSelectOutcome(outcome)}
+                      disabled={callPhase !== 'idle' && !meetingMap[currentLead?.id || '']}
+                      className={`text-left px-3 py-2 rounded-lg text-sm transition ${
+                        selectedOutcome?.key === outcome.key
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46] hover:text-white'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      <span className="font-medium">{outcome.shortcut}</span>. {outcome.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Notes</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="What did they say?"
+                  className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Follow-up date</label>
+                <input
+                  type="date"
+                  value={followUpDate}
+                  onChange={(e) => setFollowUpDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {saveError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-sm text-red-400">{saveError}</p>
+                </div>
+              )}
+
+              <button
+                onClick={handleSave}
+                disabled={!selectedOutcome || saving || (callPhase !== 'idle' && !meetingMap[currentLead?.id || ''])}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Save & Next</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
       </div>
-    );
-  }
 
-  // Admin view: keep existing lead page behavior
-  if (isAdmin) {
-    return (
-      <div className="p-6 min-h-screen bg-[#0f0f0f]">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-white mb-4">Admin Lead Workspace</h1>
-          <p className="text-sm text-gray-400">Admins should use the lead detail pages.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
+      {showCal && currentLead && (
+        <CalComModal
+          lead={currentLead}
+          show={showCal}
+          onClose={() => setShowCal(false)}
+        />
+      )}
+    </div>
+  );
 }
