@@ -18,10 +18,10 @@ import {
 } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true },
-  { href: '/dashboard/calls', label: 'Call Dialer', icon: Phone },
-  { href: '/dashboard/my-queue', label: 'My Queue', icon: Clock, members: true },
-  { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users },
+  { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true, hiddenFromMembers: true },
+  { href: '/dashboard/calls', label: 'Call Dialer', icon: Phone, hiddenFromMembers: true },
+  { href: '/dashboard/my-queue', label: 'My Queue', icon: Clock },
+  { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users, hiddenFromMembers: true },
   { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard, adminOnly: true },
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus, adminOnly: true },
   { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload, adminOnly: true },
@@ -44,10 +44,14 @@ export default function DashboardLayout({
       router.push('/');
     }
     // Redirect non-admins away from admin-only pages
-    const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/leads/new', '/dashboard/import'];
+    const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/leads/new', '/dashboard/import', '/dashboard/leads/', '/dashboard/calls'];
     const isCurrentAdminOnly = adminOnlyPaths.some(p => pathname.startsWith(p));
     if (!loading && user && isCurrentAdminOnly && !isAdmin) {
-      router.push('/dashboard');
+      router.push('/dashboard/my-queue');
+    }
+    // Members land on My Queue after login
+    if (!loading && user && !isAdmin && pathname === '/dashboard') {
+      router.push('/dashboard/my-queue');
     }
   }, [user, loading, router, isAdmin, pathname]);
 
@@ -80,7 +84,12 @@ export default function DashboardLayout({
 
         {/* Navigation */}
         <nav className="flex-1 py-4 px-3 space-y-1">
-          {NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map((item) => {
+          {NAV_ITEMS.filter(item => {
+            if (isAdmin) return true;
+            if (item.adminOnly) return false;
+            if (item.hiddenFromMembers) return false;
+            return true;
+          }).map((item) => {
             const Icon = item.icon;
             const isActive = item.exact
               ? pathname === item.href

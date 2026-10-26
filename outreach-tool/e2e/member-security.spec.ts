@@ -1,28 +1,45 @@
 import { test, expect } from '@playwright/test';
 
-// These tests verify RLS policies at the SQL level.
-// They require the migration 20261023000002_rls_hardening.sql to be applied.
-// Run the SQL in e2e/security-tests.sql directly in the Supabase SQL editor
-// with a test member JWT to verify enforcement.
-
-// For Playwright UI-level tests, a member test user must exist in the DB.
-// The tests below assume the app is running at localhost:3000
-
-test.describe('Member security: cannot escalate privileges', () => {
-  test.skip('Profile role cannot be changed to admin by member', async () => {
-    // This is verified via SQL in e2e/security-tests.sql
-    // At the SQL level, the profiles trigger blocks non-admin updates to role
+test.describe('Member access restrictions', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#email').fill('asadisdying007@gmail.com');
+    await page.locator('#password').fill('test1234');
+    await page.getByRole('button', { name: /Sign In/i }).click();
+    await page.waitForURL('**/dashboard**', { timeout: 15000 });
   });
 
-  test.skip('Member cannot read other members leads', async () => {
-    // Verified via SQL: leads_select requires assigned_to = auth.uid()
+  test('member lands on My Queue and not /dashboard', async ({ page }) => {
+    await expect(page).toHaveURL(new RegExp('\\/dashboard\\/my-queue'));
   });
 
-  test.skip('Member cannot reassign a lead', async () => {
-    // Verified via SQL: leads_update WITH CHECK blocks non-admin column changes
+  test('member is redirected from Leads list to My Queue', async ({ page }) => {
+    await page.goto('/dashboard');
+    await page.waitForURL('**/dashboard/my-queue', { timeout: 10000 });
   });
 
-  test.skip('Member cannot delete a lead', async () => {
-    // Verified via SQL: leads_delete is admin-only
+  test('member is redirected from Call Dialer to My Queue', async ({ page }) => {
+    await page.goto('/dashboard/calls');
+    await page.waitForURL('**/dashboard/my-queue', { timeout: 10000 });
+  });
+
+  test('member does not see admin-only sidebar links', async ({ page }) => {
+    await page.goto('/dashboard/my-queue');
+    await page.waitForTimeout(1000);
+
+    const labels = ['Leads', 'Call Dialer', 'LinkedIn Leads', 'Assignment Log', 'Add Lead', 'Import CSV/JSON'];
+    for (const label of labels) {
+      await expect(page.getByRole('link', { name: label })).toHaveCount(0);
+    }
+  });
+
+  test('member sees allowed sidebar links', async ({ page }) => {
+    await page.goto('/dashboard/my-queue');
+    await page.waitForTimeout(1000);
+
+    await expect(page.getByRole('link', { name: 'My Queue' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Analytics' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Activity Feed' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible();
   });
 });
