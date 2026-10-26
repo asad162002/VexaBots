@@ -206,7 +206,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
     try {
       const { data, error: fnError } = await supabase.rpc('log_call_outcome', {
         p_lead_id: currentLead.id,
-        p_outcome_status: selectedOutcome.status,
+        p_status: selectedOutcome.status,
         p_notes: notes || selectedOutcome.label,
         p_follow_up_at: selectedOutcome.requiresFollowUp && followUpDate
           ? new Date(followUpDate).toISOString()

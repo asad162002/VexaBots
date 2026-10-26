@@ -473,10 +473,13 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
   // --- Cleanup on unmount ---
   useEffect(() => {
+    // Enumerate devices on mount so device dropdowns are populated before a call
+    void enumerateDevices();
+
     return () => {
       cleanup();
     };
-  }, [cleanup]);
+  }, [cleanup, enumerateDevices]);
 
   // --- startCall ---
   const startCall = useCallback(async (leadPhone: string, leadId?: string) => {
