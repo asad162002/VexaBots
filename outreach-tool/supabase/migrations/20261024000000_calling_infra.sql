@@ -62,8 +62,15 @@ alter table public.call_logs
   add column if not exists telnyx_call_session_id text;
 
 -- ============================================================
+-- Add telnyx_credential_id to call_logs (tracks which credential placed each call)
+-- ============================================================
+alter table public.call_logs
+  add column if not exists telnyx_credential_id text;
+
+-- ============================================================
 -- Trigger function: blocks non-admin profile edits to
--- role / phone_number. Uses NEW for row-level trigger.
+-- role, phone_number, and caller_id_number
+-- Uses NEW for row-level trigger.
 -- ============================================================
 create or replace function public.check_profile_privileges()
 returns trigger
@@ -75,7 +82,7 @@ begin
     return new;
   end if;
 
-  -- Only block changes to protected columns (role, phone_number)
+  -- Only block changes to protected columns (role, phone_number, caller_id_number)
   if (new.role is distinct from old.role) and not public.is_admin() then
     raise exception 'Unauthorized: only admins can modify the role column';
   end if;
@@ -84,9 +91,23 @@ begin
     raise exception 'Unauthorized: only admins can modify the phone_number column';
   end if;
 
+  if (new.caller_id_number is distinct from old.caller_id_number) and not public.is_admin() then
+    raise exception 'Unauthorized: only admins can modify the caller_id_number column';
+  end if;
+
   return new;
 end;
 $$;
+
+-- ============================================================
+-- Attach trigger (idempotent: drop before create)
+-- Now also fires on caller_id_number changes
+-- ============================================================
+drop trigger if exists profile_privilege_check on public.profiles;
+create trigger profile_privilege_check
+  before update of role, phone_number, caller_id_number on public.profiles
+  for each row
+  execute function public.check_profile_privileges();
 
 -- ============================================================
 -- Trigger function: prevents non-admins from changing protected
@@ -131,12 +152,6 @@ $$;
 -- ============================================================
 -- Attach triggers (idempotent: drop before create)
 -- ============================================================
-drop trigger if exists profile_privilege_check on public.profiles;
-create trigger profile_privilege_check
-  before update of role, phone_number on public.profiles
-  for each row
-  execute function public.check_profile_privileges();
-
 drop trigger if exists lead_assignment_lock on public.leads;
 create trigger lead_assignment_lock
   before update of assigned_to, assigned_by, assigned_at, owner_id, source, icp_score on public.leads
