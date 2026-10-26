@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useTelnyxCall } from '@/hooks/use-telnyx-call';
 import AudioSettings from '@/components/call/AudioSettings';
-import CallControls from '@/components/call/CallControls';
+import CallDialer from '@/components/CallDialer';
 
 interface OutcomeOption {
   key: number;
@@ -394,7 +394,7 @@ export default function MyQueuePage({ initialLeads }: MyQueuePageProps) {
                   </button>
                 )}
 
-                <CallControls layout="vertical" showTimer={true} showPreCallVolume={true} />
+                <CallDialer lead={currentLead} />
               </div>
             </>
           )}
