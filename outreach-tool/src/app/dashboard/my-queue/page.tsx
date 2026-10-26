@@ -227,6 +227,14 @@ export default function MyQueuePage() {
     );
   }
 
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
+        <div className="text-gray-400 text-sm">Redirecting to login...</div>
+      </div>
+    );
+  }
+
   if (!isAdmin) {
     return (
       <div className="p-6 min-h-screen bg-[#0f0f0f]">

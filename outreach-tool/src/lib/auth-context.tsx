@@ -60,35 +60,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
+      if (cancelled) return;
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
-        await loadProfile(sess.user.id);
+        try {
+          await loadProfile(sess.user.id);
+        } catch {
+          // ignore profile load failure; still clear loading so UI can render
+        }
       } else {
         setProfile(null);
         setIsAdmin(false);
         setCallerNumber(null);
       }
-      setLoading(false);
+      if (!cancelled) {
+        setLoading(false);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, sess) => {
+        if (cancelled) return;
         setSession(sess);
         setUser(sess?.user ?? null);
         if (sess?.user) {
-          await loadProfile(sess.user.id);
+          try {
+            await loadProfile(sess.user.id);
+          } catch {
+            // ignore
+          }
         } else {
           setProfile(null);
           setIsAdmin(false);
           setCallerNumber(null);
         }
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
