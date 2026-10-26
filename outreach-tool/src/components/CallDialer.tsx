@@ -12,6 +12,7 @@ import {
   Mic,
   MicOff,
   PhoneOff,
+  Volume2,
 } from 'lucide-react';
 import { useTelnyxCall } from '@/hooks/use-telnyx-call';
 
@@ -35,9 +36,13 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     durationSeconds,
     isMuted,
     callLogId,
+    remoteVolume,
+    micVolume,
     startCall,
     endCall,
     toggleMute,
+    setVolume,
+    setMicVolume,
   } = useTelnyxCall();
 
   const isCalling = status === 'connecting' || status === 'ringing' || status === 'in-call';
@@ -145,27 +150,69 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         )}
 
         {inCall && (
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-2 text-gray-300 font-mono">
               <Clock className="w-4 h-4" />
               {formatDuration(durationSeconds)}
             </div>
-            <button
-              onClick={toggleMute}
-              className={`p-2 rounded-lg transition ${
-                isMuted
-                  ? 'bg-red-600 text-white'
-                  : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
-              }`}
-            >
-              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={handleEndCall}
-              className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition"
-            >
-              <PhoneOff className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleMute}
+                className={`p-2 rounded-lg transition ${
+                  isMuted
+                    ? 'bg-red-600 text-white'
+                    : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+                }`}
+                title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+              >
+                {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+
+              {/* Speaker volume */}
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-gray-500" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={remoteVolume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="w-24 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
+                  aria-label="Speaker volume"
+                />
+                <span className="text-xs text-gray-500 w-8 text-right">
+                  {Math.round(remoteVolume * 100)}%
+                </span>
+              </div>
+
+              {/* Mic volume */}
+              <div className="flex items-center gap-2">
+                <Mic className="w-4 h-4 text-gray-500" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={micVolume}
+                  onChange={(e) => setMicVolume(parseFloat(e.target.value))}
+                  className="w-24 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer slider"
+                  aria-label="Microphone volume"
+                />
+                <span className="text-xs text-gray-500 w-8 text-right">
+                  {Math.round(micVolume * 100)}%
+                </span>
+              </div>
+
+              <button
+                onClick={endCall}
+                className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition"
+                title="End call"
+              >
+                <PhoneOff className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 

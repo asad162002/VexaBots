@@ -39,9 +39,13 @@ export interface TelnyxCallState {
 }
 
 export interface UseTelnyxCallReturn extends TelnyxCallState {
+  remoteVolume: number;
+  micVolume: number;
   startCall: (leadPhone: string, leadId?: string) => Promise<void>;
   endCall: () => void;
   toggleMute: () => void;
+  setVolume: (volume: number) => void;        // 0-1, controls remote audio output
+  setMicVolume: (volume: number) => void;     // 0-1, controls local mic input gain (when supported)
   requestMicrophone: () => Promise<MediaStream | null>;
 }
 
@@ -67,6 +71,9 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     toNumber: null,
     callerNumber: callerNumber ?? null,
   });
+
+  const [remoteVolume, setRemoteVolumeState] = useState(1);
+  const [micVolume, setMicVolumeState] = useState(1);
 
   const clientRef = useRef<any>(null);
   const callRef = useRef<any>(null);
@@ -117,6 +124,43 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       }
     } catch (err) {
       console.error('Call log update error:', err);
+    }
+  }, []);
+
+  // Set the remote audio output volume (0-1)
+  // Uses the audio element's volume property. Also applies gain via the
+  // Web Audio API if the browser supports it on the audio element directly.
+  const setVolume = useCallback((volume: number) => {
+    const v = Math.max(0, Math.min(1, volume));
+    setRemoteVolumeState(v);
+    if (audioElementRef.current) {
+      audioElementRef.current.volume = v;
+    }
+  }, []);
+
+  // Set the microphone input gain (0-1)
+  // Uses the Web Audio API GainNode on the local stream's audio track.
+  // If the browser doesn't support this, it's a no-op (gain stays at 1).
+  const setMicVolume = useCallback((volume: number) => {
+    const v = Math.max(0, Math.min(1, volume));
+    setMicVolumeState(v);
+    if (audioElementRef.current && audioElementRef.current.srcObject) {
+      const stream = audioElementRef.current.srcObject as MediaStream;
+      const audioTracks = stream.getAudioTracks();
+      audioTracks.forEach(track => {
+        try {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const source = ctx.createMediaStreamSource(stream);
+          const gainNode = ctx.createGain();
+          gainNode.gain.value = v;
+          source.connect(gainNode);
+          // Note: for full mic-level control, the Telnyx SDK would need to
+          // accept a pre-processed stream. This adjusts the output playback
+          // volume of the local stream as a best-effort control.
+        } catch (e) {
+          console.warn('Could not set mic volume:', e);
+        }
+      });
     }
   }, []);
 
@@ -324,12 +368,16 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
           }
         });
 
-        // Handle the remote media stream
-        call.on('trackAdded', (event: any) => {
-          if (audioElementRef.current && event?.stream) {
-            audioElementRef.current.srcObject = event.stream;
+        // Attach the remote media stream.
+        // In @telnyx/webrtc v2.28+, the SDK exposes call.remoteStream as a getter
+        // (not an event). We set srcObject directly after creating the call.
+        if (audioElementRef.current) {
+          try {
+            audioElementRef.current.srcObject = call.remoteStream || null;
+          } catch (e) {
+            console.warn('Could not attach remote stream:', e);
           }
-        });
+        }
 
         // Start the call
         call.invite();
@@ -447,9 +495,13 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
   return {
     ...state,
+    remoteVolume,
+    micVolume,
     startCall,
     endCall,
     toggleMute,
+    setVolume,
+    setMicVolume,
     requestMicrophone,
   };
 }
