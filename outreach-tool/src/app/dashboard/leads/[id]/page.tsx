@@ -285,12 +285,7 @@ function LeadDetailInner({ params }: { params: Promise<{ id: string }> }) {
           {lead.phone && (
             <div className="mt-6">
               <CallDialer
-                lead={{
-                  id: lead.id,
-                  phone: lead.phone,
-                  country_code: lead.country_code || null,
-                  owner_name: lead.owner_name || null,
-                }}
+                lead={lead}
               />
             </div>
           )}
