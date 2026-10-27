@@ -32,16 +32,8 @@ export default function CallPanel({ lead, onMeetingBooked, onCallEnd }: CallPane
 
   return (
     <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
-      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-        Phone dialer
-      </h2>
       <CallDialer
-        lead={{
-          id: lead.id,
-          phone: lead.phone,
-          country_code: lead.country_code || null,
-          owner_name: lead.owner_name || null,
-        }}
+        lead={lead}
         onCallEnd={onCallEnd}
       />
 
@@ -51,7 +43,7 @@ export default function CallPanel({ lead, onMeetingBooked, onCallEnd }: CallPane
           className="mt-3 w-full flex items-center justify-center gap-2 bg-[#7c3aed] hover:bg-[#6d28d4] active:bg-[#8b3bff] text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition"
         >
           <Calendar className="w-4 h-4" />
-          Book Meeting
+          <span>Book meeting</span>
         </button>
       )}
 
