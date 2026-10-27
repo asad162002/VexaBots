@@ -61,13 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout>;
 
     const finish = () => {
       if (!cancelled) setLoading(false);
     };
 
-    timeoutId = setTimeout(finish, 4000);
+    const timeoutId = setTimeout(finish, 4000);
 
     const init = async () => {
       try {
