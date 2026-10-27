@@ -11,7 +11,6 @@ import {
   CheckCircle,
   Mic,
   MicOff,
-  PhoneOff,
   Volume2,
   Play,
   Pause,
@@ -41,11 +40,11 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     callLogId,
     remoteVolume,
     micVolume,
+    callInProgress,
     startCall,
     endCall,
     toggleMute,
     toggleHold,
-    sendDTMF,
     setVolume,
     setMicVolume,
   } = useCall();
@@ -101,8 +100,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
   if (!lead?.phone) {
     return (
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-        <p className="text-sm text-gray-400">This lead has no phone number.</p>
+      <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
+        <p className="text-sm text-gray-500">This lead has no phone number.</p>
       </div>
     );
   }
@@ -110,17 +109,15 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
   const isError = status === 'error';
 
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
-        Phone Dialer
-      </h2>
-
-      <div className="space-y-4">
+    <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
+      <div className="space-y-3">
+        {/* Phone number display */}
         <div className="flex items-center gap-2 text-sm">
           <Phone className="w-4 h-4 text-gray-500" />
           <span className="text-gray-300">{lead.phone}</span>
         </div>
 
+        {/* Caller ID */}
         {!hookCallerNumber ? (
           <p className="text-xs text-gray-500">
             No caller number configured for your account. Ask your admin to assign you a Telnyx caller-ID number.
@@ -132,11 +129,30 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
           </div>
         )}
 
+        {/* Call status pill */}
+        {status === 'connecting' || status === 'ringing' ? (
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[#2a2410] text-yellow-400 border border-yellow-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse"></span>
+            Ringing...
+          </span>
+        ) : inCall ? (
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[#14261c] text-green-400 border border-green-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+            Connected
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[#14261c] text-green-400 border border-green-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+            Ready
+          </span>
+        )}
+
+        {/* Call button (idle) */}
         {!inCall && !callEnded && hookCallerNumber && (
           <button
             onClick={handleStartCall}
             disabled={isCalling}
-            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 active:bg-green-700 disabled:bg-green-800 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 bg-[#16a34a] hover:bg-[#15803d] active:bg-[#14532d] disabled:bg-[#1a2a1a] disabled:border disabled:border-[#2b2b3a] text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
           >
             {isCalling ? (
               <>
@@ -146,33 +162,16 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
             ) : (
               <>
                 <Phone className="w-4 h-4" />
-                <span>Call Now</span>
+                <span>Call now</span>
               </>
             )}
           </button>
         )}
 
-        {/* Volume controls always visible before and during a call */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2 w-full max-w-xs">
-            <Volume2 className="w-4 h-4 text-gray-500" />
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={remoteVolume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer"
-              aria-label="Speaker volume"
-            />
-            <span className="text-xs text-gray-500 w-8 text-right">
-              {Math.round(remoteVolume * 100)}%
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 w-full max-w-xs">
-            <Mic className="w-4 h-4 text-gray-500" />
+        {/* Volume sliders (pre-call + in-call) */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Mic className="w-3 h-3" />
             <input
               type="range"
               min="0"
@@ -180,69 +179,85 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
               step="0.01"
               value={micVolume}
               onChange={(e) => setMicVolume(parseFloat(e.target.value))}
-              className="flex-1 h-2 bg-[#27272a] rounded-lg appearance-none cursor-pointer"
+              className="w-full h-1.5 bg-[#181821] rounded cursor-pointer slider"
               aria-label="Microphone volume"
             />
-            <span className="text-xs text-gray-500 w-8 text-right">
-              {Math.round(micVolume * 100)}%
-            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Volume2 className="w-3 h-3" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={remoteVolume}
+              onChange={(e) => setVolume(parseFloat(e.target.value))}
+              className="w-full h-1.5 bg-[#181821] rounded cursor-pointer slider"
+              aria-label="Speaker volume"
+            />
           </div>
         </div>
 
-        {inCall && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-2 text-gray-300 font-mono">
-              <Clock className="w-4 h-4" />
-              {formatDuration(durationSeconds)}
+        {/* In-call: timer + controls */}
+        {callInProgress && (
+          <div className="flex flex-col items-center gap-3">
+            <div className="text-center">
+              <div className="text-xl font-bold text-white font-mono">{formatDuration(durationSeconds)}</div>
+              {message && (
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {message}
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center flex-wrap justify-center gap-2">
-              {/* Mute */}
+            <div className="flex items-center justify-center gap-2">
               <button
                 onClick={toggleMute}
-                className={`p-2 rounded-lg transition ${
+                className={`px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 ${
                   isMuted
-                    ? 'bg-red-600 text-white'
-                    : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+                    ? 'bg-[#4a1a1a] border border-[#f87171] text-[#f87171]'
+                    : 'bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white'
                 }`}
-                title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+                title={isMuted ? 'Unmute microphone' : 'Mute microphone (M)'}
               >
                 {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {isMuted ? 'Muted' : 'Mute'}
               </button>
 
-              {/* Hold / Resume */}
               <button
                 onClick={toggleHold}
-                className={`p-2 rounded-lg transition ${
+                className={`px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 ${
                   isHeld
                     ? 'bg-blue-600 text-white'
-                    : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+                    : 'bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white'
                 }`}
                 title={isHeld ? 'Resume call' : 'Hold call'}
               >
                 {isHeld ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                {isHeld ? 'Resume' : 'Hold'}
               </button>
 
-              {/* DTMF Keypad */}
-              {['1','2','3','4','5','6','7','8','9','*','0','#'].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => sendDTMF(d)}
-                  className="px-2 py-1 text-xs bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 rounded transition"
-                  aria-label={`DTMF ${d}`}
-                >
-                  {d}
-                </button>
-              ))}
+              <button
+                className="px-3 py-2 rounded-xl text-xs font-medium bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white transition"
+                title="Send to voicemail"
+              >
+                <Mic className="w-4 h-4" />
+              </button>
+
+              <button
+                className="px-3 py-2 rounded-xl text-xs font-medium bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white transition"
+                title="Skip lead"
+              >
+                <Play className="w-4 h-4 rotate-90" />
+              </button>
             </div>
 
-            {/* End call */}
             <button
               onClick={handleEndCall}
-              className="p-2 rounded-lg bg-red-600 hover:bg-red-500 text-white transition"
+              className="px-6 py-2 rounded-xl bg-[#f87171] hover:bg-[#ef4444] active:bg-[#dc2626] text-white font-semibold text-sm transition"
               title="End call"
             >
-              <PhoneOff className="w-4 h-4" />
+              End call
             </button>
           </div>
         )}
@@ -255,7 +270,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         )}
 
         {callEnded && (
-          <div className="flex items-center gap-2 p-3 bg-gray-500/10 border border-gray-500/30 rounded-lg">
+          <div className="flex items-center gap-2 p-3 bg-[#1a1a23] border border-[#2a2a36] rounded-xl">
             <CheckCircle className="w-4 h-4 text-gray-400" />
             <span className="text-sm text-gray-300">
               Call ended.
@@ -264,7 +279,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         )}
 
         {isError && (
-          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
             <AlertCircle className="w-4 h-4 text-red-400" />
             <span className="text-sm text-red-400">{message}</span>
           </div>
