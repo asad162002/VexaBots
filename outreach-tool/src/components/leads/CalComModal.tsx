@@ -5,9 +5,15 @@ interface CalComModalProps {
   lead: Lead;
   show: boolean;
   onClose: () => void;
+  onBooked?: (booking: {
+    date: string;
+    time: string;
+    timezone: string;
+    link: string;
+  }) => void;
 }
 
-export default function CalComModal({ lead, show, onClose }: CalComModalProps) {
+export default function CalComModal({ lead, show, onClose, onBooked }: CalComModalProps) {
   if (!show) {
     return null;
   }
@@ -52,6 +58,29 @@ export default function CalComModal({ lead, show, onClose }: CalComModalProps) {
               Book a meeting with yourself, the client, and the cold caller via Cal.com.
               Set NEXT_PUBLIC_CALCOM_USERNAME and NEXT_PUBLIC_CALCOM_EVENT_TYPE in .env.local.
             </p>
+            {onBooked && (
+              <button
+                onClick={() => {
+                  const now = new Date();
+                  onBooked({
+                    date: now.toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    }),
+                    time: now.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    link: `https://cal.com/${process.env.NEXT_PUBLIC_CALCOM_USERNAME || 'demo'}/${process.env.NEXT_PUBLIC_CALCOM_EVENT_TYPE || '30min'}`,
+                  });
+                }}
+                className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition mb-2"
+              >
+                Confirm booking made
+              </button>
+            )}
             <button
               onClick={onClose}
               className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"

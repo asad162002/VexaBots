@@ -4,11 +4,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { type Lead, LeadStatus } from '@/lib/types';
-import { Phone, CheckCircle, Search, Loader2, AlertCircle, Copy, Mail, ExternalLink, MapPin, Calendar, Settings } from 'lucide-react';
-import { useTelnyxCall } from '@/hooks/use-telnyx-call';
+import { Phone, CheckCircle, Search, Loader2, Copy, Mail, ExternalLink, MapPin, Settings } from 'lucide-react';
+import { useCall, CallProvider } from '@/components/queue/CallProvider';
 import CallPanel from '@/components/queue/CallPanel';
 import LeadDetails from '@/components/queue/LeadDetails';
-import CalComModal from '@/components/leads/CalComModal';
 import AudioSettings from '@/components/call/AudioSettings';
 
 interface OutcomeOption {
@@ -29,9 +28,17 @@ const OUTCOMES: OutcomeOption[] = [
   { key: 7, label: 'Wrong number', status: 'dead', requiresFollowUp: false, shortcut: '7' },
 ];
 
-type CallPhase = 'idle' | 'ringing' | 'in-call';
+type CallPhase = 'idle' | 'ringing' | 'in-call' | 'ended';
 
 export default function MyQueuePage() {
+  return (
+    <CallProvider>
+      <MyQueueInner />
+    </CallProvider>
+  );
+}
+
+function MyQueueInner() {
   const { user, isAdmin, loading: authLoading } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -46,31 +53,24 @@ export default function MyQueuePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [calledSet, setCalledSet] = useState<Set<string>>(new Set());
   const [outcomeMap, setOutcomeMap] = useState<Record<string, string>>({});
-  const [meetingMap, setMeetingMap] = useState<Record<string, { when: string }>>({});
-  const [showCal, setShowCal] = useState(false);
+  const [meetingMap, setMeetingMap] = useState<Record<string, { when: string; link?: string }>>({});
   const [showAudio, setShowAudio] = useState(false);
 
   const {
     status: callStatus,
-    message: callMessage,
     durationSeconds,
-    isMuted,
-    isHeld,
     callLogId,
-    remoteVolume,
-    micVolume,
     startCall,
     endCall,
     toggleMute,
-    toggleHold,
-    sendDTMF,
     setVolume,
     setMicVolume,
-  } = useTelnyxCall();
+  } = useCall();
 
   const callPhase: CallPhase =
     callStatus === 'connecting' || callStatus === 'ringing' ? 'ringing' :
-    callStatus === 'in-call' || callStatus === 'held' ? 'in-call' : 'idle';
+    callStatus === 'in-call' || callStatus === 'held' ? 'in-call' :
+    callStatus === 'ended' ? 'ended' : 'idle';
 
   const activeLeads = useMemo(() => {
     return leads.filter(l => !['not_interested', 'meeting_booked', 'dead'].includes(l.status));
@@ -87,17 +87,37 @@ export default function MyQueuePage() {
   }, [activeLeads, searchQuery]);
 
   const currentLead = activeLeads[currentIndex];
-  const progress = calledSet.size;
+  const [todayCalledIds, setTodayCalledIds] = useState<Set<string>>(new Set());
+
+  const loadTodayProgress = async () => {
+    if (!user) return;
+    try {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const { data, error } = await supabase
+        .from('lead_activities')
+        .select('lead_id')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfDay.toISOString());
+      if (error) throw error;
+      setTodayCalledIds(new Set((data ?? []).map((d: { lead_id: string }) => d.lead_id)));
+    } catch {
+      // ignore — fall back to in-memory state
+    }
+  };
+
+  const progress = todayCalledIds.size;
 
   useEffect(() => {
-    if (authLoading || isAdmin) return;
+    if (authLoading) return;
     loadQueue();
-  }, [authLoading, isAdmin]);
+  }, [authLoading, isAdmin, user]);
 
   const loadQueue = async () => {
     setLoading(true);
     try {
       let query = supabase.from('leads').select('*');
+      // Admins see all leads; members see their assigned leads
       if (!isAdmin && user) {
         query = query.eq('assigned_to', user.id);
       }
@@ -112,21 +132,67 @@ export default function MyQueuePage() {
     }
   };
 
+  useEffect(() => {
+    if (!user) return;
+    loadTodayProgress();
+  }, [user]);
+
+  const callEnded = callStatus === 'ended';
+  const canSelectOutcome = callEnded || !!meetingMap[currentLead?.id || ''];
+
   const handleSelectOutcome = (outcome: OutcomeOption) => {
-    if (callPhase !== 'idle' && !meetingMap[currentLead?.id || '']) return;
+    if (!canSelectOutcome) return;
     setSelectedOutcome(outcome);
   };
 
+  const handleCallEnd = () => {
+    loadTodayProgress();
+  };
+
+  const handleMeetingBooked = (booking: {
+    date: string;
+    time: string;
+    timezone: string;
+    link: string;
+  }) => {
+    if (!currentLead) return;
+    const when = `${booking.date} ${booking.time} (${booking.timezone})`;
+    setMeetingMap(m => ({ ...m, [currentLead.id]: { when, link: booking.link } }));
+    setOutcomeMap(m => ({ ...m, [currentLead.id]: 'Booked meeting' }));
+    setSelectedOutcome(OUTCOMES.find(o => o.status === 'meeting_booked') || null);
+    setToast(`Meeting booked for ${when}`);
+    setTimeout(() => setToast(null), 2000);
+  };
+
   const handleSave = async () => {
-    if (!selectedOutcome || !currentLead || saving) return;
+    if (!selectedOutcome || !currentLead || saving || !canSelectOutcome) return;
+
+    // "Call back" requires a follow-up date
+    if (selectedOutcome.requiresFollowUp && !followUpDate) {
+      setSaveError('Please select a follow-up date.');
+      return;
+    }
+
+    // Reject dates before today (local calendar day comparison)
+    if (followUpDate) {
+      const today = new Date().toISOString().split('T')[0];
+      if (followUpDate < today) {
+        setSaveError('Follow-up date cannot be before today.');
+        return;
+      }
+    }
+
     setSaving(true);
     setSaveError(null);
     try {
-      const { data, error: fnError } = await supabase.rpc('log_call_outcome', {
+      const { error: fnError } = await supabase.rpc('log_call_outcome', {
         p_lead_id: currentLead.id,
         p_status: selectedOutcome.status,
         p_notes: notes || selectedOutcome.label,
-        p_follow_up_at: selectedOutcome.requiresFollowUp && followUpDate ? new Date(followUpDate).toISOString() : null,
+        p_follow_up_at:
+          selectedOutcome.requiresFollowUp && followUpDate
+            ? new Date(`${followUpDate}T12:00:00`).toISOString()
+            : null,
         p_call_log_id: callLogId || null,
         p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
       });
@@ -162,7 +228,6 @@ export default function MyQueuePage() {
       if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
         return;
       }
-      const canSelectOutcome = callPhase === 'idle' || !!meetingMap[currentLead?.id || ''];
       if (e.key >= '1' && e.key <= '7' && canSelectOutcome) {
         e.preventDefault();
         const outcome = OUTCOMES.find(o => o.key === parseInt(e.key));
@@ -175,11 +240,7 @@ export default function MyQueuePage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [callPhase, currentLead, meetingMap, saving, authLoading, toggleMute]);
-
-  const handleBookMeeting = () => {
-    setShowCal(true);
-  };
+  }, [callPhase, canSelectOutcome, currentLead, saving, authLoading, toggleMute]);
 
   if (authLoading) {
     return (
@@ -197,18 +258,7 @@ export default function MyQueuePage() {
     );
   }
 
-  if (isAdmin) {
-    return (
-      <div className="p-6 min-h-screen bg-[#0f0f0f]">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold text-white mb-4">Admin Lead Workspace</h1>
-          <p className="text-sm text-gray-400">Admins should use the lead detail pages.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (loading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
         <div className="text-gray-400 text-sm">Loading queue...</div>
@@ -222,6 +272,11 @@ export default function MyQueuePage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white">My Queue</h1>
+            {isAdmin && (
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-full mt-1">
+                Viewing as admin
+              </span>
+            )}
             <p className="text-sm text-gray-500 mt-0.5">{progress} of {activeLeads.length} called today</p>
           </div>
           <div className="relative">
@@ -250,6 +305,7 @@ export default function MyQueuePage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Queue */}
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 overflow-y-auto max-h-[600px]">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Queue</p>
             <div className="relative mb-3">
@@ -271,7 +327,11 @@ export default function MyQueuePage() {
                 return (
                   <button
                     key={l.id}
-                    onClick={() => setCurrentIndex(originalIndex)}
+                    onClick={() => {
+                      if (callPhase === 'idle') {
+                        setCurrentIndex(originalIndex);
+                      }
+                    }}
                     disabled={callPhase !== 'idle'}
                     className={`w-full text-left p-2.5 rounded-lg text-sm transition ${
                       originalIndex === currentIndex ? 'border-l-2 border-blue-500 bg-[#27272a]/30' : 'hover:bg-[#27272a]/20'
@@ -288,6 +348,7 @@ export default function MyQueuePage() {
             </div>
           </div>
 
+          {/* Center: Lead details + CallPanel */}
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
             {currentLead ? (
               <>
@@ -317,15 +378,6 @@ export default function MyQueuePage() {
                       <ExternalLink className="w-4 h-4" />
                       Visit Website
                     </a>
-                  )}
-                  {(currentLead.meeting_link || process.env.NEXT_PUBLIC_CALCOM_USERNAME) && (
-                    <button
-                      onClick={handleBookMeeting}
-                      className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
-                    >
-                      <Calendar className="w-4 h-4" />
-                      {currentLead.meeting_link ? 'View Meeting' : 'Book Meeting'}
-                    </button>
                   )}
                 </div>
 
@@ -370,19 +422,15 @@ export default function MyQueuePage() {
                   )}
                 </div>
 
-                <div className="mt-4">
-                  <CallPanel lead={currentLead} />
-                </div>
+                <CallPanel
+                  lead={currentLead}
+                  onCallEnd={handleCallEnd}
+                  onMeetingBooked={handleMeetingBooked}
+                />
 
                 {meetingMap[currentLead.id] && (
-                  <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400">
-                    ✓ Meeting booked: {meetingMap[currentLead.id].when}
-                    <button
-                      onClick={handleBookMeeting}
-                      className="ml-2 text-xs text-green-300 underline"
-                    >
-                      Reschedule
-                    </button>
+                  <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400 flex items-center justify-between">
+                    <span>✓ Meeting booked: {meetingMap[currentLead.id].when}</span>
                   </div>
                 )}
 
@@ -393,6 +441,7 @@ export default function MyQueuePage() {
             )}
           </div>
 
+          {/* Right: After the Call */}
           <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">After the Call</p>
             <div className="space-y-3">
@@ -405,7 +454,7 @@ export default function MyQueuePage() {
                     <button
                       key={outcome.key}
                       onClick={() => handleSelectOutcome(outcome)}
-                      disabled={callPhase !== 'idle' && !meetingMap[currentLead?.id || '']}
+                      disabled={!canSelectOutcome}
                       className={`text-left px-3 py-2 rounded-lg text-sm transition ${
                         selectedOutcome?.key === outcome.key
                           ? 'bg-blue-600 text-white'
@@ -448,7 +497,7 @@ export default function MyQueuePage() {
 
               <button
                 onClick={handleSave}
-                disabled={!selectedOutcome || saving || (callPhase !== 'idle' && !meetingMap[currentLead?.id || ''])}
+                disabled={!selectedOutcome || saving || !canSelectOutcome}
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-3 text-sm transition disabled:cursor-not-allowed"
               >
                 {saving ? (
@@ -467,14 +516,6 @@ export default function MyQueuePage() {
           </div>
         </div>
       </div>
-
-      {showCal && currentLead && (
-        <CalComModal
-          lead={currentLead}
-          show={showCal}
-          onClose={() => setShowCal(false)}
-        />
-      )}
     </div>
   );
 }
