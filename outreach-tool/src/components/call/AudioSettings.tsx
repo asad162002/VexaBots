@@ -11,7 +11,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { useTelnyxCall } from '@/hooks/use-telnyx-call';
+import { useCall } from '@/components/queue/CallProvider';
 
 interface AudioSettingsProps {
   className?: string;
@@ -32,7 +32,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
     testMicrophone,
     stopTestMicrophone,
     refreshDevices,
-  } = useTelnyxCall();
+  } = useCall();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isTesting, setIsTesting] = useState(false);

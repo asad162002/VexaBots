@@ -10,7 +10,7 @@ import {
   Volume2,
   Keyboard,
 } from 'lucide-react';
-import { useTelnyxCall } from '@/hooks/use-telnyx-call';
+import { useCall } from '@/components/queue/CallProvider';
 
 interface CallControlsProps {
   showTimer?: boolean;
@@ -38,7 +38,7 @@ export default function CallControls({
     toggleHold,
     endCall,
     sendDTMF,
-  } = useTelnyxCall();
+  } = useCall();
 
   const inCall = status === 'in-call';
   const onHold = status === 'held';

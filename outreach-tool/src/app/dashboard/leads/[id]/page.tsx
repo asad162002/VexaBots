@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
 import CallDialer from '@/components/CallDialer';
+import { CallProvider } from '@/components/queue/CallProvider';
 import LeadHeader from '@/components/leads/LeadHeader';
 import LeadUpdatePanel from '@/components/leads/LeadUpdatePanel';
 import LeadQuickInfo from '@/components/leads/LeadQuickInfo';
@@ -18,6 +19,14 @@ import CalComModal from '@/components/leads/CalComModal';
 import ActivityLog from '@/components/leads/ActivityLog';
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <CallProvider>
+      <LeadDetailInner params={params} />
+    </CallProvider>
+  );
+}
+
+function LeadDetailInner({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { user } = useAuth();

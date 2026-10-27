@@ -60,35 +60,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
-      setSession(sess);
-      setUser(sess?.user ?? null);
-      if (sess?.user) {
-        await loadProfile(sess.user.id);
-      } else {
-        setProfile(null);
-        setIsAdmin(false);
-        setCallerNumber(null);
-      }
-      setLoading(false);
-    });
+    let cancelled = false;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, sess) => {
+    const finish = () => {
+      if (!cancelled) setLoading(false);
+    };
+
+    const timeoutId = setTimeout(finish, 4000);
+
+    const init = async () => {
+      try {
+        const { data: { session: sess } } = await supabase.auth.getSession();
+        if (cancelled) return;
         setSession(sess);
         setUser(sess?.user ?? null);
         if (sess?.user) {
-          await loadProfile(sess.user.id);
+          try {
+            await loadProfile(sess.user.id);
+          } catch {
+            // ignore profile failure
+          }
         } else {
           setProfile(null);
           setIsAdmin(false);
           setCallerNumber(null);
         }
-        setLoading(false);
+      } catch {
+        // ignore auth init failure
+      } finally {
+        clearTimeout(timeoutId);
+        finish();
+      }
+    };
+
+    init();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, sess) => {
+        if (cancelled) return;
+        clearTimeout(timeoutId);
+        setSession(sess);
+        setUser(sess?.user ?? null);
+        if (sess?.user) {
+          try {
+            await loadProfile(sess.user.id);
+          } catch {
+            // ignore
+          }
+        } else {
+          setProfile(null);
+          setIsAdmin(false);
+          setCallerNumber(null);
+        }
+        finish();
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

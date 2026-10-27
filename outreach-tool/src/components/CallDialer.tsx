@@ -16,7 +16,7 @@ import {
   Play,
   Pause,
 } from 'lucide-react';
-import { useTelnyxCall } from '@/hooks/use-telnyx-call';
+import { useCall } from '@/components/queue/CallProvider';
 
 interface CallDialerProps {
   lead: {
@@ -48,7 +48,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     sendDTMF,
     setVolume,
     setMicVolume,
-  } = useTelnyxCall();
+  } = useCall();
 
   const isCalling = ['connecting', 'ringing', 'in-call', 'held'].includes(status);
   const inCall = status === 'ringing' || status === 'in-call' || status === 'held';
