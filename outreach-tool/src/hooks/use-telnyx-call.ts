@@ -106,6 +106,7 @@ export interface UseTelnyxCallReturn extends TelnyxCallState {
   requestMicrophone: () => Promise<MediaStream | null>;
   testMicrophone: () => Promise<void>;
   stopTestMicrophone: () => void;
+  callInProgress: boolean;
 }
 
 // --- State enum mappings (from @telnyx/webrtc constants.d.ts) ---
@@ -962,5 +963,6 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     requestMicrophone,
     testMicrophone,
     stopTestMicrophone,
+    callInProgress: ['connecting', 'ringing', 'in-call', 'held'].includes(state.status),
   };
 }
