@@ -647,8 +647,8 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       // Register event listeners
       client.on('telnyx.ready', () => {
         // Guard: only create the call once per client instance.
-        // The SDK may fire telnyx.ready again after a WebSocket reconnect (e.g. after ICE
-        // failure), which would redial the same number without this guard.
+        // The SDK may fire telnyx.ready again after a WebSocket reconnect (e.g. after
+        // ICE failure), which would redial the same number without this guard.
         if (callStartedRef.current) return;
         callStartedRef.current = true;
         // Client is registered — create the call
@@ -713,6 +713,8 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         const callState = String(call.state);
 
         if (callState === 'ringing' && !answeredAtRef.current) {
+          // Unmute audio element during ringing to hear ringback tone
+          unmuteAudioElement();
           setState(s => s.status === 'connecting' ? { ...s, status: 'ringing' } : s);
         } else if (callState === 'active' && !answeredAtRef.current) {
           answeredAtRef.current = Date.now();
