@@ -252,6 +252,8 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
     const audioEl = document.createElement('audio') as HTMLAudioElement & { playsInline: boolean };
     audioEl.autoplay = true;
+    // Set muted initially to satisfy browser autoplay policies
+    audioEl.muted = true;
     audioEl.playsInline = true;
     audioEl.id = 'telnyx-remote-audio';
     audioEl.style.display = 'none';
@@ -613,10 +615,15 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
       // Create the TelnyxRTC client
       // Verified from IClientOptions: hangupOnBeforeUnload auto-hangs up on page close
+      // Added mediaPermissionsRecovery per Telnyx docs for better error handling
       const client = new TelnyxRTC({
         login_token: jwt,
         debug: false,
         hangupOnBeforeUnload: true,
+        mediaPermissionsRecovery: {
+          enabled: true,
+          timeout: 10000,
+        },
       } as any);
 
       clientRef.current = client;
@@ -663,7 +670,16 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         }
 
         // Start the call
-        call.invite();
+        try {
+          call.invite();
+        } catch (inviteErr: any) {
+          console.error('Call invite error:', inviteErr);
+          setState(s => ({
+            ...s,
+            status: 'error',
+            message: inviteErr?.message || 'Failed to initiate call. The browser may have blocked autoplay — try clicking the call button again.',
+          }));
+        }
       });
 
       // Handle events via telnyx.notification
@@ -746,11 +762,34 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       });
 
       client.on('telnyx.error', (err: any) => {
-        console.error('Telnyx error:', err);
+        // Log full error details for debugging
+        console.error('Telnyx error:', {
+          message: err?.message,
+          name: err?.name,
+          code: err?.code,
+          type: err?.type,
+          toString: String(err),
+          keys: Object.keys(err || {}),
+        });
+        
+        // Check for known error codes from the SDK
+        let errorMsg = err?.message || 'Telnyx connection error';
+        
+        // Handle specific error types
+        try {
+          // If it's a TELNYX_ERROR_CODES value, provide a human-readable message
+          const code = err?.code;
+          if (code !== undefined) {
+            errorMsg = `Telnyx error code ${code}: ${err?.message || 'Unknown error'}`;
+          }
+        } catch {
+          // fall back to original message
+        }
+        
         setState(s => ({
           ...s,
           status: 'error',
-          message: err?.message || 'Telnyx connection error',
+          message: errorMsg,
         }));
         stopDurationTimer();
       });
