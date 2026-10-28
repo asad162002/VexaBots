@@ -640,6 +640,29 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         const call = client.newCall(callOptions) as any;
         callRef.current = call;
 
+        // Listen for call-specific notifications on the call object
+        // Per Telnyx docs: call state changes (ringing, active, hangup) come through call.on()
+        call.on('telnyx.notification', (notification: any) => {
+          if (notification?.type !== 'callUpdate' || !notification.call) return;
+          console.log('Call notification:', notification.type, 'state:', notification.call.state);
+        });
+
+        call.on('telnyx.error', (err: any) => {
+          console.error('Telnyx call error:', {
+            message: err?.message,
+            name: err?.name,
+            code: err?.code,
+            toString: String(err),
+            keys: Object.keys(err || {}),
+          });
+          setState(s => ({
+            ...s,
+            status: 'error',
+            message: err?.message || `Telnyx call error: ${String(err)}`,
+          }));
+          stopDurationTimer();
+        });
+
         // Capture Telnyx SDK call identifiers
         let telnyxCallControlId: string | null = null;
         let telnyxCallSessionId: string | null = null;
@@ -669,17 +692,21 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
           }
         }
 
-        // Start the call
-        try {
-          call.invite();
-        } catch (inviteErr: any) {
-          console.error('Call invite error:', inviteErr);
+        // Start the call — await the Promise as per Telnyx docs (invite() returns Promise<void>)
+        void call.invite().catch((inviteErr: any) => {
+          console.error('Call invite promise rejected:', {
+            message: inviteErr?.message,
+            name: inviteErr?.name,
+            code: inviteErr?.code,
+            toString: String(inviteErr),
+            keys: Object.keys(inviteErr || {}),
+          });
           setState(s => ({
             ...s,
             status: 'error',
             message: inviteErr?.message || 'Failed to initiate call. The browser may have blocked autoplay — try clicking the call button again.',
           }));
-        }
+        });
       });
 
       // Handle events via telnyx.notification
