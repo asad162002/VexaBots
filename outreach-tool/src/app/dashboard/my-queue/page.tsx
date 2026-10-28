@@ -97,7 +97,7 @@ function MyQueueInner() {
       const { data, error } = await supabase
         .from('lead_activities')
         .select('lead_id')
-        .eq('user_id', user.id)
+        .eq('profile_id', user.id)
         .gte('created_at', startOfDay.toISOString());
       if (error) throw error;
       setTodayCalledIds(new Set((data ?? []).map((d: { lead_id: string }) => d.lead_id)));
