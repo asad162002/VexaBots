@@ -272,6 +272,12 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
   }, []);
 
+  const unmuteAudioElement = useCallback(() => {
+    if (audioElementRef.current) {
+      audioElementRef.current.muted = false;
+    }
+  }, []);
+
   const setMicVolume = useCallback((volume: number) => {
     const v = Math.max(0, Math.min(1, volume));
     setMicVolumeState(v);
@@ -640,29 +646,6 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         const call = client.newCall(callOptions) as any;
         callRef.current = call;
 
-        // Listen for call-specific notifications on the call object
-        // Per Telnyx docs: call state changes (ringing, active, hangup) come through call.on()
-        call.on('telnyx.notification', (notification: any) => {
-          if (notification?.type !== 'callUpdate' || !notification.call) return;
-          console.log('Call notification:', notification.type, 'state:', notification.call.state);
-        });
-
-        call.on('telnyx.error', (err: any) => {
-          console.error('Telnyx call error:', {
-            message: err?.message,
-            name: err?.name,
-            code: err?.code,
-            toString: String(err),
-            keys: Object.keys(err || {}),
-          });
-          setState(s => ({
-            ...s,
-            status: 'error',
-            message: err?.message || `Telnyx call error: ${String(err)}`,
-          }));
-          stopDurationTimer();
-        });
-
         // Capture Telnyx SDK call identifiers
         let telnyxCallControlId: string | null = null;
         let telnyxCallSessionId: string | null = null;
@@ -709,87 +692,54 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         });
       });
 
-      // Handle events via telnyx.notification
+      // Handle events via telnyx.notification on the client
+      // In SDK v2.28.0, call state changes come through client.on('telnyx.notification'),
+      // NOT call.on() — call objects do not have an on() method in this version.
       client.on('telnyx.notification', (notification: any) => {
         if (notification.type !== 'callUpdate' || !notification.call) return;
 
         const call = notification.call;
         const callState = call.state as number;
+        // Map SDK state enum to UI status
+        // State enum: New=0, Requesting=1, Trying=2, Recovering=3, Ringing=4,
+        //             Answering=5, Early=6, Active=7, Held=8, Hangup=9, Destroy=10, Purge=11
+        const stateMap: Record<number, CallStatus> = {
+          4: 'ringing',    // Ringing
+          7: 'in-call',    // Active
+          8: 'held',       // Held
+          9: 'ended',      // Hangup
+        };
 
-        // Capture telnyx IDs from notification (may differ from newCall)
-        try {
-          const ids = call?.telnyxIDs;
-          if (ids?.telnyxCallControlId && currentCallLogIdRef.current) {
-            void updateCallLog(currentCallLogIdRef.current, {
-              telnyx_call_control_id: ids.telnyxCallControlId,
-              telnyx_call_session_id: ids.telnyxSessionId ?? null,
-            });
-          }
-        } catch (e) {
-          // telnyxIDs may not be available yet
-        }
-
-        // State machine (from constants.d.ts):
-        // New=0, Ringing=4, Active=7, Held=8, Hangup=9, Destroy=10
-        if (callState >= STATE.ACTIVE) {
-          // Active call
-          if (answeredAtRef.current === null) {
+        const newStatus = stateMap[callState];
+        if (newStatus) {
+          if (callState === 4 && !answeredAtRef.current) {
+            // Ringing started — transition to ringing UI
+            setState(s => s.status === 'connecting' ? { ...s, status: 'ringing' } : s);
+          } else if (callState === 7 && !answeredAtRef.current) {
+            // Call answered
             answeredAtRef.current = Date.now();
+            setState(s => ({ ...s, status: 'in-call', message: 'Call connected' }));
             startDurationTimer();
+            unmuteAudioElement();
+          } else if (callState === 8) {
+            setState(s => ({ ...s, status: 'held' }));
+          } else if (callState === 9) {
+            // Call ended
+            setState(s => ({
+              ...s,
+              status: 'ended',
+              message: 'Call ended.',
+              toNumber: null,
+              fromNumber: null,
+              callerNumber: null,
+            }));
+            stopDurationTimer();
           }
-          setState(s => ({
-            ...s,
-            status: 'in-call',
-            message: 'Connected. You are live.',
-            isMuted: call.isAudioMuted || false,
-          }));
-        } else if (callState === STATE.RINGING) {
-          setState(s => ({
-            ...s,
-            status: 'ringing',
-            message: 'Ringing...',
-          }));
-        } else if (callState === STATE.HELD) {
-          setState(s => ({
-            ...s,
-            status: 'held',
-            message: 'On hold.',
-            isHeld: true,
-          }));
-        } else if (callState >= STATE.HANGUP) {
-          // Hangup or Destroy
-          stopDurationTimer();
-          clearMuteWarningTimeout();
-
-          let duration = 0;
-          if (answeredAtRef.current !== null) {
-            duration = Math.floor((Date.now() - answeredAtRef.current) / 1000);
-          }
-
-          if (currentCallLogIdRef.current) {
-            const finalStatus = duration > 0 ? 'answered' : 'no_answer';
-            void updateCallLog(currentCallLogIdRef.current, {
-              status: finalStatus,
-              duration_seconds: duration > 0 ? duration : null,
-              ended_at: new Date().toISOString(),
-            });
-          }
-
-          setState(s => ({
-            ...s,
-            status: 'ended',
-            message: duration > 0 ? 'Call ended.' : 'Call not answered.',
-            durationSeconds: duration,
-            isMuted: false,
-            isHeld: false,
-            remoteMutedForMoreThan10s: false,
-          }));
-          cleanup();
         }
       });
 
+      // Handle telnyx.error on the client
       client.on('telnyx.error', (err: any) => {
-        // Log full error details for debugging
         console.error('Telnyx error:', {
           message: err?.message,
           name: err?.name,
