@@ -713,6 +713,13 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         } else if (callState === 'held') {
           setState(s => ({ ...s, status: 'held' }));
         } else if (callState === 'hangup' || callState === 'destroy' || callState === 'purge') {
+          console.warn('Call ended:', {
+            state: callState,
+            cause: call.cause,
+            causeCode: call.causeCode,
+            sipCode: call.sipCode,
+            keys: Object.keys(call),
+          });
           const duration = answeredAtRef.current
             ? Math.floor((Date.now() - answeredAtRef.current) / 1000)
             : 0;
