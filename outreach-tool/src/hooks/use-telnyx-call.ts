@@ -622,9 +622,10 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       // Create the TelnyxRTC client
       // Verified from IClientOptions: hangupOnBeforeUnload auto-hangs up on page close
       // Added mediaPermissionsRecovery per Telnyx docs for better error handling
+      // debug: true enables detailed SDK logging (temporarily enabled for debugging)
       const client = new TelnyxRTC({
         login_token: jwt,
-        debug: false,
+        debug: true,
         hangupOnBeforeUnload: true,
         mediaPermissionsRecovery: {
           enabled: true,
