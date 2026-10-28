@@ -700,42 +700,45 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         if (notification.type !== 'callUpdate' || !notification.call) return;
 
         const call = notification.call;
-        const callState = call.state as number;
-        // Map SDK state enum to UI status
-        // State enum: New=0, Requesting=1, Trying=2, Recovering=3, Ringing=4,
-        //             Answering=5, Early=6, Active=7, Held=8, Hangup=9, Destroy=10, Purge=11
-        const stateMap: Record<number, CallStatus> = {
-          4: 'ringing',    // Ringing
-          7: 'in-call',    // Active
-          8: 'held',       // Held
-          9: 'ended',      // Hangup
-        };
+        // In v2.28.0, call.state comes as a STRING in notifications (not the numeric enum)
+        // Per Telnyx docs: call.state values are 'ringing', 'active', 'hangup', etc.
+        const callState = String(call.state);
 
-        const newStatus = stateMap[callState];
-        if (newStatus) {
-          if (callState === 4 && !answeredAtRef.current) {
-            // Ringing started — transition to ringing UI
-            setState(s => s.status === 'connecting' ? { ...s, status: 'ringing' } : s);
-          } else if (callState === 7 && !answeredAtRef.current) {
-            // Call answered
-            answeredAtRef.current = Date.now();
-            setState(s => ({ ...s, status: 'in-call', message: 'Call connected' }));
-            startDurationTimer();
-            unmuteAudioElement();
-          } else if (callState === 8) {
-            setState(s => ({ ...s, status: 'held' }));
-          } else if (callState === 9) {
-            // Call ended
-            setState(s => ({
-              ...s,
-              status: 'ended',
-              message: 'Call ended.',
-              toNumber: null,
-              fromNumber: null,
-              callerNumber: null,
-            }));
-            stopDurationTimer();
+        if (callState === 'ringing' && !answeredAtRef.current) {
+          setState(s => s.status === 'connecting' ? { ...s, status: 'ringing' } : s);
+        } else if (callState === 'active' && !answeredAtRef.current) {
+          answeredAtRef.current = Date.now();
+          setState(s => ({ ...s, status: 'in-call', message: 'Call connected' }));
+          startDurationTimer();
+          unmuteAudioElement();
+        } else if (callState === 'held') {
+          setState(s => ({ ...s, status: 'held' }));
+        } else if (callState === 'hangup' || callState === 'destroy' || callState === 'purge') {
+          const duration = answeredAtRef.current
+            ? Math.floor((Date.now() - answeredAtRef.current) / 1000)
+            : 0;
+          if (currentCallLogIdRef.current) {
+            const finalStatus = duration > 0 ? 'answered' : 'no_answer';
+            void updateCallLog(currentCallLogIdRef.current, {
+              status: finalStatus,
+              duration_seconds: duration > 0 ? duration : null,
+              ended_at: new Date().toISOString(),
+            });
           }
+          setState(s => ({
+            ...s,
+            status: 'ended',
+            message: duration > 0 ? 'Call ended.' : 'Call not answered.',
+            durationSeconds: duration,
+            isMuted: false,
+            isHeld: false,
+            remoteMutedForMoreThan10s: false,
+            toNumber: null,
+            fromNumber: null,
+            callerNumber: null,
+          }));
+          stopDurationTimer();
+          cleanup();
         }
       });
 
