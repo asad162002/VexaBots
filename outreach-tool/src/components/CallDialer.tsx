@@ -148,9 +148,9 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
           </div>
         </div>
 
-        {/* Phone number */}
-        <div className="flex items-center gap-2">
-          <span className="text-xl font-bold text-white">{displayPhone}</span>
+        {/* Phone number — full number including +1, matching reference image font sizing */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-2xl font-bold text-white">{displayPhone}</span>
         </div>
 
         {/* Info cards: local time, attempts, last call */}
