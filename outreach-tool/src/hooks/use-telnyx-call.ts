@@ -279,6 +279,66 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
   }, []);
 
+  // Attach remote stream, set volume/muted, and call play() — used on every call state change
+  const attachAndPlayAudio = useCallback((label: string) => {
+    const audioEl = audioElementRef.current;
+    const call = callRef.current;
+    if (!audioEl) {
+      console.warn('[attachAndPlayAudio]', label, '— no audio element');
+      return;
+    }
+
+    // Attach remote stream
+    const remoteStream = call?.remoteStream ?? null;
+    if (remoteStream && audioEl.srcObject !== remoteStream) {
+      audioEl.srcObject = remoteStream;
+    }
+
+    // Set volume
+    audioEl.volume = remoteVolume;
+
+    // Unmute
+    audioEl.muted = false;
+
+    // Debug log
+    console.warn('[attachAndPlayAudio]', label, {
+      srcObject: audioEl.srcObject ? 'present' : 'null',
+      muted: audioEl.muted,
+      volume: audioEl.volume,
+      paused: audioEl.paused,
+      currentTime: audioEl.currentTime,
+      remoteStreamPresent: !!remoteStream,
+      remoteStreamActive: remoteStream?.active,
+      trackCount: remoteStream?.getTracks().length,
+    });
+
+    // Call play() and catch rejection
+    if (audioEl.paused) {
+      audioEl.play().catch((playErr: any) => {
+        console.warn('[attachAndPlayAudio] play() rejected:', {
+          message: playErr?.message,
+          name: playErr?.name,
+          code: playErr?.code,
+        });
+      });
+    }
+  }, [remoteVolume]);
+
+  // Debug helper to log setSinkId
+  const applyOutputDevice = useCallback((deviceId: string) => {
+    if (!audioElementRef.current) return;
+    if (deviceId === '' || deviceId === 'default') {
+      console.warn('setSinkId: using default device');
+      return;
+    }
+    try {
+      audioElementRef.current.setSinkId(deviceId);
+      console.warn('setSinkId:', deviceId);
+    } catch (e) {
+      console.warn('setSinkId failed:', deviceId, e);
+    }
+  }, []);
+
   const setMicVolume = useCallback((volume: number) => {
     const v = Math.max(0, Math.min(1, volume));
     setMicVolumeState(v);
@@ -350,14 +410,8 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     setSelectedOutputDevice(deviceId);
     saveDevicePref(LS_OUTPUT_KEY, deviceId);
     // Apply to the audio element via setSinkId (standard browser API)
-    if (audioElementRef.current) {
-      try {
-        audioElementRef.current.setSinkId(deviceId);
-      } catch (e) {
-        console.warn('Could not set sink ID:', e);
-      }
-    }
-  }, [canChangeOutputDevice]);
+    applyOutputDevice(deviceId);
+  }, [canChangeOutputDevice, applyOutputDevice]);
 
   // --- Microphone test (Web Audio API level meter) ---
   const stopTestMicrophone = useCallback(() => {
@@ -729,15 +783,16 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
         if (callState === 'ringing' && !answeredAtRef.current) {
           // Unmute audio element during ringing to hear ringback tone
-          unmuteAudioElement();
+          attachAndPlayAudio('ringing');
           setState(s => s.status === 'connecting' ? { ...s, status: 'ringing' } : s);
         } else if (callState === 'active' && !answeredAtRef.current) {
           answeredAtRef.current = Date.now();
           setState(s => ({ ...s, status: 'in-call', message: 'Call connected' }));
           startDurationTimer();
-          unmuteAudioElement();
+          attachAndPlayAudio('active');
         } else if (callState === 'held') {
           setState(s => ({ ...s, status: 'held' }));
+          attachAndPlayAudio('held');
         } else if (callState === 'hangup' || callState === 'destroy' || callState === 'purge') {
           console.warn('Call ended:', {
             state: callState,
