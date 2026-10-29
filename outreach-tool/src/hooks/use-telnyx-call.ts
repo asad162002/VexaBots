@@ -314,13 +314,21 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
     // Call play() and catch rejection
     if (audioEl.paused) {
-      audioEl.play().catch((playErr: any) => {
+      audioEl.play().then(() => {
+        console.warn('[attachAndPlayAudio] play() succeeded', label, {
+          paused: audioEl.paused,
+          currentTime: audioEl.currentTime,
+        });
+      }).catch((playErr: any) => {
         console.warn('[attachAndPlayAudio] play() rejected:', {
+          label,
           message: playErr?.message,
           name: playErr?.name,
           code: playErr?.code,
         });
       });
+    } else {
+      console.warn('[attachAndPlayAudio] already playing', label);
     }
   }, [remoteVolume]);
 
