@@ -869,10 +869,10 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
 
     // Update call log with final duration
-    if (currentCallLogIdRef.current && duration > 0) {
+    if (currentCallLogIdRef.current) {
       updateCallLog(currentCallLogIdRef.current, {
-        status: 'disconnected',
-        duration_seconds: duration,
+        status: duration > 0 ? 'answered' : 'no_answer',
+        duration_seconds: duration > 0 ? duration : null,
         ended_at: new Date().toISOString(),
       });
     }
