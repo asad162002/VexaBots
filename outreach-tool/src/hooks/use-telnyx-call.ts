@@ -684,6 +684,21 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
           }
         }
 
+        // Debug: log device and mic state when the call starts
+        if (localStreamRef.current) {
+          const tracks = localStreamRef.current.getAudioTracks();
+          console.warn('Call started with:', {
+            selectedInputDevice: selectedInputDevice,
+            audioTrackEnabled: tracks[0]?.enabled ?? null,
+            audioTrackMuted: tracks[0]?.muted ?? null,
+            streamActive: localStreamRef.current.active,
+            streamTrackCount: localStreamRef.current.getTracks().length,
+            isMuted: state.isMuted,
+          });
+        } else {
+          console.warn('Call started but localStreamRef is null');
+        }
+
         // Start the call — await the Promise as per Telnyx docs (invite() returns Promise<void>)
         void call.invite().catch((inviteErr: any) => {
           console.error('Call invite promise rejected:', {
@@ -790,6 +805,40 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
           message: errorMsg,
         }));
         stopDurationTimer();
+      });
+
+      // Debug: subscribe to telnyx.warning events
+      // These come from the CallReportCollector during active calls
+      client.on('telnyx.warning', (warning: any) => {
+        console.warn('Telnyx warning:', {
+          code: warning?.warning?.code ?? warning?.code,
+          name: warning?.warning?.name ?? warning?.name,
+          message: warning?.warning?.message ?? warning?.message,
+          callId: warning?.callId,
+        });
+      });
+
+      // Debug: subscribe to telnyx.stats.report (end-of-call stats)
+      client.on('telnyx.stats.report', (report: any) => {
+        console.log('Telnyx stats report:', report);
+      });
+
+      // Debug: subscribe to telnyx.stats.frame (periodic stats during a call)
+      let lastStatsLog = 0;
+      client.on('telnyx.stats.frame', (frame: any) => {
+        const now = Date.now();
+        // Log once every 5 seconds to avoid flooding the console
+        if (now - lastStatsLog < 5000) return;
+        lastStatsLog = now;
+        const stats = frame?.stats || frame;
+        console.log('Telnyx stats frame:', {
+          rtt: stats?.rtt,
+          jitter: stats?.jitter,
+          packetLoss: stats?.packetLossFraction,
+          mos: stats?.mos,
+          quality: stats?.quality,
+          callId: frame?.callId,
+        });
       });
 
       // Connect to Telnyx signaling
