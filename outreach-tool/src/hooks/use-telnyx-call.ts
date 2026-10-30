@@ -199,6 +199,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
   const animationFrameRef = useRef<number | null>(null);
   const isCleaningUpRef = useRef(false);
   const callStartedRef = useRef(false);
+  const endedHandledRef = useRef(false);
 
   // Keep callerNumber in sync from auth context
   useEffect(() => {
@@ -339,12 +340,11 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       console.warn('setSinkId: using default device');
       return;
     }
-    try {
-      audioElementRef.current.setSinkId(deviceId);
+    audioElementRef.current.setSinkId(deviceId).then(() => {
       console.warn('setSinkId:', deviceId);
-    } catch (e) {
-      console.warn('setSinkId failed:', deviceId, e);
-    }
+    }).catch((e: any) => {
+      console.warn('setSinkId failed:', deviceId, e?.message || e);
+    });
   }, []);
 
   const setMicVolume = useCallback((volume: number) => {
@@ -491,12 +491,18 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     stopTestMicrophone();
     clearMuteWarningTimeout();
 
-    // Hangup the call
+    // Hangup the call — skip if already in a terminal state to avoid
+    // "CALL DOES NOT EXIST" errors when the SDK already hung up
     if (callRef.current) {
-      try {
-        callRef.current.hangup();
-      } catch (e) {
-        // Call may already be hung up
+      const terminalStates = ['hangup', 'destroy', 'purge', 'ended'];
+      const currentCallState = callRef.current.state;
+      const stateStr = typeof currentCallState === 'string' ? currentCallState : '';
+      if (!terminalStates.includes(stateStr)) {
+        try {
+          callRef.current.hangup();
+        } catch (e) {
+          // Call may already be hung up
+        }
       }
     }
     // Disconnect the client
@@ -638,6 +644,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }));
 
     answeredAtRef.current = null;
+    endedHandledRef.current = false;
     stopDurationTimer();
     clearMuteWarningTimeout();
 
@@ -705,6 +712,12 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       const audioEl = setupAudioElement();
       // Apply saved volume
       audioEl.volume = remoteVolume;
+      // Register the audio element as the SDK remote element (primary path)
+      client.remoteElement = 'telnyx-remote-audio';
+      // Apply saved output device (secondary fallback if setSinkId differs)
+      if (selectedOutputDevice) {
+        applyOutputDevice(selectedOutputDevice);
+      }
 
       // Register event listeners
       client.on('telnyx.ready', () => {
@@ -786,10 +799,17 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
         const call = notification.call;
         // In v2.28.0, call.state comes as a STRING in notifications (not the numeric enum)
-        // Per Telnyx docs: call.state values are 'ringing', 'active', 'hangup', etc.
+        // Per Telnyx docs: call.state values are 'ringing', 'active', etc.
         const callState = String(call.state);
 
-        if (callState === 'ringing' && !answeredAtRef.current) {
+        // Log every callUpdate received
+        console.warn('[call state]', callState, 'prev:', call.prevState, 'remoteStream:', !!call.remoteStream);
+
+        if (callState === 'early' && !answeredAtRef.current) {
+          // Outbound calls may report 'early' instead of 'ringing'
+          attachAndPlayAudio('early');
+          setState(s => s.status === 'connecting' ? { ...s, status: 'ringing' } : s);
+        } else if (callState === 'ringing' && !answeredAtRef.current) {
           // Unmute audio element during ringing to hear ringback tone
           attachAndPlayAudio('ringing');
           setState(s => s.status === 'connecting' ? { ...s, status: 'ringing' } : s);
@@ -802,6 +822,9 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
           setState(s => ({ ...s, status: 'held' }));
           attachAndPlayAudio('held');
         } else if (callState === 'hangup' || callState === 'destroy' || callState === 'purge') {
+          // Guard: only handle end-of-call once per call instance
+          if (endedHandledRef.current) return;
+          endedHandledRef.current = true;
           console.warn('Call ended:', {
             state: callState,
             cause: call.cause,
@@ -957,7 +980,12 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     const doHangup = async () => {
       try {
         if (callRef.current) {
-          await callRef.current.hangup();
+          const terminalStates = ['hangup', 'destroy', 'purge', 'ended'];
+          const currentCallState = callRef.current.state;
+          const stateStr = typeof currentCallState === 'string' ? currentCallState : '';
+          if (!terminalStates.includes(stateStr)) {
+            await callRef.current.hangup();
+          }
         }
       } catch (e) {
         console.warn('hangup failed:', e);
