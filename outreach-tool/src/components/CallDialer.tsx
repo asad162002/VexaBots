@@ -27,6 +27,7 @@ interface CallDialerProps {
 export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
   const { callerNumber: hookCallerNumber, user } = useAuth();
   const [callEnded, setCallEnded] = useState(false);
+  const [altPhone, setAltPhone] = useState('');
 
   const {
     status,
@@ -50,8 +51,9 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
   const inCall = status === 'ringing' || status === 'in-call' || status === 'held';
 
   const handleStartCall = () => {
-    if (!lead.phone) return;
-    startCall(lead.phone, lead.id);
+    const phoneNumber = altPhone.trim() || lead.phone;
+    if (!phoneNumber) return;
+    startCall(phoneNumber, lead.id);
   };
 
   const handleEndCall = () => {
@@ -66,7 +68,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         lead_id: lead.id,
         caller_id: user?.id || '',
         from_number: hookCallerNumber || '',
-        to_number: lead.phone || '',
+        to_number: altPhone.trim() || lead.phone || '',
         status: 'disconnected',
         duration_seconds: durationSeconds,
         recorded_url: null,
@@ -184,6 +186,20 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
             <span>Calling from +1 910-661-0871 (verified)</span>
           </div>
         </div>
+
+        {/* Alternate phone number input */}
+        {!inCall && !callEnded && (
+          <div>
+            <input
+              type="tel"
+              value={altPhone}
+              onChange={(e) => setAltPhone(e.target.value)}
+              placeholder={lead.phone || "Enter alternate number"}
+              className="w-full bg-[#181821] border border-[#262633] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              aria-label="Alternate phone number"
+            />
+          </div>
+        )}
 
         {/* Call button (idle) */}
         {!inCall && !callEnded && hookCallerNumber && (
