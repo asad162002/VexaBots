@@ -330,7 +330,7 @@ function ImportPageContent() {
 
         const { error: enrichedError } = await supabase
           .from('linkedin_leads')
-          .insert(enriched_record);
+          .upsert(enriched_record, { onConflict: 'place_id', ignoreDuplicates: true });
         if (!enrichedError) enriched++;
       }
 
@@ -348,7 +348,7 @@ function ImportPageContent() {
 
           const { error: apolloError } = await supabase
             .from('linkedin_leads')
-            .insert(record);
+            .upsert(record, { onConflict: 'place_id', ignoreDuplicates: true });
           if (!apolloError) enriched++;
         }
       }
