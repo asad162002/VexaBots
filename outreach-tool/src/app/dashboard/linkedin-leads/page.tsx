@@ -100,7 +100,7 @@ export default function LinkedinLeadsPage() {
         query = query.in('place_id', placeIds);
       } else if (!isAdmin && placeIds.length === 0) {
         // No assigned leads means no results
-        query = query.eq('id', 'never-matches');
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000');
       }
 
       if (sourceFilter !== 'all') {
