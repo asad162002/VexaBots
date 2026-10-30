@@ -4,11 +4,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { type Lead, LeadStatus } from '@/lib/types';
-import { Phone, CheckCircle, Search, Loader2, Copy, Mail, ExternalLink, MapPin, Settings } from 'lucide-react';
+import { Phone, CheckCircle, Search, Loader2, Copy, Mail, ExternalLink, MapPin } from 'lucide-react';
 import { useCall, CallProvider } from '@/components/queue/CallProvider';
 import CallPanel from '@/components/queue/CallPanel';
 import LeadDetails from '@/components/queue/LeadDetails';
-import AudioSettings from '@/components/call/AudioSettings';
 
 interface OutcomeOption {
   key: number;
@@ -54,7 +53,6 @@ function MyQueueInner() {
   const [calledSet, setCalledSet] = useState<Set<string>>(new Set());
   const [outcomeMap, setOutcomeMap] = useState<Record<string, string>>({});
   const [meetingMap, setMeetingMap] = useState<Record<string, { when: string; link?: string }>>({});
-  const [showAudio, setShowAudio] = useState(false);
 
   const {
     status: callStatus,
@@ -286,22 +284,7 @@ function MyQueueInner() {
               <p className="text-sm text-gray-500">{progress} of {activeLeads.length} called today</p>
             </div>
           </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowAudio(!showAudio)}
-              className="p-2 rounded-xl bg-[#181821] border border-[#262633] text-gray-400 hover:text-white hover:bg-[#1f1f2b] transition"
-              aria-label="Queue settings"
-              title="Queue settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            {showAudio && (
-              <div className="absolute right-0 bottom-full mb-2 w-64 bg-[#1a1a1a] border border-[#27272a] rounded-lg shadow-xl p-4 z-50">
-                <AudioSettings />
-              </div>
-            )}
           </div>
-        </div>
 
         {error && (
           <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-xl text-sm text-red-400">{error}</div>
