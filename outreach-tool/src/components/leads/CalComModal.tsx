@@ -24,12 +24,12 @@ export default function CalComModal({ lead, show, onClose, onBooked }: CalComMod
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-        <div className="p-4 border-b border-[#27272a] flex items-center justify-between">
-          <h3 className="font-semibold text-white">
+      <div className="bg-secondary border border-border rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">
             {lead.meeting_link ? 'Meeting Details' : 'Book a Meeting'}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <button onClick={onClose} className="text-muted hover:text-foreground">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -39,7 +39,7 @@ export default function CalComModal({ lead, show, onClose, onBooked }: CalComMod
               href={lead.meeting_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 break-all"
+              className="text-accent hover:text-accent break-all"
             >
               {lead.meeting_link}
             </a>
@@ -47,14 +47,14 @@ export default function CalComModal({ lead, show, onClose, onBooked }: CalComMod
             <iframe
               src={`https://cal.com/${calUsername}/${calEventType}?prefill[name]=${prefillName}`}
               title="Book Meeting"
-              className="w-full h-[600px] border border-[#27272a] rounded-lg"
+              className="w-full h-[600px] border border-border rounded-lg"
               allowFullScreen
             />
           )}
         </div>
         {!lead.meeting_link && (
-          <div className="p-4 border-t border-[#27272a]">
-            <p className="text-xs text-gray-500 mb-3">
+          <div className="p-4 border-t border-border">
+            <p className="text-xs text-muted mb-3">
               Book a meeting with yourself, the client, and the cold caller via Cal.com.
               Set NEXT_PUBLIC_CALCOM_USERNAME and NEXT_PUBLIC_CALCOM_EVENT_TYPE in .env.local.
             </p>
@@ -76,14 +76,14 @@ export default function CalComModal({ lead, show, onClose, onBooked }: CalComMod
                     link: `https://cal.com/${process.env.NEXT_PUBLIC_CALCOM_USERNAME || 'demo'}/${process.env.NEXT_PUBLIC_CALCOM_EVENT_TYPE || '30min'}`,
                   });
                 }}
-                className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition mb-2"
+                className="w-full bg-green-600 hover:bg-green-500 text-foreground font-semibold rounded-lg px-4 py-2.5 text-sm transition mb-2"
               >
                 Confirm booking made
               </button>
             )}
             <button
               onClick={onClose}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+              className="w-full bg-card hover:bg-muted text-foreground font-semibold rounded-lg px-4 py-2.5 text-sm transition"
             >
               Close
             </button>

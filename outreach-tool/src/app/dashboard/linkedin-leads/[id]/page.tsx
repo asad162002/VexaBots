@@ -83,7 +83,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-gray-400">Loading lead...</div>
+        <div className="text-muted">Loading lead...</div>
       </div>
     );
   }
@@ -91,10 +91,10 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
   if (!lead) {
     return (
       <div className="text-center py-12">
-        <div className="text-gray-400 mb-4">Lead not found</div>
+        <div className="text-muted mb-4">Lead not found</div>
         <button
           onClick={() => router.push('/dashboard/linkedin-leads')}
-          className="text-blue-400 hover:text-blue-300"
+          className="text-accent hover:text-accent"
         >
           Return to LinkedIn Leads
         </button>
@@ -110,25 +110,25 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
       <div className="flex items-center gap-4 mb-6">
         <button
           onClick={() => router.push('/dashboard/linkedin-leads')}
-          className="p-2 text-gray-400 hover:text-white hover:bg-[#27272a] rounded-lg transition"
+          className="p-2 text-muted hover:text-foreground hover:bg-card rounded-lg transition"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="text-2xl font-bold text-white">Lead Details</h1>
+        <h1 className="text-2xl font-bold text-foreground">Lead Details</h1>
       </div>
 
       <div className="space-y-6">
         {/* Main Info */}
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
+        <div className="bg-secondary border border-border rounded-xl p-6">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-600/20 rounded-lg flex items-center justify-center">
-                <User className="w-6 h-6 text-blue-400" />
+              <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center">
+                <User className="w-6 h-6 text-accent" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-white">{lead.lead_name || 'Untitled Contact'}</h2>
+                <h2 className="text-xl font-semibold text-foreground">{lead.lead_name || 'Untitled Contact'}</h2>
                 {lead.title && (
-                  <p className="text-gray-400 mt-1">{lead.title}</p>
+                  <p className="text-muted mt-1">{lead.title}</p>
                 )}
               </div>
             </div>
@@ -136,7 +136,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
               lead.source === 'apollo_enrichment'
                 ? 'bg-purple-500/20 text-purple-300'
-                : 'bg-blue-500/20 text-blue-300'
+                : 'bg-primary/20 text-accent'
             }`}>
               {lead.source?.replace('_', ' ') || 'Unknown'}
             </span>
@@ -146,20 +146,20 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
             {lead.email && (
               <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-medium text-muted uppercase tracking-wider mb-1.5">
                   Email Address
                 </label>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2 flex-1">
-                    <Mail className="w-4 h-4 text-gray-500" />
-                    <span className="text-white">{lead.email}</span>
+                    <Mail className="w-4 h-4 text-muted" />
+                    <span className="text-foreground">{lead.email}</span>
                     {lead.email_status === 'verified' && (
                       <CheckCircleIcon />
                     )}
                   </div>
                   <button
                     onClick={() => handleEmailClick(lead.email!)}
-                    className="p-1 text-gray-400 hover:text-white hover:bg-[#27272a] rounded transition"
+                    className="p-1 text-muted hover:text-foreground hover:bg-card rounded transition"
                     title="Send email"
                   >
                     <Mail className="w-4 h-4" />
@@ -170,12 +170,12 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
 
             {lead.linkedin_url && (
               <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-medium text-muted uppercase tracking-wider mb-1.5">
                   LinkedIn Profile
                 </label>
                 <button
                   onClick={() => handleLinkedInClick(lead.linkedin_url!)}
-                  className="flex items-center gap-2 text-blue-400 hover:text-blue-300"
+                  className="flex items-center gap-2 text-accent hover:text-accent"
                 >
                   <ExternalLink className="w-4 h-4" />
                   {lead.linkedin_url}
@@ -185,34 +185,34 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
 
             {lead.place_id && (
               <div>
-                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-medium text-muted uppercase tracking-wider mb-1.5">
                   Place ID
                 </label>
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-300 font-mono text-sm">{lead.place_id}</span>
+                  <Building2 className="w-4 h-4 text-muted" />
+                  <span className="text-muted font-mono text-sm">{lead.place_id}</span>
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-medium text-muted uppercase tracking-wider mb-1.5">
                 Source
               </label>
-              <span className="text-white">{lead.source?.replace('_', ' ') || 'Unknown'}</span>
+              <span className="text-foreground">{lead.source?.replace('_', ' ') || 'Unknown'}</span>
             </div>
           </div>
 
           {/* Timeline */}
-          <div className="mt-6 pt-4 border-t border-[#27272a]">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="mt-6 pt-4 border-t border-border">
+            <div className="flex items-center gap-2 text-xs text-muted">
               <Calendar className="w-3.5 h-3.5" />
               <span>
                 Added: {new Date(lead.created_at).toLocaleString()}
               </span>
               {lead.updated_at !== lead.created_at && (
                 <>
-                  <span className="text-gray-600">·</span>
+                  <span className="text-muted">·</span>
                   <span>
                     Updated: {new Date(lead.updated_at).toLocaleString()}
                   </span>
@@ -223,18 +223,18 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
         </div>
 
         {/* Notes */}
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
-          <label className="block text-sm font-medium text-white mb-2">
+        <div className="bg-secondary border border-border rounded-xl p-6">
+          <label className="block text-sm font-medium text-foreground mb-2">
             Notes
           </label>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-muted mb-3">
             Add notes about this lead - your observations, follow-up plans, or any context.
           </p>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={6}
-            className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition resize-none"
+            className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition resize-none"
             placeholder="Enter your notes here..."
           />
           {notesError && (
@@ -244,7 +244,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
             <button
               onClick={saveNotes}
               disabled={saving || notes === lead.notes}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-medium rounded-lg text-sm transition disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary disabled:bg-primary text-foreground font-medium rounded-lg text-sm transition disabled:cursor-not-allowed"
             >
               {saving ? (
                 <>
@@ -262,7 +262,7 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
               )}
             </button>
             {notes !== lead.notes && (
-              <span className="text-xs text-gray-500">Unsaved changes</span>
+              <span className="text-xs text-muted">Unsaved changes</span>
             )}
           </div>
         </div>

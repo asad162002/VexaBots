@@ -161,10 +161,10 @@ function CallsPageContent({
   onRefresh: () => void;
 }) {
   return (
-    <div className="p-6 min-h-screen bg-[#0f0f0f]">
+    <div className="p-6 min-h-screen bg-background">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Cold Caller Dashboard</h1>
-        <button onClick={onRefresh} className="text-xs text-gray-400 hover:text-white transition" title="Refresh">
+        <h1 className="text-2xl font-bold text-foreground">Cold Caller Dashboard</h1>
+        <button onClick={onRefresh} className="text-xs text-muted hover:text-foreground transition" title="Refresh">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
@@ -189,19 +189,19 @@ function CallsPageContent({
         </div>
       )}
 
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl overflow-hidden">
+      <div className="bg-secondary border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#27272a]">
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Lead</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Phone</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Last Call</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Duration</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2.5">Actions</th>
+              <tr className="border-b border-border">
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Lead</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Phone</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Last Call</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Duration</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#27272a]">
+            <tbody className="divide-y divide-border">
               {filteredLeads.map((lead) => (
                 <CallLeadRow
                   key={lead.id}
@@ -215,8 +215,8 @@ function CallsPageContent({
         </div>
         {filteredLeads.length === 0 && (
           <div className="text-center py-12">
-            <Phone className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-500">No leads found matching your filters.</p>
+            <Phone className="w-12 h-12 text-muted mx-auto mb-3" />
+            <p className="text-muted">No leads found matching your filters.</p>
           </div>
         )}
       </div>

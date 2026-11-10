@@ -26,15 +26,15 @@ export default function LeadHeader({
   onBookMeeting,
 }: LeadHeaderProps) {
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6">
+    <div className="bg-secondary border border-border rounded-xl p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">
+          <h1 className="text-xl font-bold text-foreground">
             {lead.title || 'Untitled Business'}
           </h1>
           {lead.owner_name && (
-            <p className="text-gray-400 mt-1 text-sm">
-              Contact: <span className="font-medium text-gray-200">{lead.owner_name}</span>
+            <p className="text-muted mt-1 text-sm">
+              Contact: <span className="font-medium text-foreground">{lead.owner_name}</span>
               {lead.owner_role && ` — ${lead.owner_role}`}
             </p>
           )}
@@ -57,7 +57,7 @@ export default function LeadHeader({
             href={lead.website}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+            className="inline-flex items-center gap-2 bg-primary hover:bg-primary active:bg-accent text-foreground font-semibold rounded-lg px-4 py-2.5 text-sm transition"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -68,7 +68,7 @@ export default function LeadHeader({
         {(lead.meeting_link || process.env.NEXT_PUBLIC_CALCOM_USERNAME) && (
           <button
             onClick={onBookMeeting}
-            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-foreground font-semibold rounded-lg px-4 py-2.5 text-sm transition"
           >
             <Calendar className="w-4 h-4" />
             {lead.meeting_link ? 'View Meeting' : 'Book Meeting'}

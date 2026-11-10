@@ -23,7 +23,7 @@ export default function CallPanel({ lead, onMeetingBooked, onCallEnd }: CallPane
   if (!lead.phone) {
     return (
       <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
-        <p className="text-sm text-gray-500">This lead has no phone number.</p>
+        <p className="text-sm text-muted">This lead has no phone number.</p>
       </div>
     );
   }
@@ -40,7 +40,7 @@ export default function CallPanel({ lead, onMeetingBooked, onCallEnd }: CallPane
       {hasCalConfig && !lead.meeting_link && (
         <button
           onClick={() => setShowCal(true)}
-          className="mt-3 w-full flex items-center justify-center gap-2 bg-[#7c3aed] hover:bg-[#6d28d4] active:bg-[#8b3bff] text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition"
+          className="mt-3 w-full flex items-center justify-center gap-2 bg-[#7c3aed] hover:bg-[#6d28d4] active:bg-[#8b3bff] text-foreground font-semibold rounded-xl px-4 py-2.5 text-sm transition"
         >
           <Calendar className="w-4 h-4" />
           <span>Book meeting</span>
@@ -53,7 +53,7 @@ export default function CallPanel({ lead, onMeetingBooked, onCallEnd }: CallPane
             href={lead.meeting_link}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-blue-400 hover:text-blue-300 break-all"
+            className="text-xs text-accent hover:text-accent break-all"
           >
             {lead.meeting_link}
           </a>

@@ -53,16 +53,16 @@ export default function LeadFilters({
   availableCategories,
 }: LeadFiltersProps) {
   const inputClassName =
-    "w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition";
+    "w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition";
 
   const selectClassName =
-    "w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition";
+    "w-full sm:w-[130px] bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition";
 
   return (
     <div className="flex flex-wrap gap-3 items-end">
       {/* Search */}
       <div className="flex-1 min-w-[200px]">
-        <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+        <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
           Search
         </label>
         <input
@@ -76,7 +76,7 @@ export default function LeadFilters({
 
       {/* Status */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+        <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
           Status
         </label>
         <select
@@ -85,7 +85,7 @@ export default function LeadFilters({
           className={selectClassName}
         >
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
+            <option key={opt.value} value={opt.value} className="bg-secondary">
               {opt.label}
             </option>
           ))}
@@ -94,7 +94,7 @@ export default function LeadFilters({
 
       {/* Source */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+        <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
           Source
         </label>
         <select
@@ -103,7 +103,7 @@ export default function LeadFilters({
           className={selectClassName}
         >
           {SOURCE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
+            <option key={opt.value} value={opt.value} className="bg-secondary">
               {opt.label}
             </option>
           ))}
@@ -112,17 +112,17 @@ export default function LeadFilters({
 
       {/* Category */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+        <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
           Category
         </label>
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="w-full sm:w-[150px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+          className="w-full sm:w-[150px] bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
         >
-          <option value="all" className="bg-[#1a1a1a]">All Categories</option>
+          <option value="all" className="bg-secondary">All Categories</option>
           {availableCategories.map((cat) => (
-            <option key={cat} value={cat} className="bg-[#1a1a1a]">
+            <option key={cat} value={cat} className="bg-secondary">
               {cat}
             </option>
           ))}
@@ -131,23 +131,23 @@ export default function LeadFilters({
 
       {/* Assignment Status */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+        <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
           Assignment
         </label>
         <select
           value={assignedFilter}
           onChange={(e) => setAssignedFilter(e.target.value as 'all' | 'assigned' | 'unassigned')}
-          className="w-full sm:w-[140px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+          className="w-full sm:w-[140px] bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
         >
-          <option value="all" className="bg-[#1a1a1a]">All</option>
-          <option value="assigned" className="bg-[#1a1a1a]">Assigned</option>
-          <option value="unassigned" className="bg-[#1a1a1a]">Unassigned</option>
+          <option value="all" className="bg-secondary">All</option>
+          <option value="assigned" className="bg-secondary">Assigned</option>
+          <option value="unassigned" className="bg-secondary">Unassigned</option>
         </select>
       </div>
 
       {/* Sort */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+        <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
           Sort
         </label>
         <select
@@ -155,9 +155,9 @@ export default function LeadFilters({
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           className={selectClassName}
         >
-          <option value="newest" className="bg-[#1a1a1a]">Newest First</option>
-          <option value="icp_high" className="bg-[#1a1a1a]">ICP Score (High)</option>
-          <option value="follow_up" className="bg-[#1a1a1a]">Follow-up Due</option>
+          <option value="newest" className="bg-secondary">Newest First</option>
+          <option value="icp_high" className="bg-secondary">ICP Score (High)</option>
+          <option value="follow_up" className="bg-secondary">Follow-up Due</option>
         </select>
       </div>
     </div>

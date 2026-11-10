@@ -117,7 +117,7 @@ function ActivityFeedPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-3 text-gray-500">
+        <div className="flex items-center gap-3 text-muted">
           <Spinner size="md" />
           <span>Loading activity feed...</span>
         </div>
@@ -129,8 +129,8 @@ function ActivityFeedPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Activity Feed</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-foreground">Activity Feed</h1>
+          <p className="text-sm text-muted mt-0.5">
             {isAdmin ? `Team activity grouped by member (${activities.length} total activities)` : 'Your activity history'}
           </p>
         </div>
@@ -138,7 +138,7 @@ function ActivityFeedPage() {
           <select
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-1.5 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           >
             {DATE_FILTERS.map((f) => (
               <option key={f.value} value={f.value}>{f.label}</option>
@@ -146,7 +146,7 @@ function ActivityFeedPage() {
           </select>
           <button
             onClick={fetchActivities}
-            className="text-xs text-gray-400 hover:text-white border border-[#27272a] hover:border-[#3f3f46] rounded-lg px-3 py-1.5 transition"
+            className="text-xs text-muted hover:text-foreground border border-border hover:border-border rounded-lg px-3 py-1.5 transition"
           >
             Refresh
           </button>
@@ -154,11 +154,11 @@ function ActivityFeedPage() {
       </div>
 
       {groupedActivities.length === 0 ? (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
+        <div className="bg-secondary border border-border rounded-xl p-12">
           <div className="text-center">
-            <Clock className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400">No activities logged yet.</p>
-            <p className="text-gray-600 text-sm mt-1">Log activities from lead detail pages to see them here.</p>
+            <Clock className="w-10 h-10 text-muted mx-auto mb-3" />
+            <p className="text-muted">No activities logged yet.</p>
+            <p className="text-muted text-sm mt-1">Log activities from lead detail pages to see them here.</p>
           </div>
         </div>
       ) : (

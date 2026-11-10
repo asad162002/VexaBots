@@ -28,7 +28,7 @@ export default function FunnelBar({ label, value, total, colorKey }: FunnelBarPr
         <span className="text-sm font-medium" style={{ color: barColor }}>{label}</span>
       </div>
       <div className="flex-1">
-        <div className="w-full bg-[#27272a] rounded-full h-4">
+        <div className="w-full bg-card rounded-full h-4">
           <div
             className="h-4 rounded-full transition-all"
             style={{ width: `${pct}%`, backgroundColor: barColor }}
@@ -37,7 +37,7 @@ export default function FunnelBar({ label, value, total, colorKey }: FunnelBarPr
       </div>
       <div className="w-16 text-right">
         <span className="text-sm font-medium" style={{ color: barColor }}>{value}</span>
-        <span className="text-xs text-gray-500 ml-2">({pct}%)</span>
+        <span className="text-xs text-muted ml-2">({pct}%)</span>
       </div>
     </div>
   );

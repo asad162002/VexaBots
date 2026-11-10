@@ -15,7 +15,7 @@ export default function LeadCard({ lead, isSelected, toggleItem }: LeadCardProps
   return (
     <Link
       href={`/dashboard/leads/${lead.id}`}
-      className="block bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 transition cursor-pointer group"
+      className="block bg-secondary border border-border rounded-xl p-4 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition cursor-pointer group"
     >
       <div className="flex items-start gap-3">
         {/* Checkbox */}
@@ -28,9 +28,9 @@ export default function LeadCard({ lead, isSelected, toggleItem }: LeadCardProps
           }}
         >
           {isSelected ? (
-            <div className="w-4 h-4 bg-blue-600 rounded flex items-center justify-center">
+            <div className="w-4 h-4 bg-primary rounded flex items-center justify-center">
               <svg
-                className="w-3 h-3 text-white"
+                className="w-3 h-3 text-foreground"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -42,7 +42,7 @@ export default function LeadCard({ lead, isSelected, toggleItem }: LeadCardProps
               </svg>
             </div>
           ) : (
-            <div className="w-4 h-4 border border-[#3f3f46] rounded" />
+            <div className="w-4 h-4 border border-border rounded" />
           )}
         </div>
 
@@ -53,7 +53,7 @@ export default function LeadCard({ lead, isSelected, toggleItem }: LeadCardProps
         <div className="shrink-0 flex items-center gap-1.5">
           {lead.website && (
             <svg
-              className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition"
+              className="w-4 h-4 text-muted group-hover:text-muted transition"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -67,7 +67,7 @@ export default function LeadCard({ lead, isSelected, toggleItem }: LeadCardProps
             </svg>
           )}
           <svg
-            className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition"
+            className="w-4 h-4 text-muted group-hover:text-muted transition"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -97,7 +97,7 @@ function LeadCardContent({ lead }: { lead: Lead }) {
   return (
     <>
       <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
-        <h3 className="font-semibold text-white text-base truncate">
+        <h3 className="font-semibold text-foreground text-base truncate">
           {lead.title || 'Untitled Business'}
         </h3>
         <span
@@ -106,12 +106,12 @@ function LeadCardContent({ lead }: { lead: Lead }) {
           {STATUS_LABELS[lead.status]}
         </span>
         {lead.icp_score !== null && (
-          <span className="text-xs text-gray-400 font-semibold bg-[#27272a] px-2 py-0.5 rounded">
+          <span className="text-xs text-muted font-semibold bg-card px-2 py-0.5 rounded">
             ICP {lead.icp_score}
           </span>
         )}
         {lead.category_name && (
-          <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+          <span className="text-xs text-accent bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
             {lead.category_name}
           </span>
         )}
@@ -119,8 +119,8 @@ function LeadCardContent({ lead }: { lead: Lead }) {
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {lead.owner_name && (
-          <span className="text-gray-400">
-            Owner: <span className="text-gray-200 font-medium">{lead.owner_name}</span>
+          <span className="text-muted">
+            Owner: <span className="text-foreground font-medium">{lead.owner_name}</span>
           </span>
         )}
         {lead.phone && (
@@ -131,7 +131,7 @@ function LeadCardContent({ lead }: { lead: Lead }) {
               e.preventDefault();
               navigator.clipboard.writeText(lead.phone!);
             }}
-            className="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 text-left"
+            className="text-accent hover:text-accent font-medium flex items-center gap-1 text-left"
             title="Click to copy phone"
           >
             <Phone className="w-3.5 h-3.5" />
@@ -152,10 +152,10 @@ function LeadCardContent({ lead }: { lead: Lead }) {
             Call
           </button>
         )}
-        {lead.city && <span className="text-gray-500">{lead.city}</span>}
+        {lead.city && <span className="text-muted">{lead.city}</span>}
       </div>
 
-      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+      <div className="flex items-center gap-3 mt-2 text-xs text-muted">
         {lead.total_score && (
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500/50" />
@@ -164,7 +164,7 @@ function LeadCardContent({ lead }: { lead: Lead }) {
         )}
         {lead.source && (
           <span className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/50" />
             {lead.source.replace('_', ' ')}
           </span>
         )}

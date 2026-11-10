@@ -30,145 +30,50 @@ export default function LoginPage() {
     router.push('/dashboard');
   };
 
-  const handleMagicLink = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const { error: magicError } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
-    });
-
-    if (magicError) {
-      setError(magicError.message);
-      setLoading(false);
-      return;
-    }
-
-    setError('Check your email for the login link.');
-    setLoading(false);
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0f0f0f]">
-      <div className="w-full max-w-sm mx-auto">
-        {/* Logo / header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white tracking-tight">Vexabots</h1>
-          <p className="text-sm text-gray-400 mt-1">Outreach Tool</p>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "#08090a" }}>
+      <div className="w-full max-w-sm mx-auto px-6">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4" style={{ background: "rgba(94,106,210,0.15)", border: "1px solid rgba(94,106,210,0.3)" }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#7170ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <h1 className="text-2xl font-medium" style={{ color: "#f7f8f8", letterSpacing: "-0.02em" }}>Vexabots</h1>
+          <p className="text-sm mt-1" style={{ color: "#8a8f98" }}>Outreach Tool</p>
         </div>
 
-        {/* Login card */}
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-6 shadow-lg">
-          <h2 className="text-lg font-semibold text-white text-center mb-6">
-            Sign in to your account
-          </h2>
+        <div className="rounded-xl p-6" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <h2 className="text-base font-medium mb-5 text-center" style={{ color: "#f7f8f8" }}>Sign in to your account</h2>
 
           <form onSubmit={handleSignIn} className="space-y-4">
             <div>
-              <label
-                htmlFor="email"
-                className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                placeholder="you@company.com"
-                required
-              />
+              <label htmlFor="email" className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: "#8a8f98" }}>Email</label>
+              <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg px-3 py-2.5 text-sm placeholder-muted focus:outline-none transition"
+                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", color: "#f7f8f8" }}
+                placeholder="you@company.com" required />
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                placeholder="Enter your password"
-                required
-              />
+              <label htmlFor="password" className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: "#8a8f98" }}>Password</label>
+              <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-lg px-3 py-2.5 text-sm placeholder-muted focus:outline-none transition"
+                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", color: "#f7f8f8" }}
+                placeholder="Enter your password" required />
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-                <p className="text-sm text-red-400">{error}</p>
-              </div>
+              <div className="rounded-lg px-3 py-2 text-sm" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171" }}>{error}</div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Signing in...
-                </span>
-              ) : (
-                'Sign In'
-              )}
-            </button>
-          </form>
-
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-[#3f3f46]" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-[#1a1a1a] text-gray-500">or</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleMagicLink} className="space-y-4">
-            <div>
-              <label
-                htmlFor="magic-email"
-                className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide"
-              >
-                Email (magic link)
-              </label>
-              <input
-                id="magic-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                placeholder="you@company.com"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#3f3f46] hover:bg-[#52525b] text-white font-medium rounded-lg px-4 py-2.5 text-sm transition disabled:opacity-50"
-            >
-              {loading ? 'Sending...' : 'Send Magic Link'}
+            <button type="submit" disabled={loading}
+              className="w-full font-medium rounded-lg px-4 py-2.5 text-sm transition disabled:opacity-50"
+              style={{ background: "#5e6ad2", color: "#ffffff" }}>
+              {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-gray-600 mt-6">
-          Vexabots AI Automation Agency
-        </p>
+        <p className="text-center text-xs mt-6" style={{ color: "#62666d" }}>Vexabots AI Automation Agency</p>
       </div>
     </div>
   );

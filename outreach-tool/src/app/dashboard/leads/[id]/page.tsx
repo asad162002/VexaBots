@@ -224,8 +224,8 @@ function LeadDetailInner({ params }: { params: Promise<{ id: string }> }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
-        <div className="flex items-center gap-3 text-gray-400">
+      <div className="flex items-center justify-center py-16 bg-background">
+        <div className="flex items-center gap-3 text-muted">
           <Spinner size="md" />
           <span>Loading lead...</span>
         </div>
@@ -235,11 +235,11 @@ function LeadDetailInner({ params }: { params: Promise<{ id: string }> }) {
 
   if (error || !lead) {
     return (
-      <div className="bg-[#1a1a1a] border border-[#27272b] rounded-xl p-12 text-center bg-[#0f0f0f]">
+      <div className="bg-secondary border border-[#27272b] rounded-xl p-12 text-center bg-background">
         <p className="text-red-400 mb-3">{error || 'Lead not found'}</p>
         <button
           onClick={() => router.push('/dashboard')}
-          className="text-blue-400 hover:text-blue-300 font-medium text-sm"
+          className="text-accent hover:text-accent font-medium text-sm"
         >
           Back to leads
         </button>
@@ -252,7 +252,7 @@ function LeadDetailInner({ params }: { params: Promise<{ id: string }> }) {
       {/* Back button */}
       <button
         onClick={() => router.push('/dashboard')}
-        className="mb-5 text-sm text-gray-500 hover:text-white transition flex items-center gap-1.5"
+        className="mb-5 text-sm text-muted hover:text-foreground transition flex items-center gap-1.5"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

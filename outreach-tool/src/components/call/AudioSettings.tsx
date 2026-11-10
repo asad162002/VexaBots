@@ -118,7 +118,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
     <div className={`relative ${className}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="p-2 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 transition"
+        className="p-2 rounded-lg bg-card hover:bg-border text-muted transition"
         aria-label="Audio settings"
         aria-expanded={isOpen}
         title="Audio settings"
@@ -128,12 +128,12 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
 
       {isOpen && (
         <div
-          className="absolute z-50 bottom-full mb-2 w-64 bg-[#1a1a1a] border border-[#27272a] rounded-lg shadow-xl p-4 space-y-4"
+          className="absolute z-50 bottom-full mb-2 w-64 bg-secondary border border-border rounded-lg shadow-xl p-4 space-y-4"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Microphone selection */}
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-xs text-gray-400">
+            <label className="flex items-center gap-2 text-xs text-muted">
               <Mic className="w-3 h-3" />
               Microphone
             </label>
@@ -144,7 +144,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
               selectInputDevice(val);
             }}
               disabled={micPermission === 'denied'}
-              className="w-full bg-[#27272a] border border-[#3f3f46] rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+              className="w-full bg-card border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
             >
               <option value="">Default</option>
               {availableInputDevices.map((d) => (
@@ -156,13 +156,13 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
 
             <div className="flex items-center justify-between text-xs">
               {getPermissionIcon()}
-              <span className="text-gray-400">{getPermissionStatusText()}</span>
+              <span className="text-muted">{getPermissionStatusText()}</span>
             </div>
 
             {micPermission !== 'granted' && (
               <button
                 onClick={refreshDevices}
-                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition"
+                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-primary hover:bg-primary text-foreground rounded transition"
               >
                 Allow microphone access
               </button>
@@ -174,7 +174,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
             <button
               onClick={handleTestMic}
               disabled={!audioCtxSupported || micPermission === 'denied'}
-              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 rounded disabled:opacity-40 transition"
+              className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs bg-card hover:bg-border text-muted rounded disabled:opacity-40 transition"
             >
               {isTesting ? (
                 <>
@@ -190,14 +190,14 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
 
             {showLevelMeter && (
               <div className="space-y-1">
-                <div className="h-2 bg-[#27272a] rounded overflow-hidden">
+                <div className="h-2 bg-card rounded overflow-hidden">
                   <div
                     ref={meterRef}
                     className="h-full bg-green-500 rounded transition-all duration-75 ease-out"
                     style={{ width: '2px' }}
                   />
                 </div>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted">
                   Input level: {Math.round(micLevel * 100)}%
                 </span>
               </div>
@@ -206,7 +206,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
 
           {/* Speaker selection */}
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-xs text-gray-400">
+            <label className="flex items-center gap-2 text-xs text-muted">
               <Speaker className="w-3 h-3" />
               Speaker / Headphones
             </label>
@@ -218,7 +218,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
               const val = e.target.value || null;
               selectOutputDevice(val);
             }}
-                  className="w-full bg-[#27272a] border border-[#3f3f46] rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full bg-card border border-border rounded px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">System default</option>
                   {availableOutputDevices.map((d) => (
@@ -229,7 +229,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
                 </select>
               </>
             ) : (
-              <div className="flex items-center gap-2 text-xs text-gray-500">
+              <div className="flex items-center gap-2 text-xs text-muted">
                 <VolumeX className="w-3 h-3" />
                 <span>Speaker switching not supported (Safari)</span>
               </div>
@@ -257,7 +257,7 @@ export default function AudioSettings({ className = '', onTestMic }: AudioSettin
           {/* Refresh devices */}
           <button
             onClick={refreshDevices}
-            className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 rounded transition"
+            className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-card hover:bg-border text-muted rounded transition"
           >
             <RefreshCw className="w-3 h-3" />
             Refresh device list

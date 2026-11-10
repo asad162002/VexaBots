@@ -150,13 +150,23 @@ export default function SettingsPage() {
     if (!confirm(`Remove ${email} from the team? This cannot be undone.`)) return;
     setRemovingId(profileId);
     setRemoveError('');
-    const { error } = await supabase.from('profiles').delete().eq('id', profileId);
-    if (error) {
-      setRemoveError(error.message);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/remove-member', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ userId: profileId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setRemoveError(data.error || 'Failed to remove');
       setRemovingId(null);
       return;
     }
     fetchProfiles();
+    setRemovingId(null);
   };
 
   const handleCallerIdChange = (profileId: string, callerId: string | null) => {
@@ -170,19 +180,19 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Manage your team and account settings.</p>
+        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <p className="text-sm text-muted mt-0.5">Manage your team and account settings.</p>
       </div>
 
       {/* Current User Card */}
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+      <div className="bg-secondary border border-border rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+          <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-foreground font-bold">
             {user?.email?.charAt(0).toUpperCase() ?? '?'}
           </div>
           <div>
-            <h2 className="text-white font-semibold">{user?.email}</h2>
-            <p className="text-sm text-gray-400">
+            <h2 className="text-foreground font-semibold">{user?.email}</h2>
+            <p className="text-sm text-muted">
               {currentUserProfile?.role === 'admin' ? 'Admin' : 'Member'} · Joined {
                 currentUserProfile?.created_at
                   ? new Date(currentUserProfile.created_at).toLocaleDateString()
@@ -192,7 +202,7 @@ export default function SettingsPage() {
           </div>
         </div>
         {isAdmin && (
-          <div className="flex items-center gap-2 text-sm text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-2 text-sm text-accent bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
             <Shield className="w-4 h-4" />
             <span>You are an admin. You can manage team members.</span>
           </div>
@@ -201,25 +211,25 @@ export default function SettingsPage() {
 
       {/* Team Members */}
       {isAdmin && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-            <Users className="w-5 h-5 text-gray-400" />
+        <div className="bg-secondary border border-border rounded-xl p-5">
+          <h2 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
+            <Users className="w-5 h-5 text-muted" />
             Team Members
-            <span className="text-sm font-normal text-gray-500">({profiles.length})</span>
+            <span className="text-sm font-normal text-muted">({profiles.length})</span>
           </h2>
-          <p className="text-xs text-gray-500 mb-4">Manage who has access to the outreach tool.</p>
+          <p className="text-xs text-muted mb-4">Manage who has access to the outreach tool.</p>
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="flex items-center gap-3 text-gray-500">
+              <div className="flex items-center gap-3 text-muted">
                 <Spinner size="md" />
                 <span>Loading team members...</span>
               </div>
             </div>
           ) : profiles.length === 0 ? (
             <div className="text-center py-8">
-              <Users className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400 text-sm">No team members yet.</p>
-              <p className="text-gray-600 text-xs mt-1">Add members below to get started.</p>
+              <Users className="w-8 h-8 text-muted mx-auto mb-3" />
+              <p className="text-muted text-sm">No team members yet.</p>
+              <p className="text-muted text-xs mt-1">Add members below to get started.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -248,7 +258,7 @@ export default function SettingsPage() {
             <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm text-yellow-300 mb-1">Member Access</p>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-muted">
                 You can view and update leads assigned to you. Contact an admin for access to team management features.
               </p>
             </div>
@@ -256,48 +266,14 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Assignment Limits */}
-      {isAdmin && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-gray-400" />
-            Assignment Limits
-          </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Set maximum lead assignments per team member. Leave at 0 for no limit.
-          </p>
-          {limitsLoading ? (
-            <div className="flex items-center gap-3 text-gray-500">
-              <Spinner size="sm" />
-              <span>Loading limits...</span>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {profiles
-                .filter(p => p.role !== 'admin' || p.id === user?.id)
-                .map((profile) => (
-                  <AssignmentLimitRow
-                    key={profile.id}
-                    profile={profile}
-                    limit={assignLimits[profile.id]?.max_leads ?? 0}
-                    current={assignLimits[profile.id]?.current_leads ?? 0}
-                    currentUserId={user?.id}
-                    onUpdate={updateLimit}
-                  />
-                ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Invite Member */}
       {isAdmin && (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-gray-400" />
+        <div className="bg-secondary border border-border rounded-xl p-5">
+          <h2 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-muted" />
             Invite Team Member
           </h2>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-muted mb-4">
             Add a new member to the team. A password will be generated for them.
           </p>
           {inviteError && (
@@ -312,11 +288,11 @@ export default function SettingsPage() {
               <p className="text-sm text-green-400">{inviteSuccess}</p>
               {invitePassword && (
                 <div className="mt-1 flex items-center gap-2">
-                  <code className="text-sm font-mono bg-[#1a1a1a] px-2 py-1 rounded text-gray-200">{invitePassword}</code>
+                  <code className="text-sm font-mono bg-secondary px-2 py-1 rounded text-foreground">{invitePassword}</code>
                   <button
                     type="button"
                     onClick={() => { navigator.clipboard.writeText(invitePassword); }}
-                    className="text-xs text-blue-400 hover:text-blue-300"
+                    className="text-xs text-accent hover:text-accent"
                   >
                     <Copy className="w-3 h-3" />
                   </button>
@@ -326,7 +302,7 @@ export default function SettingsPage() {
           )}
           <form onSubmit={handleInvite} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+              <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
                 Email Address
               </label>
               <input
@@ -334,11 +310,11 @@ export default function SettingsPage() {
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="colleague@company.com"
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+              <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
                 Full Name (optional)
               </label>
               <input
@@ -346,17 +322,17 @@ export default function SettingsPage() {
                 value={inviteName}
                 onChange={(e) => setInviteName(e.target.value)}
                 placeholder="John Smith"
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+              <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
                 Role
               </label>
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as 'admin' | 'member')}
-                className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                className="w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
               >
                 <option value="member">Member (can view and update leads)</option>
                 <option value="admin">Admin (full access)</option>
@@ -365,7 +341,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={inviting || !inviteEmail.trim()}
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
+              className="bg-primary hover:bg-primary disabled:bg-primary text-foreground font-semibold rounded-lg px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
             >
               {inviting ? 'Adding...' : 'Add Team Member'}
             </button>

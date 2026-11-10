@@ -39,7 +39,7 @@ function ImportPageWrapper() {
   if (loadingRole) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
-        <div className="flex items-center gap-3 text-gray-400">
+        <div className="flex items-center gap-3 text-muted">
           <Spinner size="md" />
           <span>Checking permissions...</span>
         </div>
@@ -54,13 +54,13 @@ function ImportPageWrapper() {
           <div className="flex items-start gap-3">
             <Shield className="w-6 h-6 text-red-400 flex-shrink-0" />
             <div>
-              <h1 className="text-xl font-bold text-white mb-2">Access Restricted</h1>
-              <p className="text-gray-300 mb-4">
+              <h1 className="text-xl font-bold text-foreground mb-2">Access Restricted</h1>
+              <p className="text-muted mb-4">
                 Import leads is an admin-only feature. You need admin permissions to upload CSV or JSON files.
               </p>
               <button
                 onClick={() => router.push('/dashboard')}
-                className="text-blue-400 hover:text-blue-300 font-medium text-sm"
+                className="text-accent hover:text-accent font-medium text-sm"
               >
                 Go back to dashboard
               </button>
@@ -521,8 +521,8 @@ function ImportPageContent() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Import Leads</h1>
-        <p className="text-sm text-gray-400 mt-1">
+        <h1 className="text-2xl font-bold text-foreground">Import Leads</h1>
+        <p className="text-sm text-muted mt-1">
           Upload a CSV or JSON file (google-maps-scraper format) to import leads.
         </p>
       </div>
@@ -563,7 +563,7 @@ function ImportPageContent() {
               <button
                 onClick={handleImport}
                 disabled={importing}
-                className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
+                className="bg-primary hover:bg-primary disabled:bg-primary text-foreground font-semibold rounded-lg px-4 py-2 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {importing ? (
                   <>
@@ -582,7 +582,7 @@ function ImportPageContent() {
               <button
                 onClick={handleImport}
                 disabled={importing}
-                className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
+                className="bg-primary hover:bg-primary disabled:bg-primary text-foreground font-semibold rounded-lg px-4 py-2 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {importing ? (
                   <>
@@ -600,7 +600,7 @@ function ImportPageContent() {
             <button
               onClick={handleReset}
               disabled={importing}
-              className="text-gray-400 hover:text-white text-sm font-medium transition"
+              className="text-muted hover:text-foreground text-sm font-medium transition"
             >
               Reset
             </button>

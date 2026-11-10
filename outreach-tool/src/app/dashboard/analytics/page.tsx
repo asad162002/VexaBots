@@ -217,9 +217,9 @@ export default function AnalyticsPage() {
   };
 
   const STATUS_COLORS_MAP: Record<string, string> = {
-    new: 'bg-gray-400', contacted: 'bg-blue-400', interested: 'bg-green-400',
+    new: 'bg-muted', contacted: 'bg-accent', interested: 'bg-green-400',
     not_interested: 'bg-red-400', send_info: 'bg-yellow-400',
-    meeting_booked: 'bg-purple-400', dead: 'bg-gray-600',
+    meeting_booked: 'bg-purple-400', dead: 'bg-muted',
   };
 
   const STATUS_LABELS_MAP: Record<string, string> = {
@@ -231,7 +231,7 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-3 text-gray-500">
+        <div className="flex items-center gap-3 text-muted">
           <Spinner size="md" />
           <span>Loading analytics...</span>
         </div>
@@ -259,8 +259,8 @@ export default function AnalyticsPage() {
       {/* Team Performance Cards */}
       {isAdmin && memberStats.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-gray-400" />
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-muted" />
             Team Performance
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -294,7 +294,7 @@ export default function AnalyticsPage() {
               label={STATUS_LABELS_MAP[item.status] || item.status}
               count={item.count}
               percentage={item.percentage}
-              colorClass={STATUS_COLORS_MAP[item.status] || 'bg-gray-400'}
+              colorClass={STATUS_COLORS_MAP[item.status] || 'bg-muted'}
             />
           )}
         />
@@ -310,7 +310,7 @@ export default function AnalyticsPage() {
               label={item.source.replace('_', ' ')}
               count={item.count}
               percentage={item.percentage}
-              colorClass="bg-blue-500"
+              colorClass="bg-primary"
             />
           )}
         />
@@ -338,8 +338,8 @@ function DistributionSection<T>({ title, items, renderBar }: {
   renderBar: (item: T) => React.ReactNode;
 }) {
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-      <h2 className="text-lg font-semibold text-white mb-4">{title}</h2>
+    <div className="bg-secondary border border-border rounded-xl p-5">
+      <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
       <div className="space-y-3">
         {items.map((item, idx) => (
           <div key={idx}>{renderBar(item)}</div>
@@ -355,10 +355,10 @@ function BarWithColor({
   return (
     <div key={label}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm text-gray-300">{label}</span>
-        <span className="text-sm text-gray-400">{count} ({percentage}%)</span>
+        <span className="text-sm text-muted">{label}</span>
+        <span className="text-sm text-muted">{count} ({percentage}%)</span>
       </div>
-      <div className="w-full bg-[#27272a] rounded-full h-2">
+      <div className="w-full bg-card rounded-full h-2">
         <div className={`h-2 rounded-full ${colorClass}`} style={{ width: `${percentage}%` }} />
       </div>
     </div>

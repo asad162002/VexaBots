@@ -66,13 +66,13 @@ export const STATUS_LABELS_DISPLAY: Record<LeadStatus, string> = {
 };
 
 export const STATUS_COLORS: Record<LeadStatus, string> = {
-  new: 'bg-gray-400',
-  contacted: 'bg-blue-400',
+  new: 'bg-muted',
+  contacted: 'bg-accent',
   interested: 'bg-green-400',
   not_interested: 'bg-red-400',
   send_info: 'bg-yellow-400',
   meeting_booked: 'bg-purple-400',
-  dead: 'bg-gray-600',
+  dead: 'bg-muted',
 };
 
 export const SOURCE_LABELS: Record<string, string> = {
@@ -86,13 +86,13 @@ export const SOURCE_LABELS: Record<string, string> = {
 
 export const FUNNEL_STEPS = [
   { key: 'total', label: 'Total Leads' },
-  { key: 'new', label: 'New', color: 'text-gray-400' },
-  { key: 'contacted', label: 'Contacted', color: 'text-blue-400' },
+  { key: 'new', label: 'New', color: 'text-muted' },
+  { key: 'contacted', label: 'Contacted', color: 'text-accent' },
   { key: 'interested', label: 'Interested', color: 'text-green-400' },
   { key: 'send_info', label: 'Send Info', color: 'text-yellow-400' },
   { key: 'meeting_booked', label: 'Meeting Booked', color: 'text-purple-400' },
   { key: 'not_interested', label: 'Not Interested', color: 'text-red-400' },
-  { key: 'dead', label: 'Dead', color: 'text-gray-600' },
+  { key: 'dead', label: 'Dead', color: 'text-muted' },
 ];
 
 export const EMPTY_STATUS: Record<LeadStatus, number> = {

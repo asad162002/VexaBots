@@ -32,17 +32,17 @@ export default function LeadUpdatePanel({
   saving,
 }: LeadUpdatePanelProps) {
   const selectClassName =
-    "w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition";
+    "w-full bg-card border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition";
 
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5 sticky top-6">
-      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Update</h2>
+    <div className="bg-secondary border border-border rounded-xl p-5 sticky top-6">
+      <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Update</h2>
 
       <div className="mb-4">
-        <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Status</label>
+        <label className="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Status</label>
         <select value={status} onChange={(e) => setStatus(e.target.value as LeadStatus)} className={selectClassName}>
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
+            <option key={opt.value} value={opt.value} className="bg-secondary">
               {opt.label}
             </option>
           ))}
@@ -51,11 +51,11 @@ export default function LeadUpdatePanel({
 
       {profiles.length > 0 && (
         <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Assign To</label>
+          <label className="block text-xs font-medium text-muted mb-2 uppercase tracking-wide">Assign To</label>
           <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className={selectClassName}>
-            <option value="" className="bg-[#1a1a1a]">Unassigned</option>
+            <option value="" className="bg-secondary">Unassigned</option>
             {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id} className="bg-[#1a1a1a]">
+              <option key={profile.id} value={profile.id} className="bg-secondary">
                 {profile.full_name || profile.email || 'Unnamed'}
               </option>
             ))}
@@ -67,7 +67,7 @@ export default function LeadUpdatePanel({
       <button
         onClick={onSave}
         disabled={saving}
-        className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-lg px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
+        className="w-full bg-primary hover:bg-primary active:bg-accent disabled:bg-primary text-foreground font-semibold rounded-lg px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
       >
         {saving ? 'Saving...' : 'Save Changes'}
       </button>
@@ -77,12 +77,12 @@ export default function LeadUpdatePanel({
 
 function DateInfo({ lead }: { lead: Lead }) {
   return (
-    <div className="text-xs text-gray-500 mb-4 space-y-1">
+    <div className="text-xs text-muted mb-4 space-y-1">
       {lead.last_contacted_at && (
         <p>Last contacted: {new Date(lead.last_contacted_at).toLocaleString()}</p>
       )}
       {lead.next_follow_up_at && (
-        <p className="text-blue-400 font-medium">
+        <p className="text-accent font-medium">
           Follow-up due: {new Date(lead.next_follow_up_at).toLocaleDateString()}
         </p>
       )}

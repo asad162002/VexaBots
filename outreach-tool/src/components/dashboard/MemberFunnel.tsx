@@ -12,14 +12,14 @@ export default function MemberFunnel({ funnel }: MemberFunnelProps) {
   const calledCount = funnel.contacted + funnel.interested + funnel.send_info + funnel.meeting_booked;
 
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-      <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="bg-secondary border border-border rounded-xl p-5">
+      <h2 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
+        <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
         My Conversion Funnel
       </h2>
-      <p className="text-xs text-gray-500 mb-4">
+      <p className="text-xs text-muted mb-4">
         Your lead pipeline from new to meeting booked.
       </p>
 
@@ -27,7 +27,7 @@ export default function MemberFunnel({ funnel }: MemberFunnelProps) {
       <div className="flex items-center justify-between mb-6">
         <StatItem value={funnel.total} label="Total" />
         <ArrowSeparator />
-        <StatItemWithIcon icon={Phone} value={calledCount} label="Called" iconColor="text-blue-400" valueColor="text-blue-400" />
+        <StatItemWithIcon icon={Phone} value={calledCount} label="Called" iconColor="text-accent" valueColor="text-accent" />
         <ArrowSeparator />
         <StatItemWithIcon icon={CheckCircle} value={funnel.interested + funnel.send_info + funnel.meeting_booked} label="Interested" iconColor="text-green-400" valueColor="text-green-400" />
         <ArrowSeparator />
@@ -56,8 +56,8 @@ export default function MemberFunnel({ funnel }: MemberFunnelProps) {
 function StatItem({ value, label }: { value: number; label: string }) {
   return (
     <div className="text-center">
-      <p className="text-2xl font-bold text-white">{value}</p>
-      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-2xl font-bold text-foreground">{value}</p>
+      <p className="text-xs text-muted">{label}</p>
     </div>
   );
 }
@@ -71,13 +71,13 @@ function StatItemWithIcon({ icon: Icon, value, label, iconColor, valueColor }: {
 }) {
   return (
     <div className="text-center">
-      <Icon className={`w-6 h-6 ${iconColor || 'text-gray-400'} mx-auto`} />
-      <p className={`text-xl font-bold ${valueColor || 'text-white'}`}>{value}</p>
-      <p className="text-xs text-gray-500">{label}</p>
+      <Icon className={`w-6 h-6 ${iconColor || 'text-muted'} mx-auto`} />
+      <p className={`text-xl font-bold ${valueColor || 'text-foreground'}`}>{value}</p>
+      <p className="text-xs text-muted">{label}</p>
     </div>
   );
 }
 
 function ArrowSeparator() {
-  return <span className="text-gray-500">→</span>;
+  return <span className="text-muted">→</span>;
 }

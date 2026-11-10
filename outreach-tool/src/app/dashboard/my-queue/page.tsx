@@ -242,35 +242,35 @@ function MyQueueInner() {
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
-        <div className="text-gray-400 text-sm">Loading...</div>
+      <div className="flex items-center justify-center py-16 bg-background">
+        <div className="text-muted text-sm">Loading...</div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
-        <div className="text-gray-400 text-sm">Redirecting to login...</div>
+      <div className="flex items-center justify-center py-16 bg-background">
+        <div className="text-muted text-sm">Redirecting to login...</div>
       </div>
     );
   }
 
   if (loading && leads.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16 bg-[#0f0f0f]">
-        <div className="text-gray-400 text-sm">Loading queue...</div>
+      <div className="flex items-center justify-center py-16 bg-background">
+        <div className="text-muted text-sm">Loading queue...</div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 min-h-screen bg-[#0b0b0f]">
+    <div className="p-6 min-h-screen bg-[#08090a]">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-white">My Queue</h1>
+              <h1 className="text-2xl font-bold text-foreground">My Queue</h1>
               {isAdmin && (
                 <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-medium text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-full">
                   Viewing as admin
@@ -278,10 +278,10 @@ function MyQueueInner() {
               )}
             </div>
             <div className="flex items-center gap-3 mt-1.5">
-              <div className="h-2 flex-1 max-w-xs bg-[#1d1d28] rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${activeLeads.length > 0 ? (progress / activeLeads.length) * 100 : 0}%` }}></div>
+              <div className="h-2 flex-1 max-w-xs bg-[#191a1b] rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full" style={{ width: `${activeLeads.length > 0 ? (progress / activeLeads.length) * 100 : 0}%` }}></div>
               </div>
-              <p className="text-sm text-gray-500">{progress} of {activeLeads.length} called today</p>
+              <p className="text-sm text-muted">{progress} of {activeLeads.length} called today</p>
             </div>
           </div>
           </div>
@@ -296,16 +296,16 @@ function MyQueueInner() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {/* Left: Queue */}
-          <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3 overflow-y-auto max-h-[600px]">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Queue · {activeLeads.length}</p>
+          <div className="bg-[#0f1011] border border-[rgba(255,255,255,0.06)] rounded-xl p-3 overflow-y-auto max-h-[600px]">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Queue · {activeLeads.length}</p>
             <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search name or phone"
-                className="w-full bg-[#181821] border border-[#262633] rounded-xl text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 h-9 pl-10 pr-3 text-sm"
+                className="w-full bg-secondary border border-border rounded-xl text-muted placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 pl-10 pr-3 text-sm"
                 aria-label="Search leads"
               />
             </div>
@@ -326,18 +326,18 @@ function MyQueueInner() {
                     disabled={callPhase !== 'idle'}
                     className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition ${
                       originalIndex === currentIndex
-                        ? 'bg-[#1b2236] border border-[#2c3a66]'
-                        : 'hover:bg-[#1a1a23]'
+                        ? 'bg-[#191a1b] border border-[rgba(255,255,255,0.08)]'
+                        : 'hover:bg-[#191a1b]'
                     } ${isDone ? 'opacity-60' : ''}`}
                   >
                     <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-medium flex-shrink-0 ${
-                      originalIndex === currentIndex ? 'bg-blue-600 text-white' : 'bg-[#232333] text-gray-400'
+                      originalIndex === currentIndex ? 'bg-primary text-foreground' : 'bg-[#191a1b] text-muted'
                     }`}>
                       {initials}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium text-white text-sm truncate">{l.title || 'Untitled'}</div>
-                      <div className="text-xs text-gray-500 truncate">{l.owner_name || ''} · {l.phone || ''}</div>
+                      <div className="font-medium text-foreground text-sm truncate">{l.title || 'Untitled'}</div>
+                      <div className="text-xs text-muted truncate">{l.owner_name || ''} · {l.phone || ''}</div>
                     </div>
                     {isDone && outcomeLabel && (
                       <span className="text-xs text-green-400">{outcomeLabel}</span>
@@ -352,35 +352,35 @@ function MyQueueInner() {
           <div className="flex flex-col gap-3 min-w-0">
             {currentLead ? (
               <>
-                <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
+                <div className="bg-[#0f1011] border border-[rgba(255,255,255,0.06)] rounded-xl p-3">
                   <div className="flex justify-between gap-8 items-start">
                     <div className="min-w-0">
-                      <div className="font-medium text-white text-[15px]">{currentLead.title || 'Untitled Business'}</div>
+                      <div className="font-medium text-foreground text-[15px]">{currentLead.title || 'Untitled Business'}</div>
                       {currentLead.owner_name && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted mt-1">
                           {currentLead.owner_name}
                           {currentLead.owner_role && ` — ${currentLead.owner_role}`}
                         </p>
                       )}
                     </div>
-                    <span className="shrink-0 inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full font-semibold bg-[#2a2410] text-yellow-400 border border-yellow-500/30">
+                    <span className="shrink-0 inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full font-semibold bg-[#191a1b] text-yellow-400 border border-yellow-500/30">
                       {currentLead.source.replace('_', ' ')}
                     </span>
                   </div>
 
                   <div className="flex flex-wrap gap-2 mt-3">
                     {currentLead.city && (
-                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#1d1d28] text-gray-400 border border-[#2b2b3a]">
+                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#191a1b] text-muted border border-[rgba(255,255,255,0.06)]">
                         📍 {currentLead.city}
                       </span>
                     )}
                     {currentLead.category_name && (
-                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#1d1d28] text-gray-400 border border-[#2b2b3a]">
+                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#191a1b] text-muted border border-[rgba(255,255,255,0.06)]">
                         🏷️ {currentLead.category_name}
                       </span>
                     )}
                     {currentLead.reviews_count && (
-                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#1d1d28] text-gray-400 border border-[#2b2b3a]">
+                      <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#191a1b] text-muted border border-[rgba(255,255,255,0.06)]">
                         ⭐ {currentLead.total_score} ({currentLead.reviews_count} reviews)
                       </span>
                     )}
@@ -391,7 +391,7 @@ function MyQueueInner() {
                       href={currentLead.website.startsWith('http') ? currentLead.website : `https://${currentLead.website}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-2"
+                      className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent mt-2"
                     >
                       {currentLead.website}
                       <ExternalLink className="w-3 h-3" />
@@ -424,15 +424,15 @@ function MyQueueInner() {
                 <LeadDetails lead={currentLead} />
               </>
             ) : (
-              <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-5">
-                <p className="text-sm text-gray-400">Select a lead from the queue.</p>
+              <div className="bg-[#0f1011] border border-[rgba(255,255,255,0.06)] rounded-xl p-5">
+                <p className="text-sm text-muted">Select a lead from the queue.</p>
               </div>
             )}
           </div>
 
           {/* Right: After the Call */}
-          <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">After the call</p>
+          <div className="bg-[#0f1011] border border-[rgba(255,255,255,0.06)] rounded-xl p-3">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">After the call</p>
             <div className="space-y-3">
               {!canSelectOutcome && callPhase !== 'ended' && (
                 <div className="text-xs text-yellow-400 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
@@ -440,7 +440,7 @@ function MyQueueInner() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+                <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">
                   Outcome (1-7 keys or click)
                 </label>
                 <div className="grid grid-cols-1 gap-1.5 mt-2">
@@ -451,13 +451,13 @@ function MyQueueInner() {
                       disabled={!canSelectOutcome}
                       className={`oc text-left px-3 py-2 rounded-xl text-sm transition ${
                         selectedOutcome?.key === outcome.key
-                          ? 'border border-[#383835] bg-[#1b1b27] text-white'
-                          : 'bg-[#181821] text-gray-300 border border-[#262633] hover:bg-[#1f1f2b] hover:text-white'
+                          ? 'border border-[rgba(255,255,255,0.08)] bg-[#1b1b27] text-foreground'
+                          : 'bg-secondary text-muted border border-border hover:bg-[#1f1f2b] hover:text-foreground'
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       <span className="flex items-center justify-between">
                         <span>{outcome.label}</span>
-                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-[#0f0f15] border border-[#2b2b3a] text-gray-500 font-mono">
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-[#0f0f15] border border-[rgba(255,255,255,0.06)] text-muted font-mono">
                           {outcome.shortcut}
                         </span>
                       </span>
@@ -467,24 +467,24 @@ function MyQueueInner() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Notes</label>
+                <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Notes</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="What did they say?"
-                  className="w-full bg-[#181821] border border-[#262633] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+                  className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary resize-y"
                   rows={3}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">Follow-up date</label>
+                <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Follow-up date</label>
                 <input
                   type="date"
                   value={followUpDate}
                   onChange={(e) => setFollowUpDate(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full bg-[#181821] border border-[#262633] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
@@ -497,7 +497,7 @@ function MyQueueInner() {
               <button
                 onClick={handleSave}
                 disabled={!selectedOutcome || saving || !canSelectOutcome}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:bg-blue-800 text-white font-semibold rounded-xl px-4 py-3 text-sm transition disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary active:bg-accent disabled:bg-primary text-foreground font-semibold rounded-xl px-4 py-3 text-sm transition disabled:cursor-not-allowed"
               >
                 {saving ? (
                   <>

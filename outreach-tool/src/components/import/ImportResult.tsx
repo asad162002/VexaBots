@@ -17,15 +17,15 @@ export default function ImportResult({ success, skippedDetails, onImport, onRese
         <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
           <CheckCircle className="w-6 h-6 text-green-400" />
         </div>
-        <p className="text-white font-medium">Import complete</p>
-        <p className="text-sm text-gray-400 mt-1">
+        <p className="text-foreground font-medium">Import complete</p>
+        <p className="text-sm text-muted mt-1">
           {success.total} rows processed — {success.inserted} added, {success.skipped} skipped
           {success.enriched ? ` (${success.enriched} enriched leads added)` : ''}
         </p>
         {skippedDetails && skippedDetails.length > 0 && (
           <details className="mt-3 text-left">
-            <summary className="text-xs text-gray-500 cursor-pointer mb-1">View skipped rows</summary>
-            <ul className="text-xs text-gray-500 space-y-0.5 max-h-32 overflow-y-auto">
+            <summary className="text-xs text-muted cursor-pointer mb-1">View skipped rows</summary>
+            <ul className="text-xs text-muted space-y-0.5 max-h-32 overflow-y-auto">
               {skippedDetails.map((detail, i) => (
                 <li key={i} className="py-0.5">{detail}</li>
               ))}
@@ -34,7 +34,7 @@ export default function ImportResult({ success, skippedDetails, onImport, onRese
         )}
         <button
           onClick={() => window.location.assign('/dashboard')}
-          className="mt-4 text-blue-400 hover:text-blue-300 text-sm"
+          className="mt-4 text-accent hover:text-accent text-sm"
         >
           View leads
         </button>
@@ -49,7 +49,7 @@ export default function ImportResult({ success, skippedDetails, onImport, onRese
       <button
         onClick={onImport}
         disabled={importing}
-        className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-semibold rounded-lg px-6 py-2.5 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
+        className="bg-primary hover:bg-primary disabled:bg-primary text-foreground font-semibold rounded-lg px-6 py-2.5 text-sm transition disabled:cursor-not-allowed flex items-center gap-2"
       >
         {importing ? (
           <>
@@ -68,7 +68,7 @@ export default function ImportResult({ success, skippedDetails, onImport, onRese
       </button>
       <button
         onClick={onReset}
-        className="text-gray-400 hover:text-white text-sm transition"
+        className="text-muted hover:text-foreground text-sm transition"
       >
         Start over
       </button>

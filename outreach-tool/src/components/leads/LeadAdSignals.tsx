@@ -7,14 +7,14 @@ export default function LeadAdSignals({ lead }: { lead: Lead }) {
   }
 
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Ad & Enrichment Data</h2>
+    <div className="bg-secondary border border-border rounded-xl p-5">
+      <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Ad & Enrichment Data</h2>
       <div className="space-y-3">
         {lead.running_google_ads && (
           <Badge label="Google Ads" className="bg-red-500/20 text-red-400" dot="Running ads" />
         )}
         {lead.running_fb_ads && (
-          <Badge label="Facebook Ads" className="bg-blue-500/20 text-blue-400" dot="Running ads" />
+          <Badge label="Facebook Ads" className="bg-primary/20 text-accent" dot="Running ads" />
         )}
         {lead.apollo_description && (
           <Field label="Apollo Description" value={lead.apollo_description} />
@@ -42,7 +42,7 @@ function Badge({ label, className, dot }: BadgeProps) {
       <span className={`text-[11px] ${className} px-2 py-0.5 rounded-full font-semibold`}>
         {label}
       </span>
-      <span className="text-sm text-gray-400">{dot}</span>
+      <span className="text-sm text-muted">{dot}</span>
     </div>
   );
 }
@@ -50,8 +50,8 @@ function Badge({ label, className, dot }: BadgeProps) {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className="text-sm text-gray-300">{value}</p>
+      <p className="text-xs text-muted mb-1">{label}</p>
+      <p className="text-sm text-muted">{value}</p>
     </div>
   );
 }

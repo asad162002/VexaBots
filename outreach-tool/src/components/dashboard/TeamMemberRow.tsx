@@ -55,41 +55,41 @@ export default function TeamMemberRow({
   };
 
   return (
-    <div className="flex items-center justify-between bg-[#27272a] hover:bg-[#2a2a32] rounded-xl px-4 py-3.5 transition-colors">
+    <div className="flex items-center justify-between bg-card hover:bg-[#2a2a32] rounded-xl px-4 py-3.5 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
-          profile.role === 'admin' ? 'bg-purple-600' : 'bg-gray-700'
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0 ${
+          profile.role === 'admin' ? 'bg-purple-600' : 'bg-card'
         }`}>
           {profile.email?.charAt(0).toUpperCase() ?? '?'}
         </div>
         <div className="min-w-0">
-          <p className="text-sm text-white font-medium truncate">{profile.email}</p>
+          <p className="text-sm text-foreground font-medium truncate">{profile.email}</p>
           <div className="flex items-center gap-2 mt-0.5">
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
               profile.role === 'admin'
                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
+                : 'bg-background0/20 text-muted border border-border/30'
             }`}>
               {profile.role === 'admin' ? 'Admin' : 'Member'}
             </span>
             {profile.id === currentUserId && (
-              <span className="text-xs text-gray-500">(you)</span>
+              <span className="text-xs text-muted">(you)</span>
             )}
           </div>
           {isAdmin && (
             <div className="mt-2">
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">
+              <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
                 Caller-ID Number
               </label>
               {numbersLoading ? (
-                <div className="text-xs text-gray-500">Loading numbers...</div>
+                <div className="text-xs text-muted">Loading numbers...</div>
               ) : (
                 <>
                   <select
                     value={profile.caller_id_number ?? ''}
                     onChange={(e) => saveCallerId(e.target.value || null)}
                     disabled={savingCallerId}
-                    className="w-full bg-[#1a1a1a] border border-[#3f3f46] rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    className="w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                   >
                     <option value="">No caller-ID assigned</option>
                     {telnyxNumbers.map((num) => (

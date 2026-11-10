@@ -101,13 +101,13 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
 };
 
 export const STATUS_COLORS: Record<LeadStatus, string> = {
-  new: 'bg-gray-100 text-gray-700',
-  contacted: 'bg-blue-100 text-blue-700',
+  new: 'bg-secondary text-muted',
+  contacted: 'bg-primary/20 text-accent',
   interested: 'bg-green-100 text-green-700',
   not_interested: 'bg-red-100 text-red-700',
   send_info: 'bg-yellow-100 text-yellow-700',
   meeting_booked: 'bg-purple-100 text-purple-700',
-  dead: 'bg-gray-200 text-gray-500',
+  dead: 'bg-secondary text-muted',
 };
 
 // Telnyx Call Log Types

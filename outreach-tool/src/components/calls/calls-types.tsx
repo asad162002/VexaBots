@@ -38,11 +38,11 @@ export const STATUS_COLORS: Record<string, string> = {
   busy: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   no_answer: 'bg-red-500/20 text-red-400 border-red-500/30',
   voicemail: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-  initiated: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-  ringing: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  disconnected: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
-  completed: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
-  default: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  initiated: 'bg-background0/20 text-muted border-border/30',
+  ringing: 'bg-primary/20 text-accent border-primary/30',
+  disconnected: 'bg-background0/20 text-muted border-border/30',
+  completed: 'bg-background0/20 text-muted border-border/30',
+  default: 'bg-background0/20 text-muted border-border/30',
 };
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -85,15 +85,15 @@ export function CallControls({
   searchQuery, onSearchChange, leadsCount, calledCount, pendingCount,
 }: CallControlsProps) {
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 mb-6">
+    <div className="bg-secondary border border-border rounded-xl p-4 mb-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {isAdmin && (
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Caller</label>
+            <label className="block text-xs font-medium text-muted mb-1">Caller</label>
             <select
               value={selectedProfile}
               onChange={onCallerChange}
-              className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="">Select caller...</option>
               {profiles.map(p => (
@@ -105,11 +105,11 @@ export function CallControls({
           </div>
         )}
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Filter</label>
+          <label className="block text-xs font-medium text-muted mb-1">Filter</label>
           <select
             value={filterStatus}
             onChange={(e) => onFilterChange(e.target.value as 'all' | 'called' | 'not_called')}
-            className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="all">All Leads</option>
             <option value="called">Called</option>
@@ -117,28 +117,28 @@ export function CallControls({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Search</label>
+          <label className="block text-xs font-medium text-muted mb-1">Search</label>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Lead name, phone..."
-            className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Stats</label>
+          <label className="block text-xs font-medium text-muted mb-1">Stats</label>
           <div className="flex items-center gap-4 text-sm">
             <div>
-              <span className="text-gray-400">Total</span>
-              <span className="text-white font-bold"> {leadsCount}</span>
+              <span className="text-muted">Total</span>
+              <span className="text-foreground font-bold"> {leadsCount}</span>
             </div>
             <div>
-              <span className="text-gray-400">Called</span>
+              <span className="text-muted">Called</span>
               <span className="text-green-400 font-bold"> {calledCount}</span>
             </div>
             <div>
-              <span className="text-gray-400">Pending</span>
+              <span className="text-muted">Pending</span>
               <span className="text-yellow-400 font-bold"> {pendingCount}</span>
             </div>
           </div>
@@ -159,35 +159,35 @@ export function CallLeadRow({ lead, submitting, onCall }: CallLeadRowProps) {
   const hasCalled = lastCall !== null && lastCall?.status !== 'initiated';
 
   return (
-    <tr className="hover:bg-[#27272a]/30">
+    <tr className="hover:bg-card/30">
       <td className="px-4 py-3">
         <div>
-          <p className="text-sm font-medium text-white">{lead.title || 'Untitled'}</p>
-          {lead.owner_name && <p className="text-xs text-gray-500">{lead.owner_name}</p>}
+          <p className="text-sm font-medium text-foreground">{lead.title || 'Untitled'}</p>
+          {lead.owner_name && <p className="text-xs text-muted">{lead.owner_name}</p>}
         </div>
       </td>
       <td className="px-4 py-3">
         {lead.phone ? (
-          <div className="flex items-center gap-2 text-sm text-gray-300">
-            <Phone className="w-3 h-3 text-gray-500" />
+          <div className="flex items-center gap-2 text-sm text-muted">
+            <Phone className="w-3 h-3 text-muted" />
             {lead.phone}
           </div>
-        ) : <span className="text-xs text-gray-500">N/A</span>}
+        ) : <span className="text-xs text-muted">N/A</span>}
       </td>
       <td className="px-4 py-3">
         {hasCalled && lastCall ? (
           <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${getStatusColor(lastCall.status)}`}>
             {getStatusLabel(lastCall.status)}
           </span>
-        ) : <span className="text-xs text-gray-500">Not called</span>}
+        ) : <span className="text-xs text-muted">Not called</span>}
       </td>
       <td className="px-4 py-3">
         {lastCall?.duration_seconds ? (
-          <div className="flex items-center gap-1.5 text-sm text-gray-300">
-            <Clock className="w-3 h-3 text-gray-500" />
+          <div className="flex items-center gap-1.5 text-sm text-muted">
+            <Clock className="w-3 h-3 text-muted" />
             {lastCall.duration_seconds}s
           </div>
-        ) : <span className="text-xs text-gray-500">N/A</span>}
+        ) : <span className="text-xs text-muted">N/A</span>}
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
@@ -195,7 +195,7 @@ export function CallLeadRow({ lead, submitting, onCall }: CallLeadRowProps) {
             <button
               onClick={() => onCall(lead.id)}
               disabled={submitting}
-              className="text-blue-400 hover:text-blue-300 disabled:opacity-50 transition"
+              className="text-accent hover:text-accent disabled:opacity-50 transition"
               title={hasCalled ? 'Call again' : 'Call now'}
             >
               <Phone className="w-4 h-4" />
@@ -214,7 +214,7 @@ export function CallLeadRow({ lead, submitting, onCall }: CallLeadRowProps) {
           )}
           <a
             href={`/dashboard/leads/${lead.id}`}
-            className="text-gray-400 hover:text-gray-300 transition"
+            className="text-muted hover:text-muted transition"
             title="View lead details"
           >
             <ExternalLink className="w-4 h-4" />

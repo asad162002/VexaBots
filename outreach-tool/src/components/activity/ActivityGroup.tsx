@@ -15,33 +15,33 @@ export default function ActivityGroup({ group, profiles, leads, isExpanded, onTo
   const avatarText = profile?.full_name?.charAt(0) || profile?.email?.charAt(0) || '?';
 
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl overflow-hidden">
+    <div className="bg-secondary border border-border rounded-xl overflow-hidden">
       <button
         onClick={() => onToggle(group.profileId)}
         className="w-full flex items-center justify-between p-4 text-left hover:bg-[#1f1f25] transition"
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-300">
+          <div className="w-10 h-10 rounded-full bg-card flex items-center justify-center text-sm font-bold text-muted">
             {avatarText}
           </div>
           <div className="text-left">
-            <p className="text-sm font-medium text-white">{group.profileName}</p>
+            <p className="text-sm font-medium text-foreground">{group.profileName}</p>
             {group.profileEmail && group.profileName !== group.profileEmail && (
-              <p className="text-xs text-gray-500">{group.profileEmail}</p>
+              <p className="text-xs text-muted">{group.profileEmail}</p>
             )}
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-muted mt-0.5">
               {group.count} {group.count === 1 ? 'activity' : 'activities'}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-2 text-muted">
           <span className="text-xs">{group.activities[0] && getTimeAgo(group.activities[0].created_at)}</span>
           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </div>
       </button>
 
       {isExpanded && (
-        <div className="border-t border-[#27272a]">
+        <div className="border-t border-border">
           {group.activities.map((activity) => (
             <ActivityItem key={activity.id} activity={activity} leads={leads} />
           ))}
@@ -70,25 +70,25 @@ function ActivityItem({ activity, leads }: { activity: Activity; leads: Record<s
             {lead && (
               <Link
                 href={`/dashboard/leads/${lead.id}`}
-                className="text-xs text-blue-400 hover:text-blue-300 font-medium truncate"
+                className="text-xs text-accent hover:text-accent font-medium truncate"
               >
                 {lead.title || 'Untitled Business'}
               </Link>
             )}
             {lead && (
-              <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[lead.status] || 'bg-gray-200 text-gray-500'}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[lead.status] || 'bg-secondary text-muted'}`}>
                 {lead.status}
               </span>
             )}
           </div>
-          <p className="text-sm text-gray-300 break-words mb-1">{activity.content}</p>
-          {activity.outcome && <p className="text-xs text-gray-400 mb-1">Outcome: {activity.outcome}</p>}
+          <p className="text-sm text-muted break-words mb-1">{activity.content}</p>
+          {activity.outcome && <p className="text-xs text-muted mb-1">Outcome: {activity.outcome}</p>}
           {activity.next_follow_up_at && (
-            <p className="text-xs text-blue-400 mb-1">
+            <p className="text-xs text-accent mb-1">
               Follow-up: {new Date(activity.next_follow_up_at).toLocaleDateString()}
             </p>
           )}
-          <div className="flex items-center gap-3 text-xs text-gray-500">
+          <div className="flex items-center gap-3 text-xs text-muted">
             <span>{getTimeAgo(activity.created_at)}</span>
             <span>{formatDate(activity.created_at)}</span>
           </div>

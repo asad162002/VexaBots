@@ -288,14 +288,14 @@ export default function DashboardPage() {
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Leads</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-foreground">Leads</h1>
+          <p className="text-sm text-muted mt-0.5">
             {leads.length} total lead{leads.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
           onClick={fetchLeads}
-          className="bg-[#3f3f46] hover:bg-[#52525b] text-white text-sm font-medium rounded-lg px-4 py-2 transition flex items-center gap-2"
+          className="bg-border hover:bg-[#52525b] text-foreground text-sm font-medium rounded-lg px-4 py-2 transition flex items-center gap-2"
         >
           <RefreshIcon />
           Refresh
@@ -303,7 +303,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-4 mb-5">
+      <div className="bg-secondary border border-border rounded-xl p-4 mb-5">
         <LeadFilters
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
@@ -328,10 +328,10 @@ export default function DashboardPage() {
             className={`w-5 h-5 flex items-center justify-center cursor-pointer rounded border transition-colors
               ${
                 isAllSelected()
-                  ? 'bg-blue-600 border-blue-600'
+                  ? 'bg-primary border-primary'
                   : isPartiallySelected()
-                    ? 'bg-blue-600/30 border-blue-600'
-                    : 'border-[#3f3f46] hover:border-[#52525b]'
+                    ? 'bg-primary/30 border-primary'
+                    : 'border-border hover:border-[#52525b]'
               }`}
             onClick={() => {
               if (isAllSelected()) {
@@ -343,7 +343,7 @@ export default function DashboardPage() {
           >
             {isAllSelected() || isPartiallySelected() ? (
               <svg
-                className="w-3 h-3 text-white"
+                className="w-3 h-3 text-foreground"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -355,7 +355,7 @@ export default function DashboardPage() {
               </svg>
             ) : null}
           </div>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted">
             {selectedIds.size > 0
               ? `${selectedIds.size} selected on this page`
               : 'Select all on page'}
@@ -415,7 +415,7 @@ function RefreshIcon() {
 function LoadingState() {
   return (
     <div className="flex items-center justify-center py-16">
-      <div className="flex items-center gap-3 text-gray-500">
+      <div className="flex items-center gap-3 text-muted">
         <Spinner size="md" />
         <span>Loading leads...</span>
       </div>
@@ -425,11 +425,11 @@ function LoadingState() {
 
 function EmptyState() {
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
+    <div className="bg-secondary border border-border rounded-xl p-12">
       <div className="text-center">
-        <div className="w-12 h-12 rounded-full bg-[#27272a] flex items-center justify-center mx-auto mb-4">
+        <div className="w-12 h-12 rounded-full bg-card flex items-center justify-center mx-auto mb-4">
           <svg
-            className="w-6 h-6 text-gray-500"
+            className="w-6 h-6 text-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -442,8 +442,8 @@ function EmptyState() {
             />
           </svg>
         </div>
-        <p className="text-gray-300 font-medium mb-1">No leads found</p>
-        <p className="text-gray-500 text-sm">Try adjusting your filters or search query.</p>
+        <p className="text-muted font-medium mb-1">No leads found</p>
+        <p className="text-muted text-sm">Try adjusting your filters or search query.</p>
       </div>
     </div>
   );
@@ -465,11 +465,11 @@ function FollowUpReminders({ reminders }: { reminders: Lead[] }) {
       </h2>
       <div className="space-y-2">
         {reminders.map((lead) => (
-          <div key={lead.id} className="bg-[#1a1a1a] border border-[#27272a] rounded-lg p-3">
+          <div key={lead.id} className="bg-secondary border border-border rounded-lg p-3">
             <div className="flex items-center justify-between gap-3">
               <Link
                 href={`/dashboard/leads/${lead.id}`}
-                className="text-blue-400 hover:text-blue-300 font-medium text-sm truncate"
+                className="text-accent hover:text-accent font-medium text-sm truncate"
               >
                 {lead.title || 'Untitled Business'}
               </Link>

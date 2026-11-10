@@ -13,8 +13,8 @@ export default function AnalyticsHeader({ isAdmin, dateFilter, setDateFilter, le
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Analytics</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-foreground">Analytics</h1>
+          <p className="text-sm text-muted mt-0.5">
             {isAdmin ? 'Team performance and lead distribution overview' : 'Your personal lead performance'}
           </p>
         </div>
@@ -29,7 +29,7 @@ export default function AnalyticsHeader({ isAdmin, dateFilter, setDateFilter, le
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
-          className="px-3 py-1.5 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         >
           <option value="all">All Time</option>
           <option value="30d">Last 30 Days</option>
@@ -38,7 +38,7 @@ export default function AnalyticsHeader({ isAdmin, dateFilter, setDateFilter, le
         </select>
       </div>
 
-      <p className="text-xs text-gray-500 mt-3">
+      <p className="text-xs text-muted mt-3">
         Showing {leadsCount} lead{leadsCount !== 1 ? 's' : ''}
       </p>
     </div>

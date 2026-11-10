@@ -12,16 +12,16 @@ export default function LeadCompetitorInfo({ lead }: { lead: Lead }) {
   }
 
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
-      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Competitors</h2>
+    <div className="bg-secondary border border-border rounded-xl p-5">
+      <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Competitors</h2>
       <div className="space-y-2">
         {competitors.map((c: Record<string, unknown>, idx: number) => (
           <div key={idx} className="flex items-center justify-between">
-            <span className="text-sm text-gray-200">
+            <span className="text-sm text-foreground">
               {(c.name as string) ?? 'Unknown'}
             </span>
             {c.reviews != null && (
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted">
                 {String(c.reviews)} reviews{c.rating != null && c.reviews != null && ` | ${String(c.rating)}★`}
               </span>
             )}

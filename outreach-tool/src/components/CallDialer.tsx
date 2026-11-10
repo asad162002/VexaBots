@@ -127,7 +127,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
   if (!lead.phone) {
     return (
       <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
-        <p className="text-sm text-gray-500">This lead has no phone number.</p>
+        <p className="text-sm text-muted">This lead has no phone number.</p>
       </div>
     );
   }
@@ -143,7 +143,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
             <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
             Ready
           </span>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
+          <div className="flex items-center gap-1 text-xs text-muted">
             <span className="w-6 h-6 rounded bg-[#1d1d28] flex items-center justify-center">
               <Phone className="w-3 h-3" />
             </span>
@@ -152,22 +152,22 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
         {/* Phone number — full number including +1, matching reference image font sizing */}
         <div className="flex flex-col items-center gap-0.5">
-          <span className="text-2xl font-bold text-white">{displayPhone}</span>
+          <span className="text-2xl font-bold text-foreground">{displayPhone}</span>
         </div>
 
         {/* Info cards: local time, attempts, last call */}
         <div className="grid grid-cols-3 gap-1.5 text-center">
-          <div className="bg-[#181821] border border-[#262633] rounded-xl py-2">
-            <div className="text-[10px] text-gray-500 uppercase">Local time</div>
-            <div className="text-xs text-gray-300">{localTimeDisplay} PT</div>
+          <div className="bg-secondary border border-border rounded-xl py-2">
+            <div className="text-[10px] text-muted uppercase">Local time</div>
+            <div className="text-xs text-muted">{localTimeDisplay} PT</div>
           </div>
-          <div className="bg-[#181821] border border-[#262633] rounded-xl py-2">
-            <div className="text-[10px] text-gray-500 uppercase">Attempts</div>
-            <div className="text-xs text-gray-300">0</div>
+          <div className="bg-secondary border border-border rounded-xl py-2">
+            <div className="text-[10px] text-muted uppercase">Attempts</div>
+            <div className="text-xs text-muted">0</div>
           </div>
-          <div className="bg-[#181821] border border-[#262633] rounded-xl py-2">
-            <div className="text-[10px] text-gray-500 uppercase">Last call</div>
-            <div className="text-xs text-gray-300">Never</div>
+          <div className="bg-secondary border border-border rounded-xl py-2">
+            <div className="text-[10px] text-muted uppercase">Last call</div>
+            <div className="text-xs text-muted">Never</div>
           </div>
         </div>
 
@@ -180,8 +180,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         )}
 
         {/* Caller ID field */}
-        <div className="bg-[#181821] border border-[#262633] rounded-xl px-3 py-2">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+        <div className="bg-secondary border border-border rounded-xl px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-muted">
             <CheckCircle className="w-3 h-3 text-green-500/60" />
             <span>Calling from +1 910-661-0871 (verified)</span>
           </div>
@@ -195,7 +195,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
               value={altPhone}
               onChange={(e) => setAltPhone(e.target.value)}
               placeholder={lead.phone || "Enter alternate number"}
-              className="w-full bg-[#181821] border border-[#262633] rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
               aria-label="Alternate phone number"
             />
           </div>
@@ -206,7 +206,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
           <button
             onClick={handleStartCall}
             disabled={isCalling}
-            className="w-full flex items-center justify-center gap-2 bg-[#16a34a] hover:bg-[#15803d] active:bg-[#14532d] disabled:bg-[#1a2a1a] disabled:border disabled:border-[#2b2b3a] text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 bg-[#16a34a] hover:bg-[#15803d] active:bg-[#14532d] disabled:bg-[#1a2a1a] disabled:border disabled:border-[#2b2b3a] text-foreground font-semibold rounded-xl px-4 py-2.5 text-sm transition disabled:cursor-not-allowed"
           >
             {isCalling ? (
               <>
@@ -230,7 +230,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
               className={`p-2 rounded-xl text-xs transition flex items-center justify-center ${
                 isMuted
                   ? 'bg-[#4a1a1a] border border-[#f87171] text-[#f87171]'
-                  : 'bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white'
+                  : 'bg-secondary border border-border text-muted hover:bg-[#1f1f2b] hover:text-foreground'
               }`}
               title={isMuted ? 'Unmute microphone' : 'Mute microphone (M)'}
             >
@@ -241,8 +241,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
               onClick={toggleHold}
               className={`p-2 rounded-xl text-xs transition flex items-center justify-center ${
                 isHeld
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white'
+                  ? 'bg-primary text-foreground'
+                  : 'bg-secondary border border-border text-muted hover:bg-[#1f1f2b] hover:text-foreground'
               }`}
               title={isHeld ? 'Resume call' : 'Hold call'}
             >
@@ -250,14 +250,14 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
             </button>
 
             <button
-              className="p-2 rounded-xl text-xs transition bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white"
+              className="p-2 rounded-xl text-xs transition bg-secondary border border-border text-muted hover:bg-[#1f1f2b] hover:text-foreground"
               title="Drop voicemail"
             >
               <Mic className="w-4 h-4" />
             </button>
 
             <button
-              className="p-2 rounded-xl text-xs transition bg-[#181821] border border-[#262633] text-gray-300 hover:bg-[#1f1f2b] hover:text-white"
+              className="p-2 rounded-xl text-xs transition bg-secondary border border-border text-muted hover:bg-[#1f1f2b] hover:text-foreground"
               title="Skip lead"
             >
               <Play className="w-4 h-4 rotate-90" />
@@ -267,7 +267,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
         {/* Volume sliders (mic + speaker) */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <div className="flex items-center gap-1.5 text-xs text-muted">
             <Mic className="w-3 h-3" />
             <input
               type="range"
@@ -280,7 +280,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
               aria-label="Microphone volume"
             />
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <div className="flex items-center gap-1.5 text-xs text-muted">
             <Volume2 className="w-3 h-3" />
             <input
               type="range"
@@ -297,7 +297,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
         {/* In-call: timer */}
         {callInProgress && (
-          <div className="text-center text-xl font-bold text-white font-mono">
+          <div className="text-center text-xl font-bold text-foreground font-mono">
             {formatDuration(durationSeconds)}
           </div>
         )}
@@ -306,7 +306,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         {inCall && (
           <button
             onClick={handleEndCall}
-            className="w-full flex items-center justify-center gap-2 bg-[#f87171] hover:bg-[#ef4444] active:bg-[#dc2626] text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition"
+            className="w-full flex items-center justify-center gap-2 bg-[#f87171] hover:bg-[#ef4444] active:bg-[#dc2626] text-foreground font-semibold rounded-xl px-4 py-2.5 text-sm transition"
             title="End call"
           >
             <PhoneOff className="w-4 h-4" />
@@ -325,8 +325,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         {/* Call ended */}
         {callEnded && (
           <div className="flex items-center gap-2 p-3 bg-[#1a1a23] border border-[#2a2a36] rounded-xl">
-            <CheckCircle className="w-4 h-4 text-gray-400" />
-            <span className="text-sm text-gray-300">
+            <CheckCircle className="w-4 h-4 text-muted" />
+            <span className="text-sm text-muted">
               Call ended.
             </span>
           </div>

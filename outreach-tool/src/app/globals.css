@@ -1,16 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f0f0f;
-  --foreground: #ededed;
-  --card: #1a1a1a;
-  --card-foreground: #ededed;
-  --border: #27272a;
-  --primary: #3b82f6;
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --card: rgba(255,255,255,0.02);
+  --card-foreground: #f7f8f8;
+  --border: rgba(255,255,255,0.08);
+  --primary: #5e6ad2;
   --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --muted: #6b7280;
-  --accent: #3b82f6;
+  --secondary: #191a1b;
+  --muted: #8a8f98;
+  --accent: #7170ff;
+  --accent-hover: #828fff;
+  --surface-2: #0f1011;
+  --surface-3: #191a1b;
+  --surface-4: #28282c;
+  --text-secondary: #d0d6e0;
+  --text-tertiary: #8a8f98;
+  --text-quaternary: #62666d;
 }
 
 @theme inline {
@@ -24,51 +31,30 @@
   --color-secondary: var(--secondary);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 * {
   border-color: var(--border);
 }
 
-body {
+html, body {
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: "cv01", "ss03";
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
-/* Focus ring */
-*:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
+*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Stronger font weights */
-h1, h2, h3, h4 {
-  font-weight: 700;
-}
+h1, h2, h3, h4 { font-weight: 510; letter-spacing: -0.02em; color: var(--foreground); }
 
-.font-semibold {
-  font-weight: 600;
-}
-
-.font-medium {
-  font-weight: 500;
-}
+.font-semibold { font-weight: 590; }
+.font-medium { font-weight: 510; }
+.font-bold { font-weight: 590; }

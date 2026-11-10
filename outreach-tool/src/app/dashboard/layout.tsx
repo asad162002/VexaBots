@@ -15,6 +15,8 @@ import {
   BarChart3,
   Clock,
   Phone,
+  Search,
+  Command,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -43,13 +45,11 @@ export default function DashboardLayout({
     if (!loading && !user) {
       router.push('/');
     }
-    // Redirect non-admins away from admin-only pages
     const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/leads/new', '/dashboard/import', '/dashboard/leads/', '/dashboard/calls'];
     const isCurrentAdminOnly = adminOnlyPaths.some(p => pathname.startsWith(p));
     if (!loading && user && isCurrentAdminOnly && !isAdmin) {
       router.push('/dashboard/my-queue');
     }
-    // Members land on My Queue after login
     if (!loading && user && !isAdmin && pathname === '/dashboard') {
       router.push('/dashboard/my-queue');
     }
@@ -57,8 +57,8 @@ export default function DashboardLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0f0f0f]">
-        <div className="text-gray-400 text-sm">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#08090a" }}>
+        <div className="text-sm" style={{ color: "#8a8f98" }}>Loading...</div>
       </div>
     );
   }
@@ -68,22 +68,25 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f]">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#1a1a1a] border-r border-[#27272a] flex flex-col fixed left-0 top-0 h-screen">
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-5 h-16 border-b border-[#27272a]">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <LayoutDashboard className="w-5 h-5 text-white" />
+    <div className="min-h-screen flex" style={{ background: "#08090a" }}>
+      <aside className="w-60 flex flex-col fixed left-0 top-0 h-screen" style={{ background: "#0f1011", borderRight: "1px solid rgba(255,255,255,0.05)" }}>
+        <div className="flex items-center gap-2.5 px-5 h-14" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: "#5e6ad2" }}>
+            <LayoutDashboard className="w-3.5 h-3.5 text-white" />
           </div>
-          <div>
-            <h1 className="text-base font-bold text-white leading-tight">Vexabots</h1>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">Outreach Tool</p>
+          <span className="text-sm font-medium" style={{ color: "#f7f8f8", letterSpacing: "-0.01em" }}>Vexabots</span>
+          <span className="text-[10px] ml-1" style={{ color: "#62666d" }}>outreach</span>
+        </div>
+
+        <div className="px-3 pt-4 pb-2">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <Search className="w-3.5 h-3.5" style={{ color: "#62666d" }} />
+            <span className="text-xs flex-1" style={{ color: "#62666d" }}>Search...</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.05)", color: "#8a8f98", border: "1px solid rgba(255,255,255,0.05)" }}>⌘K</span>
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-1">
+        <nav className="flex-1 py-2 px-3 space-y-0.5 overflow-y-auto">
           {NAV_ITEMS.filter(item => {
             if (isAdmin) return true;
             if (item.adminOnly) return false;
@@ -98,32 +101,37 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:text-white hover:bg-[#27272a]'
-                }`}
+                className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] transition"
+                style={{
+                  background: isActive ? "rgba(94,106,210,0.15)" : "transparent",
+                  color: isActive ? "#f7f8f8" : "#8a8f98",
+                  fontWeight: isActive ? 510 : 400,
+                  borderLeft: isActive ? "2px solid #5e6ad2" : "2px solid transparent",
+                }}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-4 h-4" style={{ color: isActive ? "#7170ff" : "#62666d" }} />
                 {item.label}
               </Link>
             );
           })}
         </nav>
 
-        {/* User section */}
-        <div className="p-3 border-t border-[#27272a]">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
+        <div className="px-3 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+          <div className="flex items-center gap-2.5 px-2 py-1.5">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-medium" style={{ background: "rgba(94,106,210,0.2)", color: "#7170ff" }}>
               {user.email?.charAt(0).toUpperCase() ?? '?'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">{user.email}</p>
+              <p className="text-[12px] font-medium truncate" style={{ color: "#d0d6e0" }}>{user.email}</p>
+              <p className="text-[10px]" style={{ color: "#62666d" }}>{isAdmin ? 'Admin' : 'Member'}</p>
             </div>
           </div>
           <button
             onClick={signOut}
-            className="flex items-center gap-2 w-full mt-1 px-2 py-1.5 text-xs text-gray-500 hover:text-white hover:bg-[#27272a] rounded-lg transition"
+            className="flex items-center gap-2 w-full mt-1 px-2.5 py-1.5 text-[12px] rounded-md transition"
+            style={{ color: "#8a8f98" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
             <LogOut className="w-3.5 h-3.5" />
             Sign out
@@ -131,9 +139,8 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="ml-64 min-h-screen">
-        <div className="p-6 max-w-5xl mx-auto">
+      <main className="ml-60 flex-1 min-h-screen">
+        <div className="px-8 py-6 max-w-[1280px] mx-auto">
           {children}
         </div>
       </main>

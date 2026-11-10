@@ -58,7 +58,7 @@ export default function CallControls({
     <div className={`flex ${flexDirection} ${alignItems} gap-3`}>
       {/* Timer */}
       {showTimer && callInProgress && (
-        <div className="flex items-center gap-2 text-gray-300 font-mono bg-[#27272a] px-3 py-1.5 rounded-lg text-sm">
+        <div className="flex items-center gap-2 text-muted font-mono bg-card px-3 py-1.5 rounded-lg text-sm">
           <Clock className="w-4 h-4" />
           {formatDuration(durationSeconds)}
         </div>
@@ -66,7 +66,7 @@ export default function CallControls({
 
       {/* Status message */}
       {message && (
-        <span className="text-xs text-gray-500 font-mono">{message}</span>
+        <span className="text-xs text-muted font-mono">{message}</span>
       )}
 
       {/* Mute toggle */}
@@ -75,8 +75,8 @@ export default function CallControls({
           onClick={toggleMute}
           className={`p-2.5 rounded-lg transition flex items-center gap-1 ${
             isMuted
-              ? 'bg-red-600 text-white'
-              : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+              ? 'bg-red-600 text-foreground'
+              : 'bg-card text-muted hover:bg-border'
           }`}
           aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
           title={isMuted ? 'Unmute microphone (M)' : 'Mute microphone (M)'}
@@ -100,8 +100,8 @@ export default function CallControls({
           onClick={toggleHold}
           className={`p-2.5 rounded-lg transition flex items-center gap-1 ${
             isHeld
-              ? 'bg-blue-600 text-white'
-              : 'bg-[#27272a] text-gray-300 hover:bg-[#3f3f46]'
+              ? 'bg-primary text-foreground'
+              : 'bg-card text-muted hover:bg-border'
           }`}
           aria-label={isHeld ? 'Resume call' : 'Hold call'}
           title={isHeld ? 'Resume call' : 'Hold call'}
@@ -114,7 +114,7 @@ export default function CallControls({
       {callInProgress && (
         <button
           onClick={() => sendDTMF('')}
-          className="p-2.5 rounded-lg bg-[#27272a] text-gray-300 hover:bg-[#3f3f46] transition"
+          className="p-2.5 rounded-lg bg-card text-muted hover:bg-border transition"
           aria-label="Open dial pad"
           title="Dial pad (DTMF)"
         >
@@ -124,7 +124,7 @@ export default function CallControls({
 
       {/* Speaker volume slider */}
       {callInProgress && (
-        <div className="flex items-center gap-1 text-xs text-gray-500">
+        <div className="flex items-center gap-1 text-xs text-muted">
           <Volume2 className="w-3 h-3" />
           <input
             type="range"
@@ -133,7 +133,7 @@ export default function CallControls({
             step="0.01"
             value={remoteVolume}
             onChange={(e) => setVolume(parseFloat(e.target.value))}
-            className="w-16 h-1.5 bg-[#27272a] rounded appearance-none cursor-pointer slider"
+            className="w-16 h-1.5 bg-card rounded appearance-none cursor-pointer slider"
             aria-label="Speaker volume"
           />
           <span className="w-8 text-right">{Math.round(remoteVolume * 100)}%</span>
@@ -144,7 +144,7 @@ export default function CallControls({
       {canAct && (
         <button
           onClick={endCall}
-          className="p-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold transition flex items-center gap-1"
+          className="p-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-foreground font-semibold transition flex items-center gap-1"
           aria-label="End call"
           title="End call"
         >
@@ -156,7 +156,7 @@ export default function CallControls({
       {/* Pre-call volume controls */}
       {showPreCallVolume && !callInProgress && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-1 text-xs text-gray-500">
+          <div className="flex items-center gap-1 text-xs text-muted">
             <Volume2 className="w-3 h-3" />
             <input
               type="range"
@@ -165,12 +165,12 @@ export default function CallControls({
               step="0.01"
               value={remoteVolume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-16 h-1.5 bg-[#27272a] rounded appearance-none cursor-pointer slider"
+              className="w-16 h-1.5 bg-card rounded appearance-none cursor-pointer slider"
               aria-label="Speaker volume"
             />
             <span className="w-8 text-right">{Math.round(remoteVolume * 100)}%</span>
           </div>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
+          <div className="flex items-center gap-1 text-xs text-muted">
             <Mic className="w-3 h-3" />
             <input
               type="range"
@@ -179,7 +179,7 @@ export default function CallControls({
               step="0.01"
               value={micVolume}
               onChange={(e) => setMicVolume(parseFloat(e.target.value))}
-              className="w-16 h-1.5 bg-[#27272a] rounded appearance-none cursor-pointer slider"
+              className="w-16 h-1.5 bg-card rounded appearance-none cursor-pointer slider"
               aria-label="Microphone volume"
             />
             <span className="w-8 text-right">{Math.round(micVolume * 100)}%</span>

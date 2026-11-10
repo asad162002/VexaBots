@@ -5,6 +5,23 @@ import { createClient } from '@supabase/supabase-js';
 // Requires: Authorization: Bearer <access_token> in headers
 // Verifies the caller is an admin via their Supabase session.
 
+function generatePassword(): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#$%';
+  const all = upper + lower + digits + symbols;
+  let password = '';
+  password += upper[Math.floor(Math.random() * upper.length)];
+  password += lower[Math.floor(Math.random() * lower.length)];
+  password += digits[Math.floor(Math.random() * digits.length)];
+  password += symbols[Math.floor(Math.random() * symbols.length)];
+  for (let i = 4; i < 12; i++) {
+    password += all[Math.floor(Math.random() * all.length)];
+  }
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -31,8 +48,11 @@ export async function POST(request: NextRequest) {
     const validRole = role === 'admin' ? 'admin' : 'member';
     const supabaseAdmin = createAdminClient();
 
+    const password = generatePassword();
+
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase().trim(),
+      password,
       email_confirm: true,
       user_metadata: { full_name: name || '' },
       app_metadata: { role: validRole },
@@ -67,7 +87,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Team member added: ${email}. They can sign in with magic link or password reset.`,
+      message: `Team member added: ${email}. Share the generated password with them. They can sign in with email + password.`,
+      password,
       user_id: authData?.user?.id,
     });
   } catch (err) {

@@ -202,7 +202,7 @@ export default function AssignmentLogPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-3 text-gray-500">
+        <div className="flex items-center gap-3 text-muted">
           <Spinner size="md" />
           <span>Loading assignment log...</span>
         </div>
@@ -222,8 +222,8 @@ export default function AssignmentLogPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Assignment Log</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-foreground">Assignment Log</h1>
+          <p className="text-sm text-muted mt-0.5">
             {assigneeGroups.length} team member{assigneeGroups.length !== 1 ? 's' : ''} with assigned leads
           </p>
         </div>
@@ -237,7 +237,7 @@ export default function AssignmentLogPage() {
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
-          className="px-3 py-1.5 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         >
           <option value="all">All Time</option>
           <option value="30d">Last 30 Days</option>
@@ -247,53 +247,53 @@ export default function AssignmentLogPage() {
       </div>
 
       {assigneeGroups.length === 0 ? (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-12">
+        <div className="bg-secondary border border-border rounded-xl p-12">
           <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-[#27272a] flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 rounded-full bg-card flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-2 2l2-2-2-2M9 12l2 2 2-2" />
               </svg>
             </div>
-            <p className="text-gray-300 font-medium mb-1">No assignments yet</p>
-            <p className="text-gray-500 text-sm">Assign leads to team members to see the log here.</p>
+            <p className="text-muted font-medium mb-1">No assignments yet</p>
+            <p className="text-muted text-sm">Assign leads to team members to see the log here.</p>
           </div>
         </div>
       ) : (
-        <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl overflow-hidden">
+        <div className="bg-secondary border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#27272a]">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Team Member</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Leads Assigned</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Last Assignment</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned By</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
+              <tr className="border-b border-border">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Team Member</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Leads Assigned</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Last Assignment</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Assigned By</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Notes</th>
               </tr>
             </thead>
             <tbody>
               {assigneeGroups.map((group) => (
                 <tr key={group.assigneeId}>
-                  <td className="px-4 py-3 text-gray-200">
+                  <td className="px-4 py-3 text-foreground">
                     {group.assigneeName || group.assigneeEmail || 'Unknown'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">{group.leadCount}</span>
+                      <span className="font-medium text-foreground">{group.leadCount}</span>
                       <button
                         onClick={() => loadAssigneeLeads(group)}
-                        className="text-xs text-blue-400 hover:text-blue-300"
+                        className="text-xs text-accent hover:text-accent"
                       >
                         {selectedGroup?.assigneeId === group.assigneeId ? 'Hide' : 'Show leads'}
                       </button>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-muted">
                     {formatDate(group.latestAssignment)}
                   </td>
-                  <td className="px-4 py-3 text-gray-200">
+                  <td className="px-4 py-3 text-foreground">
                     {group.latestAssignedByName || group.latestAssignedByEmail || '-'}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 max-w-xs truncate">
+                  <td className="px-4 py-3 text-muted max-w-xs truncate">
                     {group.notes || '-'}
                   </td>
                 </tr>
@@ -302,48 +302,48 @@ export default function AssignmentLogPage() {
           </table>
 
           {selectedGroup && (
-            <div className="border-t border-[#27272a]">
-              <div className="px-4 py-3 bg-[#27272a]/30 border-b border-[#27272a]">
-                <h3 className="text-sm font-medium text-white">
+            <div className="border-t border-border">
+              <div className="px-4 py-3 bg-card/30 border-b border-border">
+                <h3 className="text-sm font-medium text-foreground">
                   Leads assigned to {selectedGroup.assigneeName || selectedGroup.assigneeEmail}
                 </h3>
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {loadingLeads[selectedGroup.assigneeId] ? (
-                  <div className="p-4 flex items-center justify-center gap-3 text-gray-500 text-sm">
+                  <div className="p-4 flex items-center justify-center gap-3 text-muted text-sm">
                     <Spinner size="sm" />
                     <span>Loading leads...</span>
                   </div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-[#27272a]">
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Lead</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned By</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Notes</th>
+                      <tr className="border-b border-border">
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Lead</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Assigned By</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Date</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Notes</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(assigneeLeads[selectedGroup.assigneeId] || []).map((lead) => {
                         const assignedByProfile = profiles[lead.assigned_by || ''];
                         return (
-                          <tr key={lead.id} className="border-b border-[#27272a] last:border-0 hover:bg-[#1f1f25] transition">
+                          <tr key={lead.id} className="border-b border-border last:border-0 hover:bg-[#1f1f25] transition">
                             <td className="px-4 py-3">
                               <a
                                 href={`/dashboard/leads/${lead.id}`}
-                                className="text-blue-400 hover:text-blue-300 font-medium"
+                                className="text-accent hover:text-accent font-medium"
                               >
                                 {lead.title || 'Untitled Business'}
                               </a>
                             </td>
-                            <td className="px-4 py-3 text-gray-200">
+                            <td className="px-4 py-3 text-foreground">
                               {assignedByProfile?.full_name || assignedByProfile?.email || '-'}
                             </td>
-                            <td className="px-4 py-3 text-gray-500 text-xs">
+                            <td className="px-4 py-3 text-muted text-xs">
                               {formatDate(lead.assigned_at)}
                             </td>
-                            <td className="px-4 py-3 text-gray-500 max-w-xs truncate text-xs">
+                            <td className="px-4 py-3 text-muted max-w-xs truncate text-xs">
                               {lead.notes || '-'}
                             </td>
                           </tr>

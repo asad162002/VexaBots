@@ -34,12 +34,12 @@ export default function ActivityLog({
   setActivityFollowUp,
 }: ActivityLogProps) {
   return (
-    <div className="bg-[#1a1a1a] border border-[#27272a] rounded-xl p-5">
+    <div className="bg-secondary border border-border rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Activity Log</h2>
+        <h2 className="text-xs font-semibold text-muted uppercase tracking-wider">Activity Log</h2>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+          className="text-xs text-accent hover:text-accent font-medium"
         >
           {showForm ? 'Cancel' : '+ Log Activity'}
         </button>
@@ -62,7 +62,7 @@ export default function ActivityLog({
       )}
 
       {activities.length === 0 ? (
-        <p className="text-sm text-gray-500">No activities logged yet.</p>
+        <p className="text-sm text-muted">No activities logged yet.</p>
       ) : (
         <div className="space-y-4">
           {activities.map((activity) => {
@@ -108,7 +108,7 @@ function ActivityForm({
   contentError: boolean;
 }) {
   return (
-    <div className="mb-4 p-4 bg-[#27272a]/30 border border-[#3f3f46] rounded-lg">
+    <div className="mb-4 p-4 bg-card/30 border border-border rounded-lg">
       <div className="grid grid-cols-2 gap-3 mb-3">
         <SelectField label="Type" value={activityType} onChange={setActivityType} options={ACTIVITY_TYPES} />
         <InputField
@@ -125,27 +125,27 @@ function ActivityForm({
         placeholder="What happened in this interaction..."
       />
       <div className="mb-3">
-        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">
+        <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">
           Next Follow-up
         </label>
         <input
           type="date"
           value={activityFollowUp}
           onChange={(e) => setActivityFollowUp(e.target.value)}
-          className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
       <div className="flex gap-2">
         <button
           onClick={onSave}
           disabled={contentError}
-          className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-white font-semibold rounded-lg text-sm transition disabled:cursor-not-allowed"
+          className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-800 text-foreground font-semibold rounded-lg text-sm transition disabled:cursor-not-allowed"
         >
           Save
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-2 bg-[#27272a] hover:bg-[#3f3f46] text-gray-300 font-medium rounded-lg text-sm transition"
+          className="px-4 py-2 bg-card hover:bg-border text-muted font-medium rounded-lg text-sm transition"
         >
           Cancel
         </button>
@@ -164,15 +164,15 @@ function ActivityItem({
   createdAt: string;
 }) {
   const typeColors: Record<string, string> = {
-    call: 'bg-gray-500/20 text-gray-300',
-    text: 'bg-blue-500/20 text-blue-400',
+    call: 'bg-background0/20 text-muted',
+    text: 'bg-primary/20 text-accent',
     email: 'bg-purple-500/20 text-purple-400',
     meeting: 'bg-green-500/20 text-green-400',
   };
-  const color = typeColors[activity.activity_type] || 'bg-gray-500/20 text-gray-300';
+  const color = typeColors[activity.activity_type] || 'bg-background0/20 text-muted';
 
   return (
-    <div className="border-b border-[#27272a] last:border-0 pb-3 last:pb-0">
+    <div className="border-b border-border last:border-0 pb-3 last:pb-0">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -182,17 +182,17 @@ function ActivityItem({
               {activity.activity_type.charAt(0).toUpperCase() + activity.activity_type.slice(1)}
             </span>
             {activity.outcome && (
-              <span className="text-xs text-gray-400">{activity.outcome}</span>
+              <span className="text-xs text-muted">{activity.outcome}</span>
             )}
           </div>
-          <p className="text-sm text-gray-300 break-words">{activity.content}</p>
+          <p className="text-sm text-muted break-words">{activity.content}</p>
           {activity.next_follow_up_at && (
-            <p className="text-xs text-blue-400 mt-1">
+            <p className="text-xs text-accent mt-1">
               Next follow-up: {new Date(activity.next_follow_up_at).toLocaleDateString()}
             </p>
           )}
         </div>
-        <div className="text-right text-xs text-gray-500 shrink-0">
+        <div className="text-right text-xs text-muted shrink-0">
           <p>{profileName}</p>
           {createdAt}
         </div>
@@ -223,14 +223,14 @@ function SelectField({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">{label}</label>
+      <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">{label}</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
+          <option key={opt.value} value={opt.value} className="bg-secondary">
             {opt.label}
           </option>
         ))}
@@ -252,13 +252,13 @@ function InputField({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">{label}</label>
+      <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">{label}</label>
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary"
       />
     </div>
   );
@@ -277,13 +277,13 @@ function TextareaField({
 }) {
   return (
     <div className="mb-3">
-      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wide">{label}</label>
+      <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">{label}</label>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={3}
-        className="w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary resize-none"
       />
     </div>
   );

@@ -38,12 +38,12 @@ export const ACTIVITY_ICONS: Record<string, any> = {
 };
 
 export const ACTIVITY_COLORS: Record<string, string> = {
-  call: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
-  text: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  call: 'bg-background0/20 text-muted border-border/30',
+  text: 'bg-primary/20 text-accent border-primary/30',
   email: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
   note: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   meeting: 'bg-green-500/20 text-green-400 border-green-500/30',
-  other: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
+  other: 'bg-background0/20 text-muted border-border/30',
 };
 
 export const DATE_FILTERS = [
@@ -54,8 +54,8 @@ export const DATE_FILTERS = [
 ];
 
 export const STATUS_COLORS: Record<string, string> = {
-  new: 'bg-gray-200 text-gray-700',
-  contacted: 'bg-blue-100 text-blue-700',
+  new: 'bg-secondary text-muted',
+  contacted: 'bg-primary/20 text-accent',
   interested: 'bg-green-100 text-green-700',
   not_interested: 'bg-red-100 text-red-700',
   send_info: 'bg-yellow-100 text-yellow-700',
