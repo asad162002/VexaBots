@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { UserPlus, X } from 'lucide-react';
+import { UserPlus, X, Trash2 } from 'lucide-react';
 import { Profile } from '@/lib/types';
 
 interface BulkActionsProps {
@@ -9,6 +9,7 @@ interface BulkActionsProps {
   selectedIds: string[];
   onAssign: (userId: string, notes: string, quantity?: number) => Promise<void>;
   onClear: () => void;
+  onArchive: () => Promise<void>;
   profiles: Profile[];
   assignLimits?: Record<string, { max_leads: number; current_leads: number }>;
 }
@@ -18,6 +19,7 @@ export default function BulkActions({
   selectedIds,
   onAssign,
   onClear,
+  onArchive,
   profiles,
   assignLimits,
 }: BulkActionsProps) {
@@ -56,6 +58,14 @@ export default function BulkActions({
           >
             <UserPlus className="w-4 h-4" />
             Assign
+          </button>
+
+          <button
+            onClick={onArchive}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded-lg transition"
+          >
+            <Trash2 className="w-4 h-4" />
+            Archive
           </button>
 
           <button

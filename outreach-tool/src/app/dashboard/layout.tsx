@@ -17,6 +17,7 @@ import {
   Phone,
   Search,
   Command,
+  Trash2,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/calls', label: 'Call Dialer', icon: Phone, hiddenFromMembers: true },
   { href: '/dashboard/my-queue', label: 'My Queue', icon: Clock },
   { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users, hiddenFromMembers: true },
+  { href: '/dashboard/deleted-leads', label: 'Deleted Leads', icon: Trash2, hiddenFromMembers: true },
   { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard, adminOnly: true },
   { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus, adminOnly: true },
   { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload, adminOnly: true },

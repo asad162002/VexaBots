@@ -7,6 +7,7 @@ import { STATUS_COLORS, STATUS_LABELS, type Lead, type LeadStatus, type LeadSour
 import type { Profile } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
+import { Trash2 } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
 import BulkActions from '@/components/bulk-actions';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
@@ -180,6 +181,14 @@ export default function DashboardPage() {
         notes: notes || null,
       });
 
+      await supabase.from('lead_activities').insert({
+        lead_id: id,
+        profile_id: user?.id || null,
+        activity_type: 'other',
+        content: `Assigned to ${profiles.find(p => p.id === userId)?.full_name || profiles.find(p => p.id === userId)?.email || 'member'}${notes ? `: ${notes}` : ''}`,
+        lead_table: 'leads',
+      });
+
       const limit = assignLimits[userId];
       if (limit) {
         await supabase.from('assignment_limits').update({
@@ -198,14 +207,31 @@ export default function DashboardPage() {
     }
   };
 
+  const handleBulkArchive = async () => {
+    if (!confirm(`Archive ${selectedIds.size} selected lead(s)?`)) return;
+    const { error } = await supabase
+      .from('leads')
+      .update({ deleted_at: new Date().toISOString() })
+      .in('id', Array.from(selectedIds));
+    if (error) { alert('Failed: ' + error.message); return; }
+    handleBulkClear();
+    fetchLeads();
+  };
+
   const handleBulkClear = () => {
     deselectAll();
     fetchLeads();
   };
 
+  const archiveLead = async (id: string) => {
+    if (!confirm('Archive this lead? It will move to Deleted Leads.')) return;
+    const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    if (error) { alert('Failed: ' + error.message); return; }
+    fetchLeads();
+  };
+
   const fetchLeads = async () => {
     setLoading(true);
-
     const { data: currentProfile } = await supabase
       .from('profiles')
       .select('role')
@@ -217,6 +243,7 @@ export default function DashboardPage() {
     let query = supabase
       .from('leads')
       .select('*')
+      .is('deleted_at', null)
       .order(
         sortBy === 'icp_high'
           ? 'icp_score'
@@ -300,6 +327,9 @@ export default function DashboardPage() {
           <RefreshIcon />
           Refresh
         </button>
+        <Link href="/dashboard/deleted-leads" className="text-sm text-muted hover:text-accent">
+          Deleted Leads
+        </Link>
       </div>
 
       {/* Filters */}
@@ -392,6 +422,7 @@ export default function DashboardPage() {
         selectedIds={Array.from(selectedIds)}
         onAssign={handleBulkAssign}
         onClear={handleBulkClear}
+        onArchive={handleBulkArchive}
         profiles={profiles}
         assignLimits={assignLimits}
       />

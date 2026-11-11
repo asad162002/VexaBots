@@ -53,10 +53,10 @@ export default function LeadFilters({
   availableCategories,
 }: LeadFiltersProps) {
   const inputClassName =
-    "w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition";
+    "w-full bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition";
 
   const selectClassName =
-    "w-full sm:w-[130px] bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition";
+    "w-full sm:w-[130px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition [&>option]:bg-[#1a1a1a] [&>option]:text-foreground [&>option:hover]:bg-primary/30";
 
   return (
     <div className="flex flex-wrap gap-3 items-end">
@@ -85,7 +85,7 @@ export default function LeadFilters({
           className={selectClassName}
         >
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-secondary">
+            <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
               {opt.label}
             </option>
           ))}
@@ -103,7 +103,7 @@ export default function LeadFilters({
           className={selectClassName}
         >
           {SOURCE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value} className="bg-secondary">
+            <option key={opt.value} value={opt.value} className="bg-[#1a1a1a]">
               {opt.label}
             </option>
           ))}
@@ -118,11 +118,11 @@ export default function LeadFilters({
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="w-full sm:w-[150px] bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
+          className="w-full sm:w-[150px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition [&>option]:bg-[#1a1a1a] [&>option]:text-foreground [&>option:hover]:bg-primary/30"
         >
-          <option value="all" className="bg-secondary">All Categories</option>
+          <option value="all" className="bg-[#1a1a1a]">All Categories</option>
           {availableCategories.map((cat) => (
-            <option key={cat} value={cat} className="bg-secondary">
+            <option key={cat} value={cat} className="bg-[#1a1a1a]">
               {cat}
             </option>
           ))}
@@ -137,11 +137,11 @@ export default function LeadFilters({
         <select
           value={assignedFilter}
           onChange={(e) => setAssignedFilter(e.target.value as 'all' | 'assigned' | 'unassigned')}
-          className="w-full sm:w-[140px] bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
+          className="w-full sm:w-[140px] bg-[#27272a] border border-[#3f3f46] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition [&>option]:bg-[#1a1a1a] [&>option]:text-foreground [&>option:hover]:bg-primary/30"
         >
-          <option value="all" className="bg-secondary">All</option>
-          <option value="assigned" className="bg-secondary">Assigned</option>
-          <option value="unassigned" className="bg-secondary">Unassigned</option>
+          <option value="all" className="bg-[#1a1a1a]">All</option>
+          <option value="assigned" className="bg-[#1a1a1a]">Assigned</option>
+          <option value="unassigned" className="bg-[#1a1a1a]">Unassigned</option>
         </select>
       </div>
 
@@ -155,9 +155,9 @@ export default function LeadFilters({
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           className={selectClassName}
         >
-          <option value="newest" className="bg-secondary">Newest First</option>
-          <option value="icp_high" className="bg-secondary">ICP Score (High)</option>
-          <option value="follow_up" className="bg-secondary">Follow-up Due</option>
+          <option value="newest" className="bg-[#1a1a1a]">Newest First</option>
+          <option value="icp_high" className="bg-[#1a1a1a]">ICP Score (High)</option>
+          <option value="follow_up" className="bg-[#1a1a1a]">Follow-up Due</option>
         </select>
       </div>
     </div>
