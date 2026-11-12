@@ -6,7 +6,6 @@ import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
 import { Users, Shield, AlertCircle, CheckCircle, UserPlus, Copy } from 'lucide-react';
 import TeamMemberRow from '@/components/dashboard/TeamMemberRow';
-import AssignmentLimitRow from '@/components/dashboard/AssignmentLimitRow';
 
 import { type Profile } from '@/lib/types';
 
@@ -16,18 +15,10 @@ interface TelnyxNumber {
   country?: string;
 }
 
-interface AssignLimit {
-  profile_id: string;
-  max_leads: number;
-  current_leads: number;
-}
-
 export default function SettingsPage() {
   const { user, isAdmin } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
-  const [limitsLoading, setLimitsLoading] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
@@ -42,7 +33,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchProfiles();
-    fetchLimits();
     if (isAdmin) {
       fetchTelnyxNumbers();
     }
@@ -62,23 +52,6 @@ export default function SettingsPage() {
     setLoading(false);
   };
 
-  const fetchLimits = async () => {
-    setLimitsLoading(true);
-    const { data, error } = await supabase
-      .from('assignment_limits')
-      .select('profile_id, max_leads, current_leads');
-    if (error) {
-      console.error('Error fetching limits:', error);
-    } else {
-      const limitMap: Record<string, AssignLimit> = {};
-      (data ?? []).forEach((l: AssignLimit) => {
-        limitMap[l.profile_id] = l;
-      });
-      setAssignLimits(limitMap);
-    }
-    setLimitsLoading(false);
-  };
-
   const fetchTelnyxNumbers = async () => {
     setNumbersLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -92,26 +65,6 @@ export default function SettingsPage() {
       setTelnyxNumbers(result.data || []);
     }
     setNumbersLoading(false);
-  };
-
-  const updateLimit = async (profileId: string, maxLeads: number) => {
-    const { error } = await supabase
-      .from('assignment_limits')
-      .upsert({
-        profile_id: profileId,
-        max_leads: maxLeads,
-        current_leads: assignLimits[profileId]?.current_leads ?? 0,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'profile_id', ignoreDuplicates: false });
-    if (error) {
-      console.error('Error updating limit:', error);
-      alert('Failed to update limit.');
-    } else {
-      setAssignLimits(prev => ({
-        ...prev,
-        [profileId]: { ...prev[profileId], max_leads: maxLeads },
-      }));
-    }
   };
 
   const handleInvite = async (e: React.FormEvent) => {
