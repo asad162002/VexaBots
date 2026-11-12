@@ -37,8 +37,6 @@ export default function DeletedLinkedInLeadsPage() {
 
   useEffect(() => { fetchDeleted(); }, [fetchDeleted]);
 
-  useEffect(() => { purgeOld(); }, []);
-
   const toggle = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -61,20 +59,6 @@ export default function DeletedLinkedInLeadsPage() {
       content,
       lead_table: 'linkedin_leads',
     })));
-  };
-
-  const purgeOld = async () => {
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: old } = await supabase
-      .from('linkedin_leads')
-      .select('id')
-      .not('deleted_at', 'is', null)
-      .lt('deleted_at', cutoff);
-    if (!old || old.length === 0) return;
-    const ids = old.map((l) => l.id);
-    await logActivity(ids, 'Lead auto-purged after 30 days');
-    await supabase.from('linkedin_leads').delete().in('id', ids);
-    setLeads((prev) => prev.filter((l) => !ids.includes(l.id)));
   };
 
   const bulkRestore = async () => {

@@ -21,6 +21,7 @@ function CallsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [leadNames, setLeadNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchData();
@@ -54,6 +55,19 @@ function CallsPage() {
           return { data, error };
         });
       if (leadsError) console.error('Error fetching leads:', leadsError);
+
+      const { data: liData } = await supabase
+        .from('linkedin_leads')
+        .select('id, lead_name');
+
+      const leadNameMap: Record<string, string> = {};
+      (leadsData ?? []).forEach((l: LeadWithCallStatus) => {
+        leadNameMap[l.id] = l.title || 'Untitled Lead';
+      });
+      (liData ?? []).forEach((l: { id: string; lead_name: string | null }) => {
+        leadNameMap[l.id] = l.lead_name || 'Untitled Contact';
+      });
+      setLeadNames(leadNameMap);
 
       const { data: logsData, error: logsError } = await supabase
         .from('call_logs')
@@ -144,7 +158,7 @@ function CallsPage() {
       onDateFromChange={setDateFrom}
       onDateToChange={setDateTo}
       callLogs={callLogs}
-      leadMap={Object.fromEntries(leads.map(l => [l.id, l]))}
+      leadMap={leadNames}
     />
   );
 }
@@ -173,7 +187,7 @@ function CallsPageContent({
   onDateFromChange: (v: string) => void;
   onDateToChange: (v: string) => void;
   callLogs: CallLog[];
-  leadMap: Record<string, LeadWithCallStatus>;
+  leadMap: Record<string, string>;
 }) {
   const filteredLogs = callLogs.filter((log) => {
     if (selectedProfile && log.caller_id !== selectedProfile) return false;
@@ -317,7 +331,7 @@ function CallsPageContent({
                         {new Date(log.created_at).toLocaleString()}
                       </td>
                       <td className="px-4 py-2.5 text-sm text-foreground">
-                        {lead?.title || 'Unknown Lead'}
+                        {lead || 'Unknown Lead'}
                       </td>
                       <td className="px-4 py-2.5 text-sm text-muted">
                         {caller?.full_name || caller?.email || 'Unknown'}
