@@ -16,6 +16,7 @@ interface LinkedInLead {
   linkedin_url: string | null;
   source: string | null;
   notes: string | null;
+  phone: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -180,6 +181,18 @@ export default function LinkedInLeadDetailPage({ params }: { params: Promise<{ i
                   <ExternalLink className="w-4 h-4" />
                   {lead.linkedin_url}
                 </button>
+              </div>
+            )}
+
+            {lead.phone && (
+              <div>
+                <label className="block text-xs font-medium text-muted uppercase tracking-wider mb-1.5">
+                  Phone
+                </label>
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-muted" />
+                  <span className="text-foreground">{lead.phone}</span>
+                </div>
               </div>
             )}
 

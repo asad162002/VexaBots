@@ -29,7 +29,6 @@ export default function DashboardPage() {
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [followUpReminders, setFollowUpReminders] = useState<Lead[]>([]);
-  const [assignLimits, setAssignLimits] = useState<Record<string, { max_leads: number; current_leads: number }>>({});
 
   const bulk = useBulkSelection(leads);
   const { selectedIds, setSelectedIds, toggleItem, selectAllOnPage, deselectAll, isAllSelected, isPartiallySelected } = bulk;
@@ -47,27 +46,7 @@ export default function DashboardPage() {
     fetchProfiles();
     fetchCategories();
     fetchFollowUpReminders();
-    fetchAssignLimits();
   }, [statusFilter, sourceFilter, searchDebounce, sortBy, categoryFilter, assignedFilter]);
-
-  const fetchAssignLimits = async () => {
-    const { data, error } = await supabase
-      .from('assignment_limits')
-      .select('profile_id, max_leads, current_leads');
-
-    if (error) {
-      console.error('Error fetching limits:', error);
-    } else {
-      const limitMap: Record<string, { max_leads: number; current_leads: number }> = {};
-      (data ?? []).forEach((l: any) => {
-        limitMap[l.profile_id] = {
-          max_leads: l.max_leads,
-          current_leads: l.current_leads,
-        };
-      });
-      setAssignLimits(limitMap);
-    }
-  };
 
   const fetchCategories = async () => {
     const { data, error } = await supabase
@@ -118,27 +97,6 @@ export default function DashboardPage() {
   const handleBulkAssign = async (userId: string, notes: string, quantity?: number) => {
     const selectedIdsArray = Array.from(selectedIds);
 
-    const limit = assignLimits[userId]?.max_leads ?? 0;
-    const currentCount = assignLimits[userId]?.current_leads ?? 0;
-
-    if (limit > 0) {
-      const idsToAssign = quantity && quantity > 0 && quantity < selectedIdsArray.length
-        ? selectedIdsArray.slice(0, quantity)
-        : selectedIdsArray;
-
-      if (currentCount + idsToAssign.length > limit) {
-        const available = limit - currentCount;
-        if (available <= 0) {
-          alert(`${profiles.find(p => p.id === userId)?.email || 'This member'} has reached their maximum assignment limit of ${limit} leads.`);
-          return;
-        }
-        const proceed = confirm(
-          `${profiles.find(p => p.id === userId)?.email || 'This member'} has a limit of ${limit} leads and currently has ${currentCount}. You can only assign ${available} more. Proceed with ${available} leads?`
-        );
-        if (!proceed) return;
-      }
-    }
-
     const idsToAssign = quantity && quantity > 0 && quantity < selectedIdsArray.length
       ? selectedIdsArray.slice(0, quantity)
       : selectedIdsArray;
@@ -188,17 +146,9 @@ export default function DashboardPage() {
         content: `Assigned to ${profiles.find(p => p.id === userId)?.full_name || profiles.find(p => p.id === userId)?.email || 'member'}${notes ? `: ${notes}` : ''}`,
         lead_table: 'leads',
       });
-
-      const limit = assignLimits[userId];
-      if (limit) {
-        await supabase.from('assignment_limits').update({
-          current_leads: limit.current_leads + 1,
-        }).eq('profile_id', userId);
-      }
     }
 
     await fetchLeads();
-    fetchAssignLimits();
     const remainingIds = idsToAssign.filter((id) => !idsToAssign.includes(id));
     if (remainingIds.length === 0) {
       deselectAll();
@@ -209,11 +159,19 @@ export default function DashboardPage() {
 
   const handleBulkArchive = async () => {
     if (!confirm(`Archive ${selectedIds.size} selected lead(s)?`)) return;
+    const ids = Array.from(selectedIds);
     const { error } = await supabase
       .from('leads')
       .update({ deleted_at: new Date().toISOString() })
-      .in('id', Array.from(selectedIds));
+      .in('id', ids);
     if (error) { alert('Failed: ' + error.message); return; }
+    await Promise.all(ids.map((id) => supabase.from('lead_activities').insert({
+      lead_id: id,
+      profile_id: user?.id || null,
+      activity_type: 'other',
+      content: 'Lead archived',
+      lead_table: 'leads',
+    })));
     handleBulkClear();
     fetchLeads();
   };
@@ -227,6 +185,13 @@ export default function DashboardPage() {
     if (!confirm('Archive this lead? It will move to Deleted Leads.')) return;
     const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', id);
     if (error) { alert('Failed: ' + error.message); return; }
+    await supabase.from('lead_activities').insert({
+      lead_id: id,
+      profile_id: user?.id || null,
+      activity_type: 'other',
+      content: 'Lead archived',
+      lead_table: 'leads',
+    });
     fetchLeads();
   };
 
@@ -424,7 +389,6 @@ export default function DashboardPage() {
         onClear={handleBulkClear}
         onArchive={handleBulkArchive}
         profiles={profiles}
-        assignLimits={assignLimits}
       />
     </div>
   );

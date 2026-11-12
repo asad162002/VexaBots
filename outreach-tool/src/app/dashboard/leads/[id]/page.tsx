@@ -180,6 +180,13 @@ function LeadDetailInner({ params }: { params: Promise<{ id: string }> }) {
         new_status: status,
         reason: null,
       });
+      await supabase.from('lead_activities').insert({
+        lead_id: id,
+        profile_id: user?.id || null,
+        activity_type: 'other',
+        content: `Status changed from ${lead.status} to ${status}`,
+        lead_table: 'leads',
+      });
     }
 
     if (assignedTo) {

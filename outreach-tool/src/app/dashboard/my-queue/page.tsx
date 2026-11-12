@@ -125,16 +125,16 @@ function MyQueueInner() {
       ]);
       if (leadsRes.error) throw leadsRes.error;
 
-      const gmapLeads = (leadsRes.data ?? []).map((l: Lead): Lead => ({ ...l, lead_table: 'leads' }));
+      const gmapLeads = (leadsRes.data ?? []).map((l: Lead): Lead => ({ ...l, lead_table: 'leads' })).filter((l) => l.phone);
       const liLeads: Lead[] = ((liRes.data ?? []) as Array<Record<string, unknown>>)
-        .filter((l) => !l.deleted_at)
+        .filter((l) => !l.deleted_at && (l.phone as string | null))
         .map((l) => ({
           id: l.id as string,
           owner_id: null,
           title: (l.lead_name as string) || null,
           category_name: null,
           categories: null,
-          phone: (l.email as string) || null,
+          phone: (l.phone as string) || null,
           address: null,
           city: null,
           postal_code: null,
@@ -256,43 +256,24 @@ function MyQueueInner() {
 
     setSaving(true);
     setSaveError(null);
+    const isLinkedIn = currentLead.lead_table === 'linkedin_leads';
     try {
-      const isLinkedIn = currentLead.lead_table === 'linkedin_leads';
-      if (isLinkedIn) {
-        const { error: updError } = await supabase
-          .from('linkedin_leads')
-          .update({ notes: notes || selectedOutcome.label, updated_at: new Date().toISOString() })
-          .eq('id', currentLead.id);
-        if (updError) throw updError;
-        await supabase.from('lead_activities').insert({
-          lead_id: currentLead.id,
-          profile_id: user?.id || null,
-          activity_type: 'call',
-          content: notes || selectedOutcome.label,
-          lead_table: 'linkedin_leads',
-          next_follow_up_at:
-            selectedOutcome.requiresFollowUp && followUpDate
-              ? new Date(`${followUpDate}T12:00:00`).toISOString()
-              : null,
-          call_log_id: callLogId || null,
-        });
-      } else {
-        const { error: fnError } = await supabase.rpc('log_call_outcome', {
-          p_lead_id: currentLead.id,
-          p_status: selectedOutcome.status,
-          p_notes: notes || selectedOutcome.label,
-          p_follow_up_at:
-            selectedOutcome.requiresFollowUp && followUpDate
-              ? new Date(`${followUpDate}T12:00:00`).toISOString()
-              : null,
-          p_call_log_id: callLogId || null,
-          p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
-        });
-        if (fnError) {
-          setSaveError(fnError.message || 'Failed to save.');
-          setSaving(false);
-          return;
-        }
+      const { error: fnError } = await supabase.rpc('log_call_outcome', {
+        p_lead_id: currentLead.id,
+        p_status: isLinkedIn ? null : selectedOutcome.status,
+        p_notes: notes || selectedOutcome.label,
+        p_follow_up_at:
+          selectedOutcome.requiresFollowUp && followUpDate
+            ? new Date(`${followUpDate}T12:00:00`).toISOString()
+            : null,
+        p_call_log_id: callLogId || null,
+        p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
+        p_lead_table: isLinkedIn ? 'linkedin_leads' : 'leads',
+      });
+      if (fnError) {
+        setSaveError(fnError.message || 'Failed to save.');
+        setSaving(false);
+        return;
       }
       setCalledSet(s => new Set([...s, currentLead.id]));
       setOutcomeMap(m => ({ ...m, [currentLead.id]: selectedOutcome.label }));

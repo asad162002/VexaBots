@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Phone, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { CallControls, CallLeadRow } from '@/components/calls/calls-types';
+import { CallControls, CallLeadRow, getStatusColor, getStatusLabel } from '@/components/calls/calls-types';
 import type { LeadWithCallStatus, CallLog } from '@/components/calls/calls-types';
 
 function CallsPage() {
@@ -19,6 +19,8 @@ function CallsPage() {
   const [message, setMessage] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'called' | 'not_called'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -137,6 +139,12 @@ function CallsPage() {
       onCall={handleCall}
       onCallerChange={(e) => setSelectedProfile(e.target.value)}
       onRefresh={fetchData}
+      dateFrom={dateFrom}
+      dateTo={dateTo}
+      onDateFromChange={setDateFrom}
+      onDateToChange={setDateTo}
+      callLogs={callLogs}
+      leadMap={Object.fromEntries(leads.map(l => [l.id, l]))}
     />
   );
 }
@@ -144,6 +152,7 @@ function CallsPage() {
 function CallsPageContent({
   leads, isAdmin, filteredLeads, profiles, selectedProfile, onCallerChange, filterStatus, onFilterStatusChange,
   searchQuery, onSearchChange, submitting, message, onCall, onRefresh,
+  dateFrom, dateTo, onDateFromChange, onDateToChange, callLogs, leadMap,
   }: {
   leads: LeadWithCallStatus[];
   isAdmin: boolean;
@@ -159,7 +168,29 @@ function CallsPageContent({
   message: string;
   onCall: (id: string) => void;
   onRefresh: () => void;
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (v: string) => void;
+  onDateToChange: (v: string) => void;
+  callLogs: CallLog[];
+  leadMap: Record<string, LeadWithCallStatus>;
 }) {
+  const filteredLogs = callLogs.filter((log) => {
+    if (selectedProfile && log.caller_id !== selectedProfile) return false;
+    if (dateFrom) {
+      const d = new Date(log.created_at);
+      if (d < new Date(`${dateFrom}T00:00:00`)) return false;
+    }
+    if (dateTo) {
+      const d = new Date(log.created_at);
+      if (d > new Date(`${dateTo}T23:59:59`)) return false;
+    }
+    return true;
+  });
+
+  const totalDuration = filteredLogs.reduce((sum, l) => sum + (l.duration_seconds || 0), 0);
+  const answeredCount = filteredLogs.filter((l) => l.status === 'answered' || l.status === 'completed').length;
+
   return (
     <div className="p-6 min-h-screen bg-background">
       <div className="flex items-center justify-between mb-6">
@@ -219,6 +250,100 @@ function CallsPageContent({
             <p className="text-muted">No leads found matching your filters.</p>
           </div>
         )}
+      </div>
+
+      {/* Call History */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-foreground">Call History</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-muted">From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => onDateFromChange(e.target.value)}
+                className="bg-card border border-border rounded-lg px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-muted">To</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => onDateToChange(e.target.value)}
+                className="bg-card border border-border rounded-lg px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { onDateFromChange(''); onDateToChange(''); }}
+                className="text-xs text-muted hover:text-foreground"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 mb-3 text-xs text-muted">
+          <span>{filteredLogs.length} calls</span>
+          <span>{answeredCount} answered</span>
+          <span>{Math.floor(totalDuration / 60)}m {totalDuration % 60}s total</span>
+        </div>
+
+        <div className="bg-secondary border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Date</th>
+                  <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Lead</th>
+                  <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Caller</th>
+                  <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">To Number</th>
+                  <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Status</th>
+                  <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-2.5">Duration</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredLogs.map((log) => {
+                  const lead = log.lead_id ? leadMap[log.lead_id] : null;
+                  const caller = profiles.find(p => p.id === log.caller_id);
+                  const mins = Math.floor((log.duration_seconds || 0) / 60);
+                  const secs = (log.duration_seconds || 0) % 60;
+                  return (
+                    <tr key={log.id} className="hover:bg-card/50">
+                      <td className="px-4 py-2.5 text-sm text-muted">
+                        {new Date(log.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-foreground">
+                        {lead?.title || 'Unknown Lead'}
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-muted">
+                        {caller?.full_name || caller?.email || 'Unknown'}
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-muted">{log.to_number}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${getStatusColor(log.status)}`}>
+                          {getStatusLabel(log.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-muted">
+                        {log.duration_seconds ? `${mins}m ${secs}s` : '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {filteredLogs.length === 0 && (
+            <div className="text-center py-12">
+              <Phone className="w-12 h-12 text-muted mx-auto mb-3" />
+              <p className="text-muted">No calls found for this caller and date range.</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

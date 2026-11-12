@@ -51,12 +51,24 @@ export default function DeletedLinkedInLeadsPage() {
     else setSelected(new Set(leads.map((l) => l.id)));
   };
 
+  const logActivity = async (ids: string[], content: string) => {
+    await Promise.all(ids.map((id) => supabase.from('lead_activities').insert({
+      lead_id: id,
+      profile_id: null,
+      activity_type: 'other',
+      content,
+      lead_table: 'linkedin_leads',
+    })));
+  };
+
   const bulkRestore = async () => {
     if (!confirm(`Restore ${selected.size} lead(s)?`)) return;
     setBusy(true);
-    const { error } = await supabase.from('linkedin_leads').update({ deleted_at: null }).in('id', Array.from(selected));
+    const ids = Array.from(selected);
+    const { error } = await supabase.from('linkedin_leads').update({ deleted_at: null }).in('id', ids);
     setBusy(false);
     if (error) { alert('Failed: ' + error.message); return; }
+    await logActivity(ids, 'Lead restored');
     setLeads((prev) => prev.filter((l) => !selected.has(l.id)));
     setSelected(new Set());
   };
@@ -64,9 +76,11 @@ export default function DeletedLinkedInLeadsPage() {
   const bulkDelete = async () => {
     if (!confirm(`Permanently delete ${selected.size} lead(s)? Cannot be undone.`)) return;
     setBusy(true);
-    const { error } = await supabase.from('linkedin_leads').delete().in('id', Array.from(selected));
+    const ids = Array.from(selected);
+    const { error } = await supabase.from('linkedin_leads').delete().in('id', ids);
     setBusy(false);
     if (error) { alert('Failed: ' + error.message); return; }
+    await logActivity(ids, 'Lead permanently deleted');
     setLeads((prev) => prev.filter((l) => !selected.has(l.id)));
     setSelected(new Set());
   };
@@ -74,6 +88,7 @@ export default function DeletedLinkedInLeadsPage() {
   const restore = async (id: string) => {
     const { error } = await supabase.from('linkedin_leads').update({ deleted_at: null }).eq('id', id);
     if (error) { alert('Failed: ' + error.message); return; }
+    await logActivity([id], 'Lead restored');
     setLeads((prev) => prev.filter((l) => l.id !== id));
   };
 
@@ -81,6 +96,7 @@ export default function DeletedLinkedInLeadsPage() {
     if (!confirm('Permanently delete? Cannot be undone.')) return;
     const { error } = await supabase.from('linkedin_leads').delete().eq('id', id);
     if (error) { alert('Failed: ' + error.message); return; }
+    await logActivity([id], 'Lead permanently deleted');
     setLeads((prev) => prev.filter((l) => l.id !== id));
   };
 

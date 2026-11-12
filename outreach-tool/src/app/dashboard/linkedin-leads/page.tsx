@@ -208,17 +208,32 @@ export default function LinkedinLeadsPage() {
       alert('Failed to archive: ' + error.message);
       return;
     }
+    await supabase.from('lead_activities').insert({
+      lead_id: id,
+      profile_id: user?.id || null,
+      activity_type: 'other',
+      content: 'Lead archived',
+      lead_table: 'linkedin_leads',
+    });
     setLeads((prev) => prev.filter((l) => l.id !== id));
   };
 
   const bulkArchive = async () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`Archive ${selectedIds.size} selected lead(s)?`)) return;
+    const ids = Array.from(selectedIds);
     const { error } = await supabase
       .from('linkedin_leads')
       .update({ deleted_at: new Date().toISOString() })
-      .in('id', Array.from(selectedIds));
+      .in('id', ids);
     if (error) { alert('Failed: ' + error.message); return; }
+    await Promise.all(ids.map((id) => supabase.from('lead_activities').insert({
+      lead_id: id,
+      profile_id: user?.id || null,
+      activity_type: 'other',
+      content: 'Lead archived',
+      lead_table: 'linkedin_leads',
+    })));
     setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
     deselectAll();
   };

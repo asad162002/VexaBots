@@ -51,6 +51,20 @@ export default function AddLeadPage() {
     setError('');
     setSuccess(false);
 
+    // Prevent duplicate manual adds by title (case-insensitive)
+    if (form.title?.trim()) {
+      const { data: dup } = await supabase
+        .from('leads')
+        .select('id')
+        .ilike('title', form.title.trim())
+        .limit(1);
+      if (dup && dup.length > 0) {
+        setError('A lead with this name already exists.');
+        setSubmitting(false);
+        return;
+      }
+    }
+
     const updates: Record<string, unknown> = {
       title: form.title || null,
       website: form.website || null,
