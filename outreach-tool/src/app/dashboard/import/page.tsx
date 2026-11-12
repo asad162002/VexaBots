@@ -10,6 +10,15 @@ import { useAuth } from '@/lib/auth-context';
 import ImportUpload, { CsvColumnMapper, JsonPreviewNotice } from '@/components/import/ImportUpload';
 import { LEAD_FIELDS, type ColumnMapping } from '@/components/import/import-utils';
 import ImportResult from '@/components/import/ImportResult';
+import {
+  parseCSVLine,
+  normalizePhoneForDedup,
+  buildInitialMappings,
+  parseCSVPreview,
+  parseJsonPreview,
+  buildGoogleMapsLead,
+  buildEnrichedRecord,
+} from '@/lib/import-helpers';
 
 type FileType = 'csv' | 'json';
 
@@ -88,39 +97,6 @@ function ImportPageContent() {
   const [success, setSuccess] = useState<{ total: number; inserted: number; skipped: number; enriched?: number } | null>(null);
   const [skippedDetails, setSkippedDetails] = useState<string[]>([]);
 
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
-
-  // Normalize phone for dedup: strip non-digits, remove leading + or 1
-  const normalizePhoneForDedup = (phone: unknown): string => {
-    if (!phone) return '';
-    const digits = String(phone).replace(/\D/g, '');
-    if (digits.length === 11 && digits.startsWith('1')) return digits.substring(1);
-    return digits;
-  };
-
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -150,19 +126,9 @@ function ImportPageContent() {
 
       if (isJson) {
         try {
-          const jsonData = JSON.parse(text);
-          const dataArray = Array.isArray(jsonData) ? jsonData : [jsonData];
-          const preview = dataArray.slice(0, 3).map((item: Record<string, unknown>) => {
-            const row: Record<string, string> = {};
-            for (const [key, value] of Object.entries(item)) {
-              row[key] = typeof value === 'object' && value !== null
-                ? JSON.stringify(value).substring(0, 50)
-                : String(value ?? '');
-            }
-            return row;
-          });
-          setHeaders(Object.keys(preview[0] || {}));
-          setPreviewRows(preview);
+          const { headers: jsonHeaders, rows: jsonRows } = parseJsonPreview(text);
+          setHeaders(jsonHeaders);
+          setPreviewRows(jsonRows);
           setMappings([]);
           return;
         } catch {
@@ -172,59 +138,17 @@ function ImportPageContent() {
       }
 
       // CSV parsing
-      const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-      if (lines.length < 2) {
+      const { headers: csvHeaders, rows: csvRows } = parseCSVPreview(text);
+      if (csvHeaders.length === 0) {
         setError('CSV file is empty or has only a header row.');
         setHeaders([]);
         setPreviewRows([]);
         return;
       }
 
-      const parsedHeaders = parseCSVLine(lines[0]);
-      setHeaders(parsedHeaders);
-
-      const initialMappings: ColumnMapping[] = parsedHeaders.map((col) => {
-        const lower = col.toLowerCase().trim();
-        let field: string | null = null;
-
-        if (lower.includes('name') && (lower.includes('business') || lower.includes('company') || lower.includes('title'))) {
-          field = 'title';
-        } else if (lower.includes('website') || lower.includes('url') || lower.includes('site')) {
-          field = 'website';
-        } else if (lower.includes('phone') || lower.includes('mobile')) {
-          field = 'phone';
-        } else if (lower.includes('city')) {
-          field = 'city';
-        } else if (lower.includes('country')) {
-          field = 'country_code';
-        } else if (lower.includes('owner') && lower.includes('name')) {
-          field = 'owner_name';
-        } else if (lower.includes('owner') && lower.includes('role')) {
-          field = 'owner_role';
-        } else if (lower.includes('linkedin')) {
-          field = 'owner_linkedin_url';
-        } else if (lower.includes('size') || lower.includes('employees')) {
-          field = 'company_size_estimate';
-        } else if (lower.includes('note') || lower.includes('comment')) {
-          field = 'notes';
-        }
-
-        return { csvColumn: col, leadField: field };
-      });
-
-      setMappings(initialMappings);
-
-      const previewLines = lines.slice(1, 6);
-      const preview: Record<string, string>[] = [];
-      for (const line of previewLines) {
-        const values = parseCSVLine(line);
-        const row: Record<string, string> = {};
-        parsedHeaders.forEach((h, idx) => {
-          row[h] = values[idx] ?? '';
-        });
-        preview.push(row);
-      }
-      setPreviewRows(preview);
+      setHeaders(csvHeaders);
+      setMappings(buildInitialMappings(csvHeaders));
+      setPreviewRows(csvRows);
     };
     reader.readAsText(selectedFile);
   }, []);
@@ -246,48 +170,10 @@ function ImportPageContent() {
     const seenKeys = new Set<string>();
 
     for (const item of dataArray as Record<string, unknown>[]) {
-      const detailed_address = item.detailed_address as Record<string, string> | undefined;
-      const city = detailed_address?.city || '';
       const owner = item.owner as Record<string, string> | undefined;
       const leads_array = item.leads as Record<string, unknown>[] | undefined;
       const tech_stack = item.tech_stack as Record<string, unknown> | undefined;
-
-      const lead: Record<string, unknown> = {
-        title: item.name || '',
-        category_name: item.main_category || category || '',
-        categories: Array.isArray(item.categories) ? item.categories.join(', ') : null,
-        phone: item.phone || '',
-        address: item.address || '',
-        city: city,
-        postal_code: detailed_address?.postal_code || '',
-        country_code: detailed_address?.country_code || '',
-        website: item.website || '',
-        total_score: item.rating || 0,
-        reviews_count: item.reviews || 0,
-        place_id: item.place_id || '',
-        is_advertisement: item.is_spending_on_ads || false,
-        search_string: item.query || '',
-        url: (item.link as string) || '',
-        domain: (item.website as string) ? new URL(item.website as string).hostname : '',
-        source: 'google_maps',
-        status: 'new',
-        ad_running: item.is_spending_on_ads || false,
-        source_details: JSON.stringify({
-          rating: item.rating,
-          reviews: item.reviews,
-          coordinates: item.coordinates,
-        }),
-        owner_name: owner?.name || null,
-        owner_role: owner?.title || owner?.role || null,
-        owner_linkedin_url: owner?.linkedin_url || null,
-        owner_snippet: owner?.snippet || null,
-        owner_found: !!owner?.name,
-      };
-
-      // Clean empty strings
-      for (const key of Object.keys(lead)) {
-        if (lead[key] === '') lead[key] = null;
-      }
+      const lead = buildGoogleMapsLead(item, category);
 
       // Deduplicate: normalized phone + title
       const normalizedPhoneJson = normalizePhoneForDedup(lead.phone);
@@ -318,14 +204,8 @@ function ImportPageContent() {
 
       // Upload enriched leads for LinkedIn-sourced imports
       if (owner?.name && lead.source !== 'google_maps') {
-        const enriched_record = {
-          place_id: lead.place_id,
-          lead_name: owner.name,
-          title: owner.title || owner.role || null,
-          email: owner.email || null,
-          email_status: owner.email ? 'verified' : 'not_found',
-          linkedin_url: owner.linkedin_url || null,
-          source: 'linkedin_owner_search',
+        const enriched_record = buildEnrichedRecord(lead, owner);
+        const enriched_rest = {
         };
 
         const { error: enrichedError } = await supabase

@@ -4,28 +4,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { type Lead, LeadStatus } from '@/lib/types';
-import { Phone, CheckCircle, Search, Loader2, Copy, Mail, ExternalLink, MapPin } from 'lucide-react';
+import { Phone, Search, Loader2, Copy, Mail, ExternalLink, MapPin } from 'lucide-react';
 import { useCall, CallProvider } from '@/components/queue/CallProvider';
 import CallPanel from '@/components/queue/CallPanel';
 import LeadDetails from '@/components/queue/LeadDetails';
-
-interface OutcomeOption {
-  key: number;
-  label: string;
-  status: LeadStatus;
-  requiresFollowUp: boolean;
-  shortcut: string;
-}
-
-const OUTCOMES: OutcomeOption[] = [
-  { key: 1, label: 'No answer', status: 'contacted', requiresFollowUp: false, shortcut: '1' },
-  { key: 2, label: 'Voicemail', status: 'contacted', requiresFollowUp: false, shortcut: '2' },
-  { key: 3, label: 'Not interested', status: 'not_interested', requiresFollowUp: false, shortcut: '3' },
-  { key: 4, label: 'Call back', status: 'contacted', requiresFollowUp: true, shortcut: '4' },
-  { key: 5, label: 'Interested', status: 'interested', requiresFollowUp: false, shortcut: '5' },
-  { key: 6, label: 'Booked meeting', status: 'meeting_booked', requiresFollowUp: false, shortcut: '6' },
-  { key: 7, label: 'Wrong number', status: 'dead', requiresFollowUp: false, shortcut: '7' },
-];
+import QueueList from '@/components/queue/QueueList';
+import OutcomePanel from '@/components/queue/OutcomePanel';
+import { OUTCOMES, type OutcomeOption } from '@/components/queue/outcome-types';
 
 type CallPhase = 'idle' | 'ringing' | 'in-call' | 'ended';
 
@@ -382,57 +367,17 @@ function MyQueueInner() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {/* Left: Queue */}
-          <div className="bg-[#0f1011] border border-[rgba(255,255,255,0.06)] rounded-xl p-3 overflow-y-auto max-h-[600px]">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Queue · {activeLeads.length}</p>
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search name or phone"
-                className="w-full bg-secondary border border-border rounded-xl text-muted placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 pl-10 pr-3 text-sm"
-                aria-label="Search leads"
-              />
-            </div>
-            <div className="space-y-1">
-              {filteredQueue.map((l) => {
-                const originalIndex = activeLeads.findIndex(a => a.id === l.id);
-                const isDone = calledSet.has(l.id);
-                const outcomeLabel = outcomeMap[l.id];
-                const initials = (l.owner_name || l.title || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-                return (
-                  <button
-                    key={l.id}
-                    onClick={() => {
-                      if (callPhase === 'idle') {
-                        setCurrentIndex(originalIndex);
-                      }
-                    }}
-                    disabled={callPhase !== 'idle'}
-                    className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition ${
-                      originalIndex === currentIndex
-                        ? 'bg-[#191a1b] border border-[rgba(255,255,255,0.08)]'
-                        : 'hover:bg-[#191a1b]'
-                    } ${isDone ? 'opacity-60' : ''}`}
-                  >
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-medium flex-shrink-0 ${
-                      originalIndex === currentIndex ? 'bg-primary text-foreground' : 'bg-[#191a1b] text-muted'
-                    }`}>
-                      {initials}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-foreground text-sm truncate">{l.title || 'Untitled'}</div>
-                      <div className="text-xs text-muted truncate">{l.owner_name || ''} · {l.phone || ''}</div>
-                    </div>
-                    {isDone && outcomeLabel && (
-                      <span className="text-xs text-green-400">{outcomeLabel}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <QueueList
+            leads={filteredQueue}
+            activeLeads={activeLeads}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            currentIndex={currentIndex}
+            calledSet={calledSet}
+            outcomeMap={outcomeMap}
+            callPhase={callPhase}
+            onSelect={setCurrentIndex}
+          />
 
           {/* Center: Lead details + CallPanel */}
           <div className="flex flex-col gap-3 min-w-0">
@@ -517,88 +462,20 @@ function MyQueueInner() {
           </div>
 
           {/* Right: After the Call */}
-          <div className="bg-[#0f1011] border border-[rgba(255,255,255,0.06)] rounded-xl p-3">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">After the call</p>
-            <div className="space-y-3">
-              {!canSelectOutcome && callPhase !== 'ended' && (
-                <div className="text-xs text-yellow-400 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-                  End the call to select an outcome, or book a meeting.
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">
-                  Outcome (1-7 keys or click)
-                </label>
-                <div className="grid grid-cols-1 gap-1.5 mt-2">
-                  {OUTCOMES.map((outcome) => (
-                    <button
-                      key={outcome.key}
-                      onClick={() => handleSelectOutcome(outcome)}
-                      disabled={!canSelectOutcome}
-                      className={`oc text-left px-3 py-2 rounded-xl text-sm transition ${
-                        selectedOutcome?.key === outcome.key
-                          ? 'border border-[rgba(255,255,255,0.08)] bg-[#1b1b27] text-foreground'
-                          : 'bg-secondary text-muted border border-border hover:bg-[#1f1f2b] hover:text-foreground'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      <span className="flex items-center justify-between">
-                        <span>{outcome.label}</span>
-                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-[#0f0f15] border border-[rgba(255,255,255,0.06)] text-muted font-mono">
-                          {outcome.shortcut}
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Notes</label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="What did they say?"
-                  className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary resize-y"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-muted mb-1 uppercase tracking-wide">Follow-up date</label>
-                <input
-                  type="date"
-                  value={followUpDate}
-                  onChange={(e) => setFollowUpDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              {saveError && (
-                <div className="p-3 bg-red-900/30 border border-red-500/30 rounded-xl">
-                  <p className="text-sm text-red-400">{saveError}</p>
-                </div>
-              )}
-
-              <button
-                onClick={handleSave}
-                disabled={!selectedOutcome || saving || !canSelectOutcome}
-                className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary active:bg-accent disabled:bg-primary text-foreground font-semibold rounded-xl px-4 py-3 text-sm transition disabled:cursor-not-allowed"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Save and next</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
+          <OutcomePanel
+            outcomes={OUTCOMES}
+            selectedOutcome={selectedOutcome}
+            onSelectOutcome={handleSelectOutcome}
+            canSelectOutcome={canSelectOutcome}
+            callPhase={callPhase}
+            notes={notes}
+            onNotesChange={setNotes}
+            followUpDate={followUpDate}
+            onFollowUpDateChange={setFollowUpDate}
+            saveError={saveError}
+            saving={saving}
+            onSave={handleSave}
+          />
         </div>
       </div>
     </div>
