@@ -9,7 +9,7 @@ import type { LeadWithCallStatus, CallLog } from '@/components/calls/calls-types
 
 function CallsPage() {
   const { user, isAdmin, loading: authLoading } = useAuth();
-  const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string | null; email: string | null; phone_number: string | null }>>([]);
+  const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string | null; email: string | null; caller_id_number: string | null }>>([]);
   const [leads, setLeads] = useState<LeadWithCallStatus[]>([]);
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
@@ -31,8 +31,8 @@ function CallsPage() {
     try {
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, phone_number, role')
-        .not('phone_number', 'is', null);
+        .select('id, full_name, email, phone_number, caller_id_number, role')
+        .not('caller_id_number', 'is', null);
       if (profilesError) {
         console.error('Error fetching profiles:', profilesError);
       } else {
@@ -157,7 +157,7 @@ function CallsPageContent({
   leads: LeadWithCallStatus[];
   isAdmin: boolean;
   filteredLeads: LeadWithCallStatus[];
-  profiles: Array<{ id: string; full_name: string | null; email: string | null; phone_number: string | null }>;
+  profiles: Array<{ id: string; full_name: string | null; email: string | null; caller_id_number: string | null }>;
   selectedProfile: string;
   onCallerChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   filterStatus: 'all' | 'called' | 'not_called';

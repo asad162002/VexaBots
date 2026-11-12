@@ -68,7 +68,7 @@ export const getStatusLabel = (status: string | null): string => {
 
 interface CallControlsProps {
   selectedProfile: string;
-  profiles: { id: string; full_name: string | null; email: string | null; phone_number: string | null }[];
+  profiles: { id: string; full_name: string | null; email: string | null; caller_id_number: string | null }[];
   isAdmin: boolean;
   filterStatus: 'all' | 'called' | 'not_called';
   onCallerChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
@@ -98,7 +98,7 @@ export function CallControls({
               <option value="">Select caller...</option>
               {profiles.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.full_name || p.email} ({p.phone_number})
+                  {p.full_name || p.email} ({p.caller_id_number})
                 </option>
               ))}
             </select>

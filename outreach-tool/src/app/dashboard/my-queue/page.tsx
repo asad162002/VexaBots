@@ -192,7 +192,7 @@ function MyQueueInner() {
         }));
 
       let merged: Lead[] = [...gmapLeads, ...liLeads];
-      if (!isAdmin && user) {
+      if (user) {
         merged = merged.filter((l) => l.assigned_to === user.id);
       }
       setLeads(merged);
