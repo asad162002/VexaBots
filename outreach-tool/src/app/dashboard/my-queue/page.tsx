@@ -53,6 +53,7 @@ function MyQueueInner() {
   const [calledSet, setCalledSet] = useState<Set<string>>(new Set());
   const [outcomeMap, setOutcomeMap] = useState<Record<string, string>>({});
   const [meetingMap, setMeetingMap] = useState<Record<string, { when: string; link?: string }>>({});
+  const [queueFilter, setQueueFilter] = useState<'all' | 'google_maps' | 'linkedin' | 'manual'>('all');
 
   const {
     status: callStatus,
@@ -75,16 +76,20 @@ function MyQueueInner() {
   }, [leads]);
 
   const filteredQueue = useMemo(() => {
+    let base = activeLeads;
+    if (queueFilter === 'google_maps') base = base.filter(l => l.lead_table !== 'linkedin_leads' && l.source !== 'manual');
+    else if (queueFilter === 'linkedin') base = base.filter(l => l.lead_table === 'linkedin_leads');
+    else if (queueFilter === 'manual') base = base.filter(l => l.lead_table !== 'linkedin_leads' && l.source === 'manual');
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return activeLeads;
-    return activeLeads.filter(l =>
+    if (!q) return base;
+    return base.filter(l =>
       (l.title?.toLowerCase() || '').includes(q) ||
       (l.owner_name?.toLowerCase() || '').includes(q) ||
       (l.phone?.toLowerCase() || '').includes(q)
     );
-  }, [activeLeads, searchQuery]);
+  }, [activeLeads, searchQuery, queueFilter]);
 
-  const currentLead = activeLeads[currentIndex];
+  const currentLead = filteredQueue[currentIndex];
   const [todayCalledIds, setTodayCalledIds] = useState<Set<string>>(new Set());
 
   const loadTodayProgress = async () => {
@@ -114,14 +119,83 @@ function MyQueueInner() {
   const loadQueue = async () => {
     setLoading(true);
     try {
-      let query = supabase.from('leads').select('*');
-      // Admins see all leads; members see their assigned leads
+      const [leadsRes, liRes] = await Promise.all([
+        supabase.from('leads').select('*'),
+        supabase.from('linkedin_leads').select('*'),
+      ]);
+      if (leadsRes.error) throw leadsRes.error;
+
+      const gmapLeads = (leadsRes.data ?? []).map((l: Lead): Lead => ({ ...l, lead_table: 'leads' }));
+      const liLeads: Lead[] = ((liRes.data ?? []) as Array<Record<string, unknown>>)
+        .filter((l) => !l.deleted_at)
+        .map((l) => ({
+          id: l.id as string,
+          owner_id: null,
+          title: (l.lead_name as string) || null,
+          category_name: null,
+          categories: null,
+          phone: (l.email as string) || null,
+          address: null,
+          city: null,
+          postal_code: null,
+          country_code: null,
+          website: null,
+          total_score: null,
+          reviews_count: null,
+          place_id: (l.place_id as string) || null,
+          rank: null,
+          is_advertisement: null,
+          search_string: null,
+          url: null,
+          opening_hours: null,
+          is_24_hours: null,
+          permanently_closed: null,
+          temporarily_closed: null,
+          domain: null,
+          owner_name: (l.title as string) || null,
+          owner_role: null,
+          owner_linkedin_url: null,
+          owner_snippet: null,
+          owner_found: null,
+          apollo_phone: null,
+          apollo_linkedin: null,
+          apollo_employees: null,
+          apollo_revenue: null,
+          apollo_founded: null,
+          apollo_description: null,
+          apollo_tech_stack: null,
+          apollo_keywords: null,
+          running_google_ads: null,
+          running_fb_ads: null,
+          revenue_proxy: null,
+          ad_running: null,
+          no_chatbot: null,
+          no_crm: null,
+          no_booking_system: null,
+          multi_channel_inbound: null,
+          company_size_estimate: null,
+          icp_score: null,
+          icp_breakdown: null,
+          status: 'new' as LeadStatus,
+          source: 'linkedin' as const,
+          notes: l.notes as string | null,
+          meeting_link: null,
+          source_details: null,
+          last_contacted_at: null,
+          next_follow_up_at: null,
+          assigned_to: l.assigned_to as string | null,
+          assigned_at: l.assigned_at as string | null,
+          assigned_by: l.assigned_by as string | null,
+          created_at: l.created_at as string,
+          updated_at: l.updated_at as string,
+          lead_table: 'linkedin_leads' as const,
+        }));
+
+      let merged: Lead[] = [...gmapLeads, ...liLeads];
       if (!isAdmin && user) {
-        query = query.eq('assigned_to', user.id);
+        merged = merged.filter((l) => l.assigned_to === user.id);
       }
-      const { data, error: err } = await query;
-      if (err) throw err;
-      setLeads(data ?? []);
+      setLeads(merged);
       setCurrentIndex(0);
     } catch {
       setError('Failed to load queue.');
@@ -183,21 +257,42 @@ function MyQueueInner() {
     setSaving(true);
     setSaveError(null);
     try {
-      const { error: fnError } = await supabase.rpc('log_call_outcome', {
-        p_lead_id: currentLead.id,
-        p_status: selectedOutcome.status,
-        p_notes: notes || selectedOutcome.label,
-        p_follow_up_at:
-          selectedOutcome.requiresFollowUp && followUpDate
-            ? new Date(`${followUpDate}T12:00:00`).toISOString()
-            : null,
-        p_call_log_id: callLogId || null,
-        p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
-      });
-      if (fnError) {
-        setSaveError(fnError.message || 'Failed to save.');
-        setSaving(false);
-        return;
+      const isLinkedIn = currentLead.lead_table === 'linkedin_leads';
+      if (isLinkedIn) {
+        const { error: updError } = await supabase
+          .from('linkedin_leads')
+          .update({ notes: notes || selectedOutcome.label, updated_at: new Date().toISOString() })
+          .eq('id', currentLead.id);
+        if (updError) throw updError;
+        await supabase.from('lead_activities').insert({
+          lead_id: currentLead.id,
+          profile_id: user?.id || null,
+          activity_type: 'call',
+          content: notes || selectedOutcome.label,
+          lead_table: 'linkedin_leads',
+          next_follow_up_at:
+            selectedOutcome.requiresFollowUp && followUpDate
+              ? new Date(`${followUpDate}T12:00:00`).toISOString()
+              : null,
+          call_log_id: callLogId || null,
+        });
+      } else {
+        const { error: fnError } = await supabase.rpc('log_call_outcome', {
+          p_lead_id: currentLead.id,
+          p_status: selectedOutcome.status,
+          p_notes: notes || selectedOutcome.label,
+          p_follow_up_at:
+            selectedOutcome.requiresFollowUp && followUpDate
+              ? new Date(`${followUpDate}T12:00:00`).toISOString()
+              : null,
+          p_call_log_id: callLogId || null,
+          p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
+        });
+        if (fnError) {
+          setSaveError(fnError.message || 'Failed to save.');
+          setSaving(false);
+          return;
+        }
       }
       setCalledSet(s => new Set([...s, currentLead.id]));
       setOutcomeMap(m => ({ ...m, [currentLead.id]: selectedOutcome.label }));
@@ -206,9 +301,9 @@ function MyQueueInner() {
       setSelectedOutcome(null);
       setNotes('');
       setFollowUpDate('');
-      const remaining = activeLeads.slice(currentIndex + 1);
+      const remaining = filteredQueue.slice(currentIndex + 1);
       if (remaining.length === 0) {
-        setCurrentIndex(activeLeads.length);
+        setCurrentIndex(filteredQueue.length);
       } else {
         setCurrentIndex(currentIndex + 1);
       }
@@ -284,6 +379,16 @@ function MyQueueInner() {
               <p className="text-sm text-muted">{progress} of {activeLeads.length} called today</p>
             </div>
           </div>
+          <select
+            value={queueFilter}
+            onChange={(e) => { setQueueFilter(e.target.value as typeof queueFilter); setCurrentIndex(0); }}
+            className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="all">All Leads</option>
+            <option value="google_maps">Google Maps</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="manual">Manual</option>
+          </select>
           </div>
 
         {error && (

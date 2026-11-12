@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users, hiddenFromMembers: true },
   { href: '/dashboard/deleted-leads', label: 'Deleted Leads', icon: Trash2, hiddenFromMembers: true },
   { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard, adminOnly: true },
-  { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus, adminOnly: true },
+  { href: '/dashboard/leads/new', label: 'Add Lead', icon: Plus },
   { href: '/dashboard/import', label: 'Import CSV/JSON', icon: Upload, adminOnly: true },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/dashboard/activity-feed', label: 'Activity Feed', icon: Clock },
@@ -47,7 +47,7 @@ export default function DashboardLayout({
     if (!loading && !user) {
       router.push('/');
     }
-    const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/leads/new', '/dashboard/import', '/dashboard/leads/', '/dashboard/calls'];
+    const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/import', '/dashboard/leads/', '/dashboard/calls'];
     const isCurrentAdminOnly = adminOnlyPaths.some(p => pathname.startsWith(p));
     if (!loading && user && isCurrentAdminOnly && !isAdmin) {
       router.push('/dashboard/my-queue');

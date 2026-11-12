@@ -71,6 +71,7 @@ export type Lead = {
   assigned_by: string | null;
   created_at: string;
   updated_at: string;
+  lead_table?: 'leads' | 'linkedin_leads';
 };
 
 export type LeadStatus =

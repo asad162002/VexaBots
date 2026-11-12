@@ -66,6 +66,9 @@ export default function AddLeadPage() {
       place_id: form.place_id || null,
       status: 'new',
       owner_id: user?.id ?? null,
+      assigned_to: user?.id ?? null,
+      assigned_at: new Date().toISOString(),
+      assigned_by: user?.id ?? null,
     };
 
     const { error: insertError } = await supabase.from('leads').insert([updates]);
