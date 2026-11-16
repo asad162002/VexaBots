@@ -1,6 +1,17 @@
-import { type ActivityGroup, type Activity, type LeadInfo, ACTIVITY_ICONS, ACTIVITY_COLORS, STATUS_COLORS, formatDate, getTimeAgo, ChevronDown, ChevronRight } from '@/components/activity/activity-types';
 import Link from 'next/link';
 import { Clock } from 'lucide-react';
+import {
+  type Activity,
+  type ActivityGroup,
+  type LeadInfo,
+  ACTIVITY_ICONS,
+  ACTIVITY_COLORS,
+  STATUS_COLORS,
+  formatDate,
+  getTimeAgo,
+  ChevronDown,
+  ChevronRight,
+} from '@/components/activity/activity-types';
 
 interface ActivityGroupProps {
   group: ActivityGroup;
@@ -56,6 +67,12 @@ function ActivityItem({ activity, leads }: { activity: Activity; leads: Record<s
   const colorClass = ACTIVITY_COLORS[activity.activity_type] || ACTIVITY_COLORS.other;
   const lead = leads[activity.lead_id];
 
+  // The activity row records which table the lead lives in, so a LinkedIn
+  // contact must link to its own detail page rather than /dashboard/leads/:id.
+  const leadHref = activity.lead_table === 'linkedin_leads'
+    ? `/dashboard/linkedin-leads/${activity.lead_id}`
+    : `/dashboard/leads/${activity.lead_id}`;
+
   return (
     <div className="p-4 border-t border-[#272a] first:border-t-0">
       <div className="flex items-start gap-3">
@@ -63,21 +80,26 @@ function ActivityItem({ activity, leads }: { activity: Activity; leads: Record<s
           <Icon className="w-3.5 h-3.5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colorClass}`}>
               {activity.activity_type.charAt(0).toUpperCase() + activity.activity_type.slice(1)}
             </span>
             {lead && (
               <Link
-                href={`/dashboard/leads/${lead.id}`}
+                href={leadHref}
                 className="text-xs text-accent hover:text-accent font-medium truncate"
               >
-                {lead.title || 'Untitled Business'}
+                {lead.title || 'Untitled'}
               </Link>
             )}
             {lead && (
               <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[lead.status] || 'bg-secondary text-muted'}`}>
                 {lead.status}
+              </span>
+            )}
+            {activity.lead_table === 'linkedin_leads' && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                LinkedIn
               </span>
             )}
           </div>

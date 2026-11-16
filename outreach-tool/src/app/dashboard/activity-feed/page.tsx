@@ -16,17 +16,13 @@ function ActivityFeedPage() {
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  // Titles and status can come from either table, since an activity points at
+  // a lead in one of the two.
   const [leads, setLeads] = useState<Record<string, LeadInfo>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const [dateFilter, setDateFilter] = useState<string>('7d');
-
-  useEffect(() => {
-    fetchProfiles();
-  }, []);
-
-  useEffect(() => {
-    if (profilesLoaded) fetchActivities();
-  }, [profilesLoaded, dateFilter]);
+  // Default is All Time. A rolling 7-day default silently hid older history,
+  // which reads as data loss rather than a filter.
+  const [dateFilter, setDateFilter] = useState<string>('all');
 
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
@@ -59,6 +55,8 @@ function ActivityFeedPage() {
       .order('created_at', { ascending: false })
       .limit(100);
 
+    // Members see their own work. RLS permits any signed-in user to read all
+    // rows, so this filter is what actually scopes a member's view.
     if (!isAdmin && user?.id) query = query.eq('profile_id', user.id);
 
     const dateFilterValue = getDateFilterValue(dateFilter);
@@ -71,24 +69,50 @@ function ActivityFeedPage() {
       return;
     }
 
-    setActivities(data ?? []);
+    const rows = data ?? [];
+    setActivities(rows);
     setExpandedGroups({});
 
-    const leadIds = Array.from(new Set((data ?? []).map((a) => a.lead_id)));
-    if (leadIds.length > 0) {
-      const { data: leadsData, error: leadsError } = await supabase
-        .from('leads')
-        .select('id, title, status')
-        .in('id', leadIds);
-      if (leadsError) console.error('Error fetching leads:', leadsError);
-      else if (leadsData) {
-        const leadMap: Record<string, LeadInfo> = {};
-        leadsData.forEach((l) => { leadMap[l.id] = l; });
-        setLeads(leadMap);
-      }
+    const leadIds = Array.from(new Set(rows.map((a) => a.lead_id)));
+    if (leadIds.length === 0) {
+      setLoading(false);
+      return;
     }
+
+    // Resolve names and status across both tables. An activity row only records
+    // lead_table, so checking just `leads` left every LinkedIn activity nameless
+    // and unlinked. linkedin_leads has no status column, hence the fallback.
+    const [mapsData, linkedInData] = await Promise.all([
+      supabase.from('leads').select('id, title, status').in('id', leadIds),
+      supabase.from('linkedin_leads').select('id, lead_name').in('id', leadIds),
+    ]);
+
+    if (mapsData.error) console.error('Error fetching leads:', mapsData.error);
+    if (linkedInData.error) console.error('Error fetching linkedin leads:', linkedInData.error);
+
+    const leadMap: Record<string, LeadInfo> = {};
+    (mapsData.data ?? []).forEach((l: { id: string; title: string | null; status: string }) => {
+      leadMap[l.id] = { id: l.id, title: l.title, status: l.status };
+    });
+    // LinkedIn rows fill only gaps, so a Google Maps lead that also has an
+    // archived mirror keeps its real name.
+    (linkedInData.data ?? []).forEach((l: { id: string; lead_name: string | null }) => {
+      if (!leadMap[l.id]) {
+        leadMap[l.id] = { id: l.id, title: l.lead_name, status: 'new' };
+      }
+    });
+
+    setLeads(leadMap);
     setLoading(false);
   };
+
+  useEffect(() => {
+    fetchProfiles();
+  }, []);
+
+  useEffect(() => {
+    if (profilesLoaded) fetchActivities();
+  }, [profilesLoaded, dateFilter]);
 
   const groupedActivities: ActivityGroupType[] = useMemo(() => {
     const groups: Record<string, ActivityGroupType> = {};
@@ -131,14 +155,16 @@ function ActivityFeedPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Activity Feed</h1>
           <p className="text-sm text-muted mt-0.5">
-            {isAdmin ? `Team activity grouped by member (${activities.length} total activities)` : 'Your activity history'}
+            {isAdmin
+              ? `Team activity grouped by member (${activities.length} total activities)`
+              : `Your activity (${activities.length} total activities)`}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <select
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
           >
             {DATE_FILTERS.map((f) => (
               <option key={f.value} value={f.value}>{f.label}</option>
@@ -152,6 +178,12 @@ function ActivityFeedPage() {
           </button>
         </div>
       </div>
+
+      {dateFilter !== 'all' && (
+        <p className="mb-3 text-xs text-muted">
+          Showing only the selected period. Older activities exist; switch to All Time to see them.
+        </p>
+      )}
 
       {groupedActivities.length === 0 ? (
         <div className="bg-secondary border border-border rounded-xl p-12">

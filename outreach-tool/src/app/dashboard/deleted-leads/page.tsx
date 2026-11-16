@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { authFetch } from '@/lib/auth-fetch';
+import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { Trash2, RotateCcw, Users, Search } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
@@ -35,6 +36,7 @@ export default function DeletedLeadsPage() {
 
 function DeletedLeadsInner() {
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   // The LinkedIn page links here with ?filter=linkedin, so the view opens
   // already scoped to that source instead of everything.
   const requestedFilter = searchParams.get('filter');
@@ -141,9 +143,14 @@ function DeletedLeadsInner() {
   };
 
   const logActivity = async (rows: DeletedLead[], content: string) => {
+    // profile_id is NOT NULL on lead_activities and has a FK to auth.users.
+    // Passing null made every one of these inserts fail silently, so restores
+    // and permanent deletes never appeared in the activity feed.
+    if (!user?.id) return;
+
     await Promise.all(rows.map((row) => supabase.from('lead_activities').insert({
       lead_id: row.id,
-      profile_id: null,
+      profile_id: user.id,
       activity_type: 'other',
       content,
       lead_table: row.lead_table,

@@ -10,6 +10,8 @@ export interface Activity {
   outcome: string | null;
   created_at: string;
   next_follow_up_at: string | null;
+  /** Which table the lead lives in; decides the detail-page link. */
+  lead_table?: 'leads' | 'linkedin_leads';
 }
 
 export interface ActivityGroup {
@@ -38,12 +40,12 @@ export const ACTIVITY_ICONS: Record<string, any> = {
 };
 
 export const ACTIVITY_COLORS: Record<string, string> = {
-  call: 'bg-background0/20 text-muted border-border/30',
+  call: 'bg-secondary/60 text-muted border-border/30',
   text: 'bg-primary/20 text-accent border-primary/30',
   email: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
   note: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   meeting: 'bg-green-500/20 text-green-400 border-green-500/30',
-  other: 'bg-background0/20 text-muted border-border/30',
+  other: 'bg-secondary/60 text-muted border-border/30',
 };
 
 export const DATE_FILTERS = [
