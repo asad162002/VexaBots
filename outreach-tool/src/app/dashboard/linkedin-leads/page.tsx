@@ -190,7 +190,76 @@ export default function LinkedinLeadsPage() {
   });
 
   const bulk = useBulkSelection<LinkedInLead>(filteredLeads);
-  const { selectedIds, setSelectedIds, toggleItem, selectAllOnPage, deselectAll, isSelected, isAllSelected, isPartiallySelected } = bulk;
+  const { selectedIds, toggleItem, selectAllMatching, deselectAll, isSelected } = bulk;
+
+  // Selecting every lead rather than just the rows already rendered. The list
+  // loads 50 at a time via infinite scroll, so "select all" has to go back to
+  // the database or it silently covers only the first page.
+  const [selectAllMode, setSelectAllMode] = useState(false);
+
+  const fetchAllMatchingIds = async (): Promise<string[]> => {
+    let query = supabase
+      .from('linkedin_leads')
+      .select('id')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1000);
+
+    if (!isAdmin && user?.id) {
+      const { data: assigned } = await supabase
+        .from('leads')
+        .select('place_id')
+        .eq('assigned_to', user.id)
+        .not('place_id', 'is', null)
+        .neq('place_id', '');
+      const placeIds = (assigned || []).map((l: { place_id: string }) => l.place_id).filter(Boolean);
+      if (placeIds.length === 0) return [];
+      query = query.in('place_id', placeIds);
+    }
+
+    if (sourceFilter !== 'all') {
+      query = query.eq('source', sourceFilter);
+    }
+    if (emailFilter === 'verified') {
+      query = query.not('email', 'is', null).neq('email', '');
+    } else if (emailFilter === 'not_found') {
+      query = query.or('email.is.null,email.eq.');
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Failed to load all matching ids:', error);
+      return [];
+    }
+    return (data ?? []).map((row: { id: string }) => row.id);
+  };
+
+  const toggleSelectAllLeads = async () => {
+    if (selectAllMode) {
+      setSelectAllMode(false);
+      deselectAll();
+      return;
+    }
+
+    // Search is applied in the browser after the query, so honour it here too
+    // rather than selecting rows the user would not see.
+    const q = searchQuery.toLowerCase().trim();
+    const ids = q
+      ? filteredLeads.map((lead) => lead.id)
+      : await fetchAllMatchingIds();
+
+    if (ids.length > 0) {
+      selectAllMatching(ids);
+      setSelectAllMode(true);
+    }
+  };
+
+  // A different filter means a different set of rows, so any selection from the
+  // previous one would be invisible but still counted.
+  useEffect(() => {
+    setSelectAllMode(false);
+    deselectAll();
+  }, [searchQuery, sourceFilter, emailFilter, isAdmin, deselectAll]);
 
   const copyToClipboard = (email: string) => {
     navigator.clipboard.writeText(email);
@@ -222,20 +291,33 @@ export default function LinkedinLeadsPage() {
     if (selectedIds.size === 0) return;
     if (!confirm(`Archive ${selectedIds.size} selected lead(s)?`)) return;
     const ids = Array.from(selectedIds);
-    const { error } = await supabase
-      .from('linkedin_leads')
-      .update({ deleted_at: new Date().toISOString() })
-      .in('id', ids);
-    if (error) { alert('Failed: ' + error.message); return; }
-    await Promise.all(ids.map((id) => supabase.from('lead_activities').insert({
-      lead_id: id,
-      profile_id: user?.id || null,
-      activity_type: 'other',
-      content: 'Lead archived',
-      lead_table: 'linkedin_leads',
-    })));
+
+    // Chunk the update: a Supabase query string caps out around 8KB, so sending
+    // every id in one IN (...) would silently fail once a selection grows.
+    const CHUNK = 200;
+    let firstError: string | null = null;
+
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const batch = ids.slice(i, i + CHUNK);
+      const { error } = await supabase
+        .from('linkedin_leads')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', batch);
+      if (error && !firstError) firstError = error.message;
+
+      await Promise.all(batch.map((id) => supabase.from('lead_activities').insert({
+        lead_id: id,
+        profile_id: user?.id || null,
+        activity_type: 'other',
+        content: 'Lead archived',
+        lead_table: 'linkedin_leads',
+      })));
+    }
+
+    if (firstError) { alert('Failed: ' + firstError); return; }
     setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
     deselectAll();
+    setSelectAllMode(false);
   };
 
   const openAssign = async () => {
@@ -251,12 +333,21 @@ export default function LinkedinLeadsPage() {
     const ids = Array.from(selectedIds);
     const quantity = assignQuantity ? parseInt(assignQuantity, 10) : undefined;
     const idsToAssign = quantity && quantity > 0 && quantity < ids.length ? ids.slice(0, quantity) : ids;
-    const { error } = await supabase
-      .from('linkedin_leads')
-      .update({ assigned_to: userId, assigned_at: new Date().toISOString(), assigned_by: user?.id })
-      .in('id', idsToAssign);
-    if (!error) {
-      await Promise.all(idsToAssign.map((id) => supabase.from('lead_activities').insert({
+
+    // Chunked for the same reason as bulkArchive: one IN (...) with every id
+    // overflows the query string once a "select all" selection is used.
+    const CHUNK = 200;
+    let firstError: string | null = null;
+
+    for (let i = 0; i < idsToAssign.length; i += CHUNK) {
+      const batch = idsToAssign.slice(i, i + CHUNK);
+      const { error } = await supabase
+        .from('linkedin_leads')
+        .update({ assigned_to: userId, assigned_at: new Date().toISOString(), assigned_by: user?.id })
+        .in('id', batch);
+      if (error && !firstError) firstError = error.message;
+
+      await Promise.all(batch.map((id) => supabase.from('lead_activities').insert({
         lead_id: id,
         profile_id: userId,
         activity_type: 'other',
@@ -264,12 +355,14 @@ export default function LinkedinLeadsPage() {
         lead_table: 'linkedin_leads',
       })));
     }
+
     setSubmitting(false);
-    if (error) { alert('Failed to assign: ' + error.message); return; }
+    if (firstError) { alert('Failed to assign: ' + firstError); return; }
     setAssigning(false);
     setAssignQuantity('');
     setAssignNotes('');
     deselectAll();
+    setSelectAllMode(false);
   };
 
   const EmailIcon = ({ status }: { status: string | null }) => {
@@ -466,27 +559,29 @@ export default function LinkedinLeadsPage() {
       ) : (
         <div className="space-y-2">
           {filteredLeads.length > 0 && (
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer ${
-                  isAllSelected() || isPartiallySelected()
-                    ? 'bg-primary/30 border-primary'
-                    : 'border-border hover:border-[#52525b]'
-                }`}
-                onClick={() => {
-                  if (isAllSelected()) deselectAll();
-                  else selectAllOnPage();
-                }}
-              >
-                {(isAllSelected() || isPartiallySelected()) && (
-                  <svg className="w-3 h-3 text-foreground" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </div>
-              <span className="text-xs text-muted">
-                {selectedIds.size > 0 ? `${selectedIds.size} selected on this page` : 'Select all on page'}
-              </span>
+            <div className="flex items-center justify-between gap-3 bg-secondary border border-border rounded-xl px-4 py-2.5 mb-3">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={selectAllMode}
+                  onChange={() => toggleSelectAllLeads()}
+                  className="w-4 h-4 accent-primary cursor-pointer"
+                />
+                <span className="text-sm text-foreground font-medium">
+                  Select all leads
+                </span>
+                <span className="text-xs text-muted">
+                  ({filteredLeads.length} shown{selectAllMode ? `, ${selectedIds.size} selected` : ''})
+                </span>
+              </label>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => { setSelectAllMode(false); deselectAll(); }}
+                  className="text-xs text-muted hover:text-foreground transition"
+                >
+                  Clear selection
+                </button>
+              )}
             </div>
           )}
           {filteredLeads.map((lead, index) => {
