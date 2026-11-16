@@ -8,7 +8,9 @@ import { useAuth } from '@/lib/auth-context';
 
 interface HistoryEntry {
   id: string;
-  lead_id: string;
+  /** Exactly one of lead_id / linkedin_lead_id is set, enforced by a check. */
+  lead_id: string | null;
+  linkedin_lead_id: string | null;
   assigned_to: string | null;
   assigned_by: string | null;
   assigned_at: string | null;
@@ -57,7 +59,7 @@ export default function AssignmentLogPage() {
 
     let query = supabase
       .from('assignment_history')
-      .select('id, lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
+      .select('id, lead_id, linkedin_lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
       .order('assigned_at', { ascending: false })
       .limit(PAGE_SIZE);
 
@@ -88,7 +90,9 @@ export default function AssignmentLogPage() {
 
     // Resolve lead titles for both tables so a row reads correctly whether it
     // came from Google Maps or LinkedIn.
-    const leadIds = [...new Set(rows.map((r) => r.lead_id))];
+    const leadIds = [...new Set(
+      rows.flatMap((r) => [r.lead_id, r.linkedin_lead_id]).filter(Boolean),
+    )] as string[];
     const [mapsRes, linkedInRes] = await Promise.all([
       supabase.from('leads').select('id, title').in('id', leadIds),
       supabase.from('linkedin_leads').select('id, lead_name').in('id', leadIds),
@@ -98,10 +102,10 @@ export default function AssignmentLogPage() {
     const linkedInById = new Map((linkedInRes.data ?? []).map((l: { id: string; lead_name: string | null }) => [l.id, l.lead_name]));
 
     const enriched: EnrichedEntry[] = rows.map((row) => {
-      const inMaps = mapsById.has(row.lead_id);
+      const inMaps = Boolean(row.lead_id && mapsById.has(row.lead_id));
       return {
         ...row,
-        leadTitle: inMaps ? mapsById.get(row.lead_id) ?? null : linkedInById.get(row.lead_id) ?? null,
+        leadTitle: inMaps ? mapsById.get(row.lead_id!) ?? null : linkedInById.get(row.linkedin_lead_id!) ?? null,
         leadTable: inMaps ? 'leads' : 'linkedin_leads',
       };
     });

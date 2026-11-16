@@ -47,8 +47,12 @@ export async function recordAssignmentHistory({
     return { error: null };
   }
 
+  // assignment_history.lead_id is FK'd to leads(id), so a LinkedIn contact id
+  // belongs in linkedin_lead_id instead. Getting this wrong produced:
+  //   violates foreign key constraint "assignment_history_lead_id_fkey"
   const { error } = await supabase.from('assignment_history').insert({
-    lead_id: leadId,
+    lead_id: leadTable === 'leads' ? leadId : null,
+    linkedin_lead_id: leadTable === 'linkedin_leads' ? leadId : null,
     assigned_to: assignedTo,
     assigned_by: assignedBy,
     assigned_at: new Date().toISOString(),

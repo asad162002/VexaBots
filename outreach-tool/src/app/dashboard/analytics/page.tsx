@@ -66,16 +66,21 @@ export default function AnalyticsPage() {
       const { data: leads, error: leadsError } = await leadsQuery;
       if (leadsError) throw leadsError;
 
-      // Fetch activity log
+      // Fetch activity log. lead_id or linkedin_lead_id is set depending on
+      // which table the assignment targeted.
       const { data: activityData, error: activityError } = await supabase
         .from('assignment_history')
-        .select('lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
+        .select('lead_id, linkedin_lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
         .order('assigned_at', { ascending: false })
         .limit(20);
 
       if (activityError) {
         console.error('Error fetching activity:', activityError.message);
       }
+
+      // A stable key per row; LinkedIn rows have no lead_id.
+      const entryKey = (entry: { id?: string | null; lead_id: string | null; linkedin_lead_id: string | null; assigned_at: string | null }) =>
+        `${entry.lead_id ?? entry.linkedin_lead_id ?? 'unknown'}_${entry.assigned_at}`;
 
       // Process activity entries
       const profileMap: Record<string, any> = {};
@@ -90,7 +95,7 @@ export default function AnalyticsPage() {
           if (entry.assigned_to === user.id && entry.assigned_by && entry.assigned_by !== user.id) {
             const adminName = profileMap[entry.assigned_by]?.email || 'Admin';
             myReceived.push({
-              id: entry.lead_id + '_received_' + entry.assigned_at,
+              id: entryKey(entry) + '_received',
               action: 'assigned',
               description: `${adminName} assigned you a lead: ${entry.notes || 'New lead assigned'}`,
               timestamp: entry.assigned_at,
@@ -99,7 +104,7 @@ export default function AnalyticsPage() {
           if (entry.assigned_by === user.id) {
             const assigneeName = profileMap[entry.assigned_to]?.email || 'Unknown';
             myActivity.push({
-              id: entry.lead_id + '_assigned_' + entry.assigned_at,
+              id: entryKey(entry) + '_assigned',
               action: 'assigned',
               description: `Assigned lead to ${assigneeName}`,
               timestamp: entry.assigned_at,
@@ -115,7 +120,7 @@ export default function AnalyticsPage() {
             const assignerName = profileMap[entry.assigned_by]?.email || 'Someone';
             const assigneeName = profileMap[entry.assigned_to]?.email || 'Unknown';
             adminActivity.push({
-              id: entry.lead_id + '_team_' + entry.assigned_at,
+              id: entryKey(entry) + '_team',
               action: 'assigned',
               description: `${assignerName} assigned a lead to ${assigneeName}`,
               timestamp: entry.assigned_at,
