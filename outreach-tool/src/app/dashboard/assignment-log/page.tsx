@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { type Profile } from '@/lib/types';
 import Spinner from '@/components/ui/spinner';
 import { useAuth } from '@/lib/auth-context';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface HistoryEntry {
   id: string;
@@ -23,7 +24,7 @@ interface EnrichedEntry extends HistoryEntry {
   leadTable: 'leads' | 'linkedin_leads';
 }
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 500;
 
 export default function AssignmentLogPage() {
   const { user } = useAuth();
@@ -36,6 +37,7 @@ export default function AssignmentLogPage() {
   const [error, setError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'leads' | 'linkedin_leads'>('all');
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
 
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
@@ -127,16 +129,38 @@ export default function AssignmentLogPage() {
   useEffect(() => {
     if (loadingRole) return;
     fetchLog();
-  }, [loadingRole, dateFilter, sourceFilter, isAdmin]);
+  }, [loadingRole, dateFilter, sourceFilter]);
+
+  // Group by calendar day. Assigning 100 leads in one go must produce one row,
+  // not 100.
+  const groups = useMemo(() => {
+    const byDay = new Map<string, EnrichedEntry[]>();
+    entries.forEach((entry) => {
+      const key = entry.assigned_at
+        ? new Date(entry.assigned_at).toLocaleDateString(undefined, {
+            weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+          })
+        : 'Unknown date';
+      const list = byDay.get(key) ?? [];
+      list.push(entry);
+      byDay.set(key, list);
+    });
+    // Newest first: sort by the newest entry inside each day.
+    return Array.from(byDay.entries())
+      .map(([day, items]) => ({ day, items, latest: items[0]?.assigned_at ?? '' }))
+      .sort((a, b) => (a.latest < b.latest ? 1 : -1));
+  }, [entries]);
 
   const nameFor = (id: string | null) => {
     if (!id) return '-';
-    return profiles[id]?.full_name || profiles[id]?.email || 'Unknown';
+    const profile = profiles[id];
+    if (!profile) return 'Former member';
+    return profile.full_name || profile.email || 'Former member';
   };
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleString();
+  const formatTime = (dateStr: string | null) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
 
   const counts = {
@@ -151,7 +175,7 @@ export default function AssignmentLogPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Assignment Log</h1>
           <p className="text-sm text-muted mt-0.5">
-            Every lead assignment, newest first. Reassignments are kept, not overwritten.
+            Every lead assignment, grouped by day. Reassignments are kept, not overwritten.
           </p>
         </div>
         {!isAdmin && (
@@ -195,7 +219,7 @@ export default function AssignmentLogPage() {
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">
           {error}
         </div>
-      ) : entries.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div className="bg-secondary border border-border rounded-xl p-12">
           <div className="text-center">
             <div className="w-12 h-12 rounded-full bg-card flex items-center justify-center mx-auto mb-4">
@@ -208,47 +232,87 @@ export default function AssignmentLogPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-secondary border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Lead</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Source</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Assigned To</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Previous</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Assigned By</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">When</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <tr key={entry.id} className="border-b border-border last:border-0 hover:bg-[#1f1f25] transition align-top">
-                  <td className="px-4 py-3 text-foreground max-w-[220px] truncate">
-                    {entry.leadTitle || 'Untitled'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
-                      entry.leadTable === 'linkedin_leads'
-                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                        : 'bg-primary/20 text-accent border border-primary/30'
-                    }`}>
-                      {entry.leadTable === 'linkedin_leads' ? 'LinkedIn' : 'Google Maps'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-foreground">{nameFor(entry.assigned_to)}</td>
-                  <td className="px-4 py-3 text-muted">{nameFor(entry.previous_assignee)}</td>
-                  <td className="px-4 py-3 text-foreground">{nameFor(entry.assigned_by)}</td>
-                  <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">
-                    {formatDate(entry.assigned_at)}
-                  </td>
-                  <td className="px-4 py-3 text-muted max-w-xs truncate" title={entry.notes ?? ''}>
-                    {entry.notes || '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {groups.map((group) => {
+            const isOpen = expandedDates[group.day] ?? false;
+            const assignees = Array.from(new Set(group.items.map((i) => i.assigned_to)));
+            const sources = Array.from(new Set(group.items.map((i) => i.leadTable)));
+
+            return (
+              <div key={group.day} className="bg-secondary border border-border rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setExpandedDates((prev) => ({ ...prev, [group.day]: !isOpen }))}
+                  className="w-full flex items-center justify-between p-4 text-left hover:bg-[#1f1f25] transition"
+                >
+                  <div className="flex items-center gap-3">
+                    {isOpen
+                      ? <ChevronDown className="w-4 h-4 text-muted shrink-0" />
+                      : <ChevronRight className="w-4 h-4 text-muted shrink-0" />}
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{group.day}</p>
+                      <p className="text-xs text-muted mt-0.5">
+                        {group.items.length} assignment{group.items.length !== 1 ? 's' : ''}
+                        {' · '}
+                        {assignees.length === 1
+                          ? `to ${nameFor(assignees[0])}`
+                          : `to ${assignees.length} members`}
+                        {' · '}
+                        {sources.length === 1
+                          ? (sources[0] === 'linkedin_leads' ? 'LinkedIn' : 'Google Maps')
+                          : `${sources.length} sources`}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted">{group.latest ? formatTime(group.latest) : ''}</span>
+                </button>
+
+                {isOpen && (
+                  <div className="border-t border-border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Lead</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Source</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Assigned To</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Previous</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Assigned By</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Time</th>
+                          <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.items.map((entry) => (
+                          <tr key={entry.id} className="border-b border-border last:border-0 hover:bg-[#1f1f25] transition align-top">
+                            <td className="px-4 py-3 text-foreground max-w-[220px] truncate">
+                              {entry.leadTitle || 'Untitled'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
+                                entry.leadTable === 'linkedin_leads'
+                                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                  : 'bg-primary/20 text-accent border border-primary/30'
+                              }`}>
+                                {entry.leadTable === 'linkedin_leads' ? 'LinkedIn' : 'Google Maps'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-foreground">{nameFor(entry.assigned_to)}</td>
+                            <td className="px-4 py-3 text-muted">{nameFor(entry.previous_assignee)}</td>
+                            <td className="px-4 py-3 text-foreground">{nameFor(entry.assigned_by)}</td>
+                            <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">
+                              {formatTime(entry.assigned_at)}
+                            </td>
+                            <td className="px-4 py-3 text-muted max-w-xs truncate" title={entry.notes ?? ''}>
+                              {entry.notes || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
