@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { recordAssignment } from '@/lib/record-assignment';
 import { STATUS_COLORS, STATUS_LABELS, type Lead, type LeadStatus, type LeadSource } from '@/lib/types';
 import type { Profile } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
@@ -102,42 +103,33 @@ export default function DashboardPage() {
       : selectedIdsArray;
 
     for (const id of idsToAssign) {
-      const { data: currentLead, error: fetchError } = await supabase
-        .from('leads')
-        .select('assigned_to')
-        .eq('id', id)
-        .single();
-
-      const previousAssignee = fetchError ? null : currentLead?.assigned_to;
-
-      const updateData: Record<string, unknown> = {
-        assigned_to: userId,
-        assigned_at: new Date().toISOString(),
-        assigned_by: user?.id || null,
-      };
-
+      // Notes are appended to the lead's own note field, preserving what is
+      // already there instead of overwriting it.
       if (notes) {
-        const resp = await supabase.from('leads').select('notes').eq('id', id).single();
-        const existingNotes = resp.data?.notes || '';
-        updateData.notes = existingNotes
+        const { data: currentLead } = await supabase
+          .from('leads')
+          .select('notes')
+          .eq('id', id)
+          .single();
+        const existingNotes = currentLead?.notes || '';
+        const merged = existingNotes
           ? `${existingNotes}\n\n[${new Date().toISOString().split('T')[0]}] ${notes}`
           : notes;
+        await supabase.from('leads').update({ notes: merged }).eq('id', id);
       }
 
-      const { error: updateError } = await supabase.from('leads').update(updateData).eq('id', id);
-      if (updateError) {
-        console.error(`Error assigning lead ${id}:`, updateError);
+      const { error } = await recordAssignment({
+        leadId: id,
+        leadTable: 'leads',
+        assignedTo: userId,
+        assignedBy: user?.id || null,
+        notes,
+      });
+
+      if (error) {
+        console.error(`Error assigning lead ${id}:`, error.message);
         continue;
       }
-
-      await supabase.from('assignment_history').insert({
-        lead_id: id,
-        assigned_to: userId,
-        assigned_by: user?.id || null,
-        assigned_at: new Date().toISOString(),
-        previous_assignee: previousAssignee,
-        notes: notes || null,
-      });
 
       await supabase.from('lead_activities').insert({
         lead_id: id,

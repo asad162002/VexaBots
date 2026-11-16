@@ -8,6 +8,7 @@ import { Search, Filter, Users, Mail, ExternalLink, Copy, Shield, Trash2 } from 
 import Spinner from '@/components/ui/spinner';
 import { useAuth } from '@/lib/auth-context';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
+import { recordAssignment } from '@/lib/record-assignment';
 
 interface LinkedInLead {
   id: string;
@@ -336,24 +337,27 @@ export default function LinkedinLeadsPage() {
 
     // Chunked for the same reason as bulkArchive: one IN (...) with every id
     // overflows the query string once a "select all" selection is used.
-    const CHUNK = 200;
     let firstError: string | null = null;
 
-    for (let i = 0; i < idsToAssign.length; i += CHUNK) {
-      const batch = idsToAssign.slice(i, i + CHUNK);
-      const { error } = await supabase
-        .from('linkedin_leads')
-        .update({ assigned_to: userId, assigned_at: new Date().toISOString(), assigned_by: user?.id })
-        .in('id', batch);
+    // History has to be written per lead because it carries the previous
+    // assignee, which differs from row to row.
+    for (const id of idsToAssign) {
+      const { error } = await recordAssignment({
+        leadId: id,
+        leadTable: 'linkedin_leads',
+        assignedTo: userId,
+        assignedBy: user?.id || null,
+        notes: assignNotes || null,
+      });
       if (error && !firstError) firstError = error.message;
 
-      await Promise.all(batch.map((id) => supabase.from('lead_activities').insert({
+      await supabase.from('lead_activities').insert({
         lead_id: id,
         profile_id: userId,
         activity_type: 'other',
         content: `Assigned to ${profiles.find(p => p.id === userId)?.full_name || profiles.find(p => p.id === userId)?.email || 'member'}${assignNotes ? `: ${assignNotes}` : ''}`,
         lead_table: 'linkedin_leads',
-      })));
+      });
     }
 
     setSubmitting(false);

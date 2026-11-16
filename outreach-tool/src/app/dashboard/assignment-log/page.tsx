@@ -6,35 +6,35 @@ import { type Profile } from '@/lib/types';
 import Spinner from '@/components/ui/spinner';
 import { useAuth } from '@/lib/auth-context';
 
-interface AssigneeGroup {
-  assigneeId: string;
-  assigneeName: string | null;
-  assigneeEmail: string | null;
-  leadCount: number;
-  latestAssignment: string;
-  latestAssignedByName: string | null;
-  latestAssignedByEmail: string | null;
+interface HistoryEntry {
+  id: string;
+  lead_id: string;
+  assigned_to: string | null;
+  assigned_by: string | null;
+  assigned_at: string | null;
+  previous_assignee: string | null;
   notes: string | null;
 }
 
+interface EnrichedEntry extends HistoryEntry {
+  leadTitle: string | null;
+  leadTable: 'leads' | 'linkedin_leads';
+}
+
+const PAGE_SIZE = 100;
+
 export default function AssignmentLogPage() {
   const { user } = useAuth();
-  const [assigneeGroups, setAssigneeGroups] = useState<AssigneeGroup[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loadingRole, setLoadingRole] = useState(true);
+
+  const [entries, setEntries] = useState<EnrichedEntry[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [profiles, setProfiles] = useState<Record<string, Profile>>({});
-  const [profilesLoaded, setProfilesLoaded] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<AssigneeGroup | null>(null);
-  const [assigneeLeads, setAssigneeLeads] = useState<Record<string, any[]>>({});
-  const [loadingLeads, setLoadingLeads] = useState<Record<string, boolean>>({});
-  const [isAdmin, setIsAdmin] = useState(false);
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'leads' | 'linkedin_leads'>('all');
 
-  useEffect(() => {
-    fetchProfiles();
-  }, []);
-
-  // Check if user is admin and fetch profiles
   const fetchProfiles = async () => {
     const { data, error: profilesError } = await supabase.from('profiles').select('*');
     if (profilesError) {
@@ -43,180 +43,103 @@ export default function AssignmentLogPage() {
       const profileMap: Record<string, Profile> = {};
       data.forEach((p) => { profileMap[p.id] = p; });
       setProfiles(profileMap);
-      // Check if current user is admin
-      const currentProfile = data.find(p => p.id === user?.id);
-      setIsAdmin(currentProfile?.role === 'admin');
+      setIsAdmin(data.find((p) => p.id === user?.id)?.role === 'admin');
     }
-    setProfilesLoaded(true);
+    setLoadingRole(false);
   };
 
-  // Re-run fetchAssignmentLog when profiles are loaded (so enrichment works)
-  useEffect(() => {
-    if (profilesLoaded) {
-      fetchAssignmentLog();
-    }
-  }, [profilesLoaded, dateFilter]);
-
-  // Redirect non-admins
-  useEffect(() => {
-    if (profilesLoaded && !isAdmin) {
-      // Non-admins shouldn't access this page
-      // They'll still see data but this is a soft guard
-    }
-  }, [isAdmin, profilesLoaded]);
-
-  const fetchAssignmentLog = async () => {
+  // The log is assignment_history, which is append-only. Reading live leads
+  // instead meant a reassignment erased the earlier one and deleting a lead
+  // erased its whole history.
+  const fetchLog = async () => {
     setLoading(true);
     setError(null);
 
-    // Fetch leads with assignment data
-    let leadsQuery = supabase
-      .from('leads')
-      .select('id, title, assigned_to, assigned_at, assigned_by, notes')
-      .not('assigned_to', 'is', null)
+    let query = supabase
+      .from('assignment_history')
+      .select('id, lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
       .order('assigned_at', { ascending: false })
-      .limit(500);
+      .limit(PAGE_SIZE);
 
-    // Non-admins only see leads assigned to them
     if (!isAdmin && user?.id) {
-      leadsQuery = leadsQuery.eq('assigned_to', user.id);
+      query = query.eq('assigned_to', user.id);
     }
 
-    // Apply date filter based on assigned_at
-    const now = new Date();
-    let pastDate: Date | null = null;
-    if (dateFilter === '24h') {
-      pastDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    } else if (dateFilter === '7d') {
-      pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else if (dateFilter === '30d') {
-      pastDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-    if (pastDate) {
-      leadsQuery = leadsQuery.gte('assigned_at', pastDate.toISOString());
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const ms = dateFilter === '24h'
+        ? 24 * 60 * 60 * 1000
+        : dateFilter === '7d'
+          ? 7 * 24 * 60 * 60 * 1000
+          : 30 * 24 * 60 * 60 * 1000;
+      query = query.gte('assigned_at', new Date(now.getTime() - ms).toISOString());
     }
 
-    const { data: leads, error: leadsError } = await leadsQuery;
+    const { data, error: historyError } = await query;
 
-    if (leadsError) {
-      console.error('Error fetching assignment log:', leadsError);
+    if (historyError) {
+      console.error('Error fetching assignment log:', historyError);
       setError('Failed to load assignment log. Please try again.');
       setLoading(false);
       return;
     }
 
-    if (!leads) {
-      setAssigneeGroups([]);
-      setLoading(false);
-      return;
-    }
+    const rows: HistoryEntry[] = data ?? [];
 
-    // Group by assignee (who the lead was assigned TO)
-    const groups: Record<string, AssigneeGroup> = {};
-    leads.forEach((lead) => {
-      if (!lead.assigned_to) return;
-      const key = lead.assigned_to;
-      if (!groups[key]) {
-        const assignedByProfile = profiles[lead.assigned_by || ''];
-        groups[key] = {
-          assigneeId: key,
-          assigneeName: null,
-          assigneeEmail: null,
-          leadCount: 0,
-          latestAssignment: lead.assigned_at || '',
-          latestAssignedByName: assignedByProfile?.full_name || null,
-          latestAssignedByEmail: assignedByProfile?.email || null,
-          notes: lead.notes || null,
-        };
-      }
-      groups[key].leadCount += 1;
-      // Track the latest assignment date and who assigned it
-      if (lead.assigned_at && (!groups[key].latestAssignment || lead.assigned_at > groups[key].latestAssignment)) {
-        groups[key].latestAssignment = lead.assigned_at;
-        const assignedByProfile = profiles[lead.assigned_by || ''];
-        groups[key].latestAssignedByName = assignedByProfile?.full_name || null;
-        groups[key].latestAssignedByEmail = assignedByProfile?.email || null;
-      }
-      // Use the most recent non-empty notes
-      if (lead.notes && !groups[key].notes) {
-        groups[key].notes = lead.notes;
-      }
+    // Resolve lead titles for both tables so a row reads correctly whether it
+    // came from Google Maps or LinkedIn.
+    const leadIds = [...new Set(rows.map((r) => r.lead_id))];
+    const [mapsRes, linkedInRes] = await Promise.all([
+      supabase.from('leads').select('id, title').in('id', leadIds),
+      supabase.from('linkedin_leads').select('id, lead_name').in('id', leadIds),
+    ]);
+
+    const mapsById = new Map((mapsRes.data ?? []).map((l: { id: string; title: string | null }) => [l.id, l.title]));
+    const linkedInById = new Map((linkedInRes.data ?? []).map((l: { id: string; lead_name: string | null }) => [l.id, l.lead_name]));
+
+    const enriched: EnrichedEntry[] = rows.map((row) => {
+      const inMaps = mapsById.has(row.lead_id);
+      return {
+        ...row,
+        leadTitle: inMaps ? mapsById.get(row.lead_id) ?? null : linkedInById.get(row.lead_id) ?? null,
+        leadTable: inMaps ? 'leads' : 'linkedin_leads',
+      };
     });
 
-    // Enrich with profile data for assignee names
-    const groupsArray: AssigneeGroup[] = Object.values(groups).map((group) => {
-      const profile = profiles[group.assigneeId];
-      if (profile) {
-        group.assigneeName = profile.full_name;
-        group.assigneeEmail = profile.email;
-      }
-      return group;
-    });
+    // Filtering by source happens after enrichment because the history table
+    // does not record which table the lead came from.
+    const visible = sourceFilter === 'all'
+      ? enriched
+      : enriched.filter((entry) => entry.leadTable === sourceFilter);
 
-    setAssigneeGroups(groupsArray);
+    setEntries(visible);
     setLoading(false);
   };
 
-  const fetchAssigneeLeads = async (assigneeId: string) => {
-    const { data: leads, error: leadsError } = await supabase
-      .from('leads')
-      .select('id, title, assigned_at, assigned_by, notes')
-      .eq('assigned_to', assigneeId)
-      .order('assigned_at', { ascending: false })
-      .limit(100);
+  useEffect(() => {
+    fetchProfiles();
+  }, []);
 
-    if (leadsError) {
-      console.error('Error fetching assignee leads:', leadsError);
-      return [];
-    }
-    return leads || [];
+  useEffect(() => {
+    if (loadingRole) return;
+    fetchLog();
+  }, [loadingRole, dateFilter, sourceFilter, isAdmin]);
+
+  const nameFor = (id: string | null) => {
+    if (!id) return '-';
+    return profiles[id]?.full_name || profiles[id]?.email || 'Unknown';
   };
 
-  const fetchAssignmentHistory = async (leadId: string) => {
-    const { data: history, error } = await supabase
-      .from('assignment_history')
-      .select('id, lead_id, assigned_to, assigned_by, assigned_at, previous_assignee, notes')
-      .eq('lead_id', leadId)
-      .order('assigned_at', { ascending: false });
-
-    return { history: history || [], error };
-  };
-
-  const loadAssigneeLeads = async (group: AssigneeGroup) => {
-    if (assigneeLeads[group.assigneeId]) {
-      setSelectedGroup(selectedGroup?.assigneeId === group.assigneeId ? null : group);
-      return;
-    }
-    setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: true }));
-    const leads = await fetchAssigneeLeads(group.assigneeId);
-    setAssigneeLeads((prev) => ({ ...prev, [group.assigneeId]: leads }));
-    setLoadingLeads((prev) => ({ ...prev, [group.assigneeId]: false }));
-    setSelectedGroup(group);
-  };
-
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleString();
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="flex items-center gap-3 text-muted">
-          <Spinner size="md" />
-          <span>Loading assignment log...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">
-        {error}
-      </div>
-    );
-  }
+  const counts = {
+    all: entries.length,
+    leads: entries.filter((e) => e.leadTable === 'leads').length,
+    linkedin: entries.filter((e) => e.leadTable === 'linkedin_leads').length,
+  };
 
   return (
     <div>
@@ -224,20 +147,31 @@ export default function AssignmentLogPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Assignment Log</h1>
           <p className="text-sm text-muted mt-0.5">
-            {assigneeGroups.length} team member{assigneeGroups.length !== 1 ? 's' : ''} with assigned leads
+            Every lead assignment, newest first. Reassignments are kept, not overwritten.
           </p>
         </div>
         {!isAdmin && (
           <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-1.5">
-            Member View
+            Showing assignments made to you
           </div>
         )}
       </div>
-      <div className="mt-4 flex items-center gap-3">
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value as typeof sourceFilter)}
+          className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
+        >
+          <option value="all">All Sources ({counts.all})</option>
+          <option value="leads">Google Maps ({counts.leads})</option>
+          <option value="linkedin_leads">LinkedIn ({counts.linkedin})</option>
+        </select>
+
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
-          className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          className="px-3 py-1.5 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
         >
           <option value="all">All Time</option>
           <option value="30d">Last 30 Days</option>
@@ -246,7 +180,18 @@ export default function AssignmentLogPage() {
         </select>
       </div>
 
-      {assigneeGroups.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="flex items-center gap-3 text-muted">
+            <Spinner size="md" />
+            <span>Loading assignment log...</span>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">
+          {error}
+        </div>
+      ) : entries.length === 0 ? (
         <div className="bg-secondary border border-border rounded-xl p-12">
           <div className="text-center">
             <div className="w-12 h-12 rounded-full bg-card flex items-center justify-center mx-auto mb-4">
@@ -263,98 +208,43 @@ export default function AssignmentLogPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Team Member</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Leads Assigned</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Last Assignment</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Lead</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Source</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Assigned To</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Previous</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Assigned By</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">When</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted uppercase tracking-wider">Notes</th>
               </tr>
             </thead>
             <tbody>
-              {assigneeGroups.map((group) => (
-                <tr key={group.assigneeId}>
-                  <td className="px-4 py-3 text-foreground">
-                    {group.assigneeName || group.assigneeEmail || 'Unknown'}
+              {entries.map((entry) => (
+                <tr key={entry.id} className="border-b border-border last:border-0 hover:bg-[#1f1f25] transition align-top">
+                  <td className="px-4 py-3 text-foreground max-w-[220px] truncate">
+                    {entry.leadTitle || 'Untitled'}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground">{group.leadCount}</span>
-                      <button
-                        onClick={() => loadAssigneeLeads(group)}
-                        className="text-xs text-accent hover:text-accent"
-                      >
-                        {selectedGroup?.assigneeId === group.assigneeId ? 'Hide' : 'Show leads'}
-                      </button>
-                    </div>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${
+                      entry.leadTable === 'linkedin_leads'
+                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                        : 'bg-primary/20 text-accent border border-primary/30'
+                    }`}>
+                      {entry.leadTable === 'linkedin_leads' ? 'LinkedIn' : 'Google Maps'}
+                    </span>
                   </td>
-                  <td className="px-4 py-3 text-muted">
-                    {formatDate(group.latestAssignment)}
+                  <td className="px-4 py-3 text-foreground">{nameFor(entry.assigned_to)}</td>
+                  <td className="px-4 py-3 text-muted">{nameFor(entry.previous_assignee)}</td>
+                  <td className="px-4 py-3 text-foreground">{nameFor(entry.assigned_by)}</td>
+                  <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">
+                    {formatDate(entry.assigned_at)}
                   </td>
-                  <td className="px-4 py-3 text-foreground">
-                    {group.latestAssignedByName || group.latestAssignedByEmail || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-muted max-w-xs truncate">
-                    {group.notes || '-'}
+                  <td className="px-4 py-3 text-muted max-w-xs truncate" title={entry.notes ?? ''}>
+                    {entry.notes || '-'}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-
-          {selectedGroup && (
-            <div className="border-t border-border">
-              <div className="px-4 py-3 bg-card/30 border-b border-border">
-                <h3 className="text-sm font-medium text-foreground">
-                  Leads assigned to {selectedGroup.assigneeName || selectedGroup.assigneeEmail}
-                </h3>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
-                {loadingLeads[selectedGroup.assigneeId] ? (
-                  <div className="p-4 flex items-center justify-center gap-3 text-muted text-sm">
-                    <Spinner size="sm" />
-                    <span>Loading leads...</span>
-                  </div>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Lead</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Assigned By</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Date</th>
-                        <th className="text-left px-4 py-2 text-xs font-semibold text-muted uppercase tracking-wider">Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(assigneeLeads[selectedGroup.assigneeId] || []).map((lead) => {
-                        const assignedByProfile = profiles[lead.assigned_by || ''];
-                        return (
-                          <tr key={lead.id} className="border-b border-border last:border-0 hover:bg-[#1f1f25] transition">
-                            <td className="px-4 py-3">
-                              <a
-                                href={`/dashboard/leads/${lead.id}`}
-                                className="text-accent hover:text-accent font-medium"
-                              >
-                                {lead.title || 'Untitled Business'}
-                              </a>
-                            </td>
-                            <td className="px-4 py-3 text-foreground">
-                              {assignedByProfile?.full_name || assignedByProfile?.email || '-'}
-                            </td>
-                            <td className="px-4 py-3 text-muted text-xs">
-                              {formatDate(lead.assigned_at)}
-                            </td>
-                            <td className="px-4 py-3 text-muted max-w-xs truncate text-xs">
-                              {lead.notes || '-'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

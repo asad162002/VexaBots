@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { type Lead, type LeadStatus, type Profile } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { recordAssignmentHistory } from '@/lib/record-assignment';
 import Spinner from '@/components/ui/spinner';
 import CallDialer from '@/components/CallDialer';
 import { CallProvider } from '@/components/queue/CallProvider';
@@ -191,27 +192,40 @@ function LeadDetailInner({ params }: { params: Promise<{ id: string }> }) {
 
     if (assignedTo) {
       updates.assigned_to = assignedTo;
-      const previousAssignee = lead.assigned_to;
-
       if (!lead.assigned_to) {
         updates.assigned_at = new Date().toISOString();
         updates.assigned_by = user?.id || null;
       }
 
-      if (assignedTo !== previousAssignee) {
-        await supabase.from('assignment_history').insert({
-          lead_id: id,
-          assigned_to: assignedTo,
-          assigned_by: user?.id || null,
-          assigned_at: new Date().toISOString(),
-          previous_assignee: previousAssignee,
-          notes: lead?.notes || null,
-        });
+      // History is recorded separately because this handler applies its own
+      // update below (status, notes, meeting link), so the assignment must not
+      // be written twice or race with that save.
+      const { error: historyError } = await recordAssignmentHistory({
+        leadId: id,
+        leadTable: 'leads',
+        assignedTo,
+        assignedBy: user?.id || null,
+        notes: null,
+      });
+      if (historyError) {
+        console.error('Failed to record assignment history:', historyError.message);
       }
     } else {
       updates.assigned_to = null;
       updates.assigned_at = null;
       updates.assigned_by = null;
+
+      // Unassigning is an assignment change too, and belongs in the log.
+      const { error: historyError } = await recordAssignmentHistory({
+        leadId: id,
+        leadTable: 'leads',
+        assignedTo: null,
+        assignedBy: user?.id || null,
+        notes: null,
+      });
+      if (historyError) {
+        console.error('Failed to record unassignment history:', historyError.message);
+      }
     }
 
     const { error: updateError } = await supabase
