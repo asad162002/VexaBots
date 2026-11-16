@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { authFetch } from '@/lib/auth-fetch';
 import Link from 'next/link';
 import { Trash2, RotateCcw, Users } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
@@ -68,10 +69,17 @@ export default function DeletedLeadsPage() {
     if (!confirm(`Permanently delete ${selected.size} lead(s)? Cannot be undone.`)) return;
     setBusy(true);
     const ids = Array.from(selected);
-    const { error } = await supabase.from('leads').delete().in('id', ids);
+    // Permanently removing a lead is a graph delete (call logs, activities,
+    // assignment history, archived LinkedIn mirrors). Doing it row by row from
+    // the client fails on the foreign keys, so it goes through one admin route.
+    const res = await authFetch('/api/leads/permanent-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leadIds: ids }),
+    });
+    const data = await res.json().catch(() => ({}));
     setBusy(false);
-    if (error) { alert('Failed: ' + error.message); return; }
-    await logActivity(ids, 'Lead permanently deleted');
+    if (!res.ok) { alert('Failed: ' + (data.error || 'Could not delete')); return; }
     setLeads((prev) => prev.filter((l) => !selected.has(l.id)));
     setSelected(new Set());
   };
@@ -85,9 +93,14 @@ export default function DeletedLeadsPage() {
 
   const permanentDelete = async (id: string) => {
     if (!confirm('Permanently delete? Cannot be undone.')) return;
-    const { error } = await supabase.from('leads').delete().eq('id', id);
-    if (error) { alert('Failed: ' + error.message); return; }
-    await logActivity([id], 'Lead permanently deleted');
+    // Same graph delete as the bulk action, one lead at a time.
+    const res = await authFetch('/api/leads/permanent-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leadIds: [id] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert('Failed: ' + (data.error || 'Could not delete')); return; }
     setLeads((prev) => prev.filter((l) => l.id !== id));
   };
 
