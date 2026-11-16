@@ -398,7 +398,7 @@ export default function LinkedinLeadsPage() {
             Member View
           </span>
         )}
-        <Link href="/dashboard/linkedin-leads/deleted" className="text-sm text-muted hover:text-accent ml-2">
+        <Link href="/dashboard/deleted-leads?filter=linkedin" className="text-sm text-muted hover:text-accent ml-2">
           Deleted Leads
         </Link>
       </div>
