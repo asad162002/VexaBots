@@ -47,7 +47,10 @@ export default function DashboardLayout({
     if (!loading && !user) {
       router.push('/');
     }
-    const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/import', '/dashboard/leads/', '/dashboard/calls'];
+    // Members have their own calling surface in My Queue, and their own leads via
+    // assignment, so the admin-only lead routes are the ones they never enter from.
+    // /dashboard/leads/new is deliberately excluded: members add their own leads.
+    const adminOnlyPaths = ['/dashboard/assignment-log', '/dashboard/import', '/dashboard/calls'];
     const isCurrentAdminOnly = adminOnlyPaths.some(p => pathname.startsWith(p));
     if (!loading && user && isCurrentAdminOnly && !isAdmin) {
       router.push('/dashboard/my-queue');
