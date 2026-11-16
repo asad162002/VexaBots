@@ -13,6 +13,12 @@
 alter table public.assignment_history
   add column if not exists linkedin_lead_id uuid;
 
+-- lead_id is NOT NULL, so a LinkedIn row cannot leave it null. Dropping the
+-- constraint lets exactly-one-of-the-two hold; the FK still validates any
+-- non-null value against leads(id).
+alter table public.assignment_history
+  alter column lead_id drop not null;
+
 do $$
 begin
   if not exists (
@@ -40,6 +46,9 @@ alter table public.assignment_history
 -- identically once anything writes to it.
 alter table public.assignment_log
   add column if not exists linkedin_lead_id uuid;
+
+alter table public.assignment_log
+  alter column lead_id drop not null;
 
 do $$
 begin
