@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
   // Load the member's profile to get their Telnyx credential ID and assigned caller-ID number
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('caller_id_number, telnyx_credential_id')
+    .select('caller_id_number, phone_number, telnyx_credential_id')
     .eq('id', user.id)
     .single();
 
@@ -54,6 +54,15 @@ export async function GET(request: NextRequest) {
   if (!profile.telnyx_credential_id) {
     return NextResponse.json({
       error: 'No Telnyx credential configured for your account. Contact your admin.'
+    }, { status: 400 });
+  }
+
+  // A credential is only usable with a caller-ID number it is allowed to present.
+  // Caller-ID numbers live on the Telnyx connection that owns the credential, so
+  // both must be set together or the call is rejected by Telnyx.
+  if (!profile.caller_id_number && !profile.phone_number) {
+    return NextResponse.json({
+      error: 'No caller-ID number assigned to your account. Contact your admin.'
     }, { status: 400 });
   }
 
@@ -94,7 +103,10 @@ export async function GET(request: NextRequest) {
     // The response body is the raw JWT string (not JSON)
     const token = await response.text();
 
-    return NextResponse.json({ token, callerNumber: profile.caller_id_number });
+    return NextResponse.json({
+      token,
+      callerNumber: profile.caller_id_number || profile.phone_number,
+    });
   } catch (err) {
     console.error('Telnyx token generation error:', err);
     return NextResponse.json({ error: 'Failed to generate token.' }, { status: 500 });

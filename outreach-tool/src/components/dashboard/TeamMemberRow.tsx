@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { type Profile } from '@/lib/types';
 import { Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { authFetch } from '@/lib/auth-fetch';
 
 type ProfileWithPhone = Profile & { phone_number?: string | null };
 
@@ -9,6 +10,14 @@ interface TelnyxNumber {
   id: string;
   phone_number: string;
   country?: string;
+}
+
+export interface TelnyxCredential {
+  id: string;
+  name: string;
+  status: string;
+  connectionId: string | null;
+  sipUsername: string | null;
 }
 
 interface TeamMemberRowProps {
@@ -19,7 +28,10 @@ interface TeamMemberRowProps {
   removingId: string | null;
   telnyxNumbers: TelnyxNumber[];
   numbersLoading: boolean;
+  telnyxCredentials: TelnyxCredential[];
+  credentialsLoading: boolean;
   onCallerIdChange: (profileId: string, callerId: string | null) => void;
+  onCredentialChange: (profileId: string, credentialId: string | null) => void;
 }
 
 export default function TeamMemberRow({
@@ -30,10 +42,15 @@ export default function TeamMemberRow({
   removingId,
   telnyxNumbers,
   numbersLoading,
+  telnyxCredentials,
+  credentialsLoading,
   onCallerIdChange,
+  onCredentialChange,
 }: TeamMemberRowProps) {
   const [savingCallerId, setSavingCallerId] = useState(false);
   const [callerIdError, setCallerIdError] = useState('');
+  const [savingCredential, setSavingCredential] = useState(false);
+  const [credentialError, setCredentialError] = useState('');
 
   const saveCallerId = async (callerId: string | null) => {
     if (profile.id === currentUserId) return;
@@ -52,6 +69,31 @@ export default function TeamMemberRow({
       onCallerIdChange(profile.id, callerId);
     }
     setSavingCallerId(false);
+  };
+
+  // The credential decides whether /api/telnyx/token will mint a WebRTC JWT at
+  // all, so it is assigned here rather than written straight from the client.
+  const saveCredential = async (credentialId: string | null) => {
+    if (profile.id === currentUserId) return;
+    setSavingCredential(true);
+    setCredentialError('');
+
+    const res = await authFetch('/api/telnyx/assign-credential', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profileId: profile.id, credentialId }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setCredentialError(data.error || 'Could not save the credential.');
+    } else {
+      setCredentialError('Saved!');
+      setTimeout(() => setCredentialError(''), 2000);
+      onCredentialChange(profile.id, credentialId);
+    }
+
+    setSavingCredential(false);
   };
 
   return (
@@ -99,6 +141,45 @@ export default function TeamMemberRow({
                     ))}
                   </select>
                   {callerIdError && <p className="text-xs mt-1 text-green-400">{callerIdError}</p>}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Telnyx credential: without one, token minting is refused and the
+              member cannot place a call at all. */}
+          {isAdmin && (
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">
+                Telnyx Credential
+              </label>
+              {credentialsLoading ? (
+                <div className="text-xs text-muted">Loading credentials...</div>
+              ) : (
+                <>
+                  <select
+                    value={profile.telnyx_credential_id ?? ''}
+                    onChange={(e) => saveCredential(e.target.value || null)}
+                    disabled={savingCredential}
+                    className="w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                  >
+                    <option value="">No credential (cannot call)</option>
+                    {telnyxCredentials.map((cred) => (
+                      <option key={cred.id} value={cred.id}>
+                        {cred.name}{cred.status !== 'active' ? ` (${cred.status})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {!profile.telnyx_credential_id && telnyxCredentials.length > 0 && (
+                    <p className="text-xs mt-1 text-yellow-400">
+                      No credential assigned, this member cannot make calls.
+                    </p>
+                  )}
+                  {credentialError && (
+                    <p className={`text-xs mt-1 ${credentialError === 'Saved!' ? 'text-green-400' : 'text-red-400'}`}>
+                      {credentialError}
+                    </p>
+                  )}
                 </>
               )}
             </div>

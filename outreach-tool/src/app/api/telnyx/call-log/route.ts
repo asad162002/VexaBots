@@ -44,14 +44,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'lead_id is required' }, { status: 400 });
   }
 
-  // Derive caller's assigned Telnyx number from the session profile
+  // Derive caller's assigned Telnyx number from the session profile.
+  // caller_id_number is the current field (Settings writes it); phone_number is
+  // the legacy column kept only so rows migrated from the old schema still call.
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('caller_id_number, telnyx_credential_id')
+    .select('caller_id_number, phone_number, telnyx_credential_id')
     .eq('id', user.id)
     .single();
 
-  if (profileError || !profile?.caller_id_number) {
+  const callerNumber = profile?.caller_id_number || profile?.phone_number;
+
+  if (profileError || !callerNumber) {
     return NextResponse.json({
       error: 'No phone number assigned to your account. Add one in Settings first.'
     }, { status: 400 });
@@ -66,7 +70,7 @@ export async function POST(request: NextRequest) {
     .from('call_logs')
     .insert({
       caller_id: user.id,
-      from_number: profile.caller_id_number,
+      from_number: callerNumber,
       to_number: normalizedTo,
       lead_id: lead_id,
       status: 'initiated',

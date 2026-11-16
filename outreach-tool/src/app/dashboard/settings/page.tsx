@@ -5,9 +5,10 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/ui/spinner';
 import { Users, Shield, AlertCircle, CheckCircle, UserPlus, Copy } from 'lucide-react';
-import TeamMemberRow from '@/components/dashboard/TeamMemberRow';
+import TeamMemberRow, { type TelnyxCredential } from '@/components/dashboard/TeamMemberRow';
 
 import { type Profile } from '@/lib/types';
+import { authFetch } from '@/lib/auth-fetch';
 
 interface TelnyxNumber {
   id: string;
@@ -30,11 +31,14 @@ export default function SettingsPage() {
   const [removeError, setRemoveError] = useState('');
   const [telnyxNumbers, setTelnyxNumbers] = useState<TelnyxNumber[]>([]);
   const [numbersLoading, setNumbersLoading] = useState(false);
+  const [telnyxCredentials, setTelnyxCredentials] = useState<TelnyxCredential[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
 
   useEffect(() => {
     fetchProfiles();
     if (isAdmin) {
       fetchTelnyxNumbers();
+      fetchTelnyxCredentials();
     }
   }, [isAdmin]);
 
@@ -65,6 +69,16 @@ export default function SettingsPage() {
       setTelnyxNumbers(result.data || []);
     }
     setNumbersLoading(false);
+  };
+
+  const fetchTelnyxCredentials = async () => {
+    setCredentialsLoading(true);
+    const res = await authFetch('/api/telnyx/credentials');
+    if (res.ok) {
+      const result = await res.json();
+      setTelnyxCredentials(result.data || []);
+    }
+    setCredentialsLoading(false);
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -125,6 +139,12 @@ export default function SettingsPage() {
   const handleCallerIdChange = (profileId: string, callerId: string | null) => {
     setProfiles(prev => prev.map(p =>
       p.id === profileId ? { ...p, caller_id_number: callerId } : p
+    ));
+  };
+
+  const handleCredentialChange = (profileId: string, credentialId: string | null) => {
+    setProfiles(prev => prev.map(p =>
+      p.id === profileId ? { ...p, telnyx_credential_id: credentialId } : p
     ));
   };
 
@@ -196,7 +216,10 @@ export default function SettingsPage() {
                   removingId={removingId}
                   telnyxNumbers={telnyxNumbers}
                   numbersLoading={numbersLoading}
+                  telnyxCredentials={telnyxCredentials}
+                  credentialsLoading={credentialsLoading}
                   onCallerIdChange={handleCallerIdChange}
+                  onCredentialChange={handleCredentialChange}
                 />
               ))}
             </div>
