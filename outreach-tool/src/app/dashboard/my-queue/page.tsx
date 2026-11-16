@@ -348,7 +348,7 @@ function MyQueueInner() {
           <select
             value={queueFilter}
             onChange={(e) => { setQueueFilter(e.target.value as typeof queueFilter); setCurrentIndex(0); }}
-            className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
           >
             <option value="all">All Leads</option>
             <option value="google_maps">Google Maps</option>

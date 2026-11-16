@@ -93,7 +93,7 @@ export function CallControls({
             <select
               value={selectedProfile}
               onChange={onCallerChange}
-              className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
             >
               <option value="">Select caller...</option>
               {profiles.map(p => (
@@ -109,7 +109,7 @@ export function CallControls({
           <select
             value={filterStatus}
             onChange={(e) => onFilterChange(e.target.value as 'all' | 'called' | 'not_called')}
-            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
           >
             <option value="all">All Leads</option>
             <option value="called">Called</option>
