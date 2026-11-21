@@ -181,7 +181,7 @@ export async function importContactRows({
     : source;
 
   const contacts: Record<string, unknown>[] = [];
-  const businesses = new Map<string, Record<string, unknown>>();
+  let sawBusinessColumns = false;
 
   for (let i = 0; i < records.length; i++) {
     const lineNumber = i + 2;
@@ -199,6 +199,13 @@ export async function importContactRows({
       continue;
     }
 
+    // A contact file usually also carries the business, because that is how the
+    // export was built, but these rows belong to LinkedIn Leads. Writing the
+    // business into leads would put a company nobody imported into the Google Maps
+    // list and the caller queues, so it is not written. Import a business export
+    // if the company belongs in leads.
+    if (built.lead) sawBusinessColumns = true;
+
     const contact = built.contact;
     const username = typeof contact.linkedin_username === 'string' ? contact.linkedin_username : '';
     const contactKey = username
@@ -212,28 +219,10 @@ export async function importContactRows({
     }
     existingKeys.add(contactKey);
     contacts.push(contact);
-
-    // The business the person works at, so the contact has something to be opened
-    // and called from rather than sitting on its own.
-    if (built.lead) {
-      const placeId = typeof built.lead.place_id === 'string' ? built.lead.place_id : '';
-      const businessKey = placeId ? `place:${placeId}` : `name:${String(built.lead.title).toLowerCase().trim()}`;
-      if (!businesses.has(businessKey)) businesses.set(businessKey, built.lead);
-    }
   }
 
-  const businessRows = Array.from(businesses.values());
-  for (let i = 0; i < businessRows.length; i += 50) {
-    const { data, error } = await supabase
-      .from('leads')
-      .upsert(normalizeBatchKeys(businessRows.slice(i, i + 50)), { onConflict: 'place_id', ignoreDuplicates: true })
-      .select('id');
-
-    if (error) {
-      details.push(`Could not save the business these contacts belong to: ${error.message}`);
-    } else if (data && data.length > 0) {
-      details.push(`Saved ${data.length} business${data.length === 1 ? '' : 'es'} for these contacts`);
-    }
+  if (sawBusinessColumns) {
+    details.push('Business columns in this file were not saved as leads: these rows are contacts. Import a business export for the companies themselves.');
   }
 
   for (let i = 0; i < contacts.length; i += 200) {

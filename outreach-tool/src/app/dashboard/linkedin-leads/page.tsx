@@ -80,24 +80,6 @@ export default function LinkedinLeadsPage() {
     }
 
     try {
-      let placeIds: string[] = [];
-
-      // For members, first get the place_ids of leads assigned to them
-      if (user && user.id && !isAdmin) {
-        const { data: assignedLeads, error: assignError } = await supabase
-          .from('leads')
-          .select('place_id')
-          .eq('assigned_to', user.id)
-          .not('place_id', 'is', null)
-          .neq('place_id', '');
-
-        if (assignError) {
-          console.error('Error fetching assigned place_ids:', assignError);
-        } else {
-          placeIds = (assignedLeads || []).map(l => l.place_id).filter(Boolean) as string[];
-        }
-      }
-
       let query = supabase
         .from('linkedin_leads')
         .select('*', { count: 'exact' })
@@ -105,12 +87,25 @@ export default function LinkedinLeadsPage() {
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
-      // Members only see LinkedIn leads for leads assigned to them
-      if (!isAdmin && placeIds.length > 0) {
-        query = query.in('place_id', placeIds);
-      } else if (!isAdmin && placeIds.length === 0) {
-        // No assigned leads means no results
-        query = query.eq('id', '00000000-0000-0000-0000-000000000000');
+      // A member sees a contact when it was assigned to them, or when it belongs to
+      // a business they were assigned. Assignment used to work only through the
+      // business, so a contact list imported without its companies was invisible to
+      // whoever it was given to.
+      if (!isAdmin && user?.id) {
+        const { data: assignedLeads, error: assignError } = await supabase
+          .from('leads')
+          .select('place_id')
+          .eq('assigned_to', user.id)
+          .not('place_id', 'is', null)
+          .neq('place_id', '');
+
+        if (assignError) console.error('Error fetching assigned place_ids:', assignError);
+
+        const placeIds = (assignedLeads || []).map(l => l.place_id).filter(Boolean) as string[];
+        const orParts = [`assigned_to.eq.${user.id}`];
+        if (placeIds.length > 0) orParts.push(`place_id.in.(${placeIds.join(',')})`);
+
+        query = query.or(orParts.join(','));
       }
 
       if (sourceFilter !== 'all') {
@@ -208,6 +203,8 @@ export default function LinkedinLeadsPage() {
       .order('created_at', { ascending: false })
       .limit(1000);
 
+    // Members see only what is theirs, by the same rule the list uses: assigned to
+    // them directly, or belonging to a business assigned to them.
     if (!isAdmin && user?.id) {
       const { data: assigned } = await supabase
         .from('leads')
@@ -216,8 +213,9 @@ export default function LinkedinLeadsPage() {
         .not('place_id', 'is', null)
         .neq('place_id', '');
       const placeIds = (assigned || []).map((l: { place_id: string }) => l.place_id).filter(Boolean);
-      if (placeIds.length === 0) return [];
-      query = query.in('place_id', placeIds);
+      const orParts = [`assigned_to.eq.${user.id}`];
+      if (placeIds.length > 0) orParts.push(`place_id.in.(${placeIds.join(',')})`);
+      query = query.or(orParts.join(','));
     }
 
     if (sourceFilter !== 'all') {
