@@ -69,7 +69,9 @@ export default function ImportUpload({ file, fileType, handleFile, error }: Impo
         </div>
       )}
 
-      {error && !file && <p className="mt-3 text-sm text-red-400">{error}</p>}
+      {/* Shown whether or not a file is chosen: an import can also be refused
+          after the file is picked, for example when Business Name is unmapped. */}
+      {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
     </div>
   );
 }

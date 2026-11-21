@@ -18,6 +18,7 @@ import {
   parseJsonPreview,
   buildGoogleMapsLead,
   buildEnrichedRecord,
+  buildCsvLead,
 } from '@/lib/import-helpers';
 
 type FileType = 'csv' | 'json';
@@ -253,13 +254,6 @@ function ImportPageContent() {
 
   const handleCsvImport = useCallback(async () => {
     if (!file || headers.length === 0) return;
-    setImporting(true);
-    setError('');
-    setSkippedDetails([]);
-
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-    const rows = lines.slice(1);
 
     // Build field mapping
     const fieldMap: Record<string, string> = {};
@@ -269,47 +263,86 @@ function ImportPageContent() {
       }
     });
 
+    const titleColumn = Object.keys(fieldMap).find((col) => fieldMap[col] === 'title') ?? null;
+
+    // Without a Business Name there is nothing to create and every row would be
+    // dropped one at a time, which is how an import used to report
+    // "0 added, 0 skipped" with no explanation. Refuse up front instead.
+    if (!titleColumn) {
+      setError('Map a column to Business Name before importing. It is the one required field.');
+      return;
+    }
+
+    setImporting(true);
+    setError('');
+    setSkippedDetails([]);
+
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+    const rows = lines.slice(1);
+
     let inserted = 0;
     let skipped = 0;
     const batchSize = 50;
     const seenKeys = new Set<string>();
     const skipDetails: string[] = [];
 
+    // What is already stored, read once instead of one query per row. Two leads
+    // are the same lead when they share a Place ID, or a phone number once the
+    // formatting is stripped, and the phone comparison has to happen here because
+    // SQL cannot compare "+1 415-872-9589" against "4158729589".
+    const existingPlaceIds = new Set<string>();
+    const existingPhones = new Set<string>();
+    for (let from = 0; ; from += 1000) {
+      const { data: page, error: pageError } = await supabase
+        .from('leads')
+        .select('place_id, phone')
+        .range(from, from + 999);
+
+      if (pageError) {
+        skipDetails.push(`Could not read existing leads: ${pageError.message}`);
+        break;
+      }
+      if (!page || page.length === 0) break;
+
+      for (const stored of page as { place_id: string | null; phone: string | null }[]) {
+        if (stored.place_id) existingPlaceIds.add(stored.place_id);
+        const storedPhone = normalizePhoneForDedup(stored.phone);
+        if (storedPhone) existingPhones.add(storedPhone);
+      }
+      if (page.length < 1000) break;
+    }
+
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize);
       const leadsToInsert: Record<string, unknown>[] = [];
 
-      for (const line of batch) {
-        const values = parseCSVLine(line);
+      for (let j = 0; j < batch.length; j++) {
+        const lineNumber = i + j + 2; // +1 for the header, +1 because lines are 1-based
+        const values = parseCSVLine(batch[j]);
         const row: Record<string, string> = {};
         headers.forEach((h, idx) => {
           row[h] = values[idx] ?? '';
         });
 
-        const lead: Record<string, unknown> = {
-          source,
-          status: 'new',
-          category_name: category || null,
-        };
+        const built = buildCsvLead(row, fieldMap, { source, category });
 
-        for (const [csvCol, leadField] of Object.entries(fieldMap)) {
-          if (row[csvCol] && row[csvCol].trim()) {
-            if (leadField === 'company_size_estimate') {
-              const val = row[csvCol].toLowerCase().trim();
-              if (['solo', 'small', 'medium', 'large'].includes(val)) {
-                lead[leadField] = val;
-              }
-            } else {
-              lead[leadField] = row[csvCol].trim();
-            }
-          }
+        if (built.note) {
+          skipDetails.push(`Line ${lineNumber}: ${built.note}`);
         }
+        if (!built.lead) {
+          skipped++;
+          skipDetails.push(`Skipped line ${lineNumber}: ${built.error}`);
+          continue;
+        }
+        const lead = built.lead;
 
-        if (!lead.title) continue;
-
-        // Deduplicate: normalized phone + title (case-insensitive)
+        // Deduplicate inside the file first, then against the database.
         const normalizedPhone = normalizePhoneForDedup(lead.phone);
-        const dedupKey = `${normalizedPhone}|${(lead.title as string).toLowerCase().trim()}`;
+        const placeId = typeof lead.place_id === 'string' ? lead.place_id : '';
+        const dedupKey = placeId
+          ? `place:${placeId}`
+          : `phone:${normalizedPhone}|${(lead.title as string).toLowerCase().trim()}`;
 
         if (seenKeys.has(dedupKey)) {
           skipped++;
@@ -318,19 +351,20 @@ function ImportPageContent() {
         }
         seenKeys.add(dedupKey);
 
-        // Check if a lead with this phone already exists in the DB
-        if (normalizedPhone) {
-          const { data: existing } = await supabase
-            .from('leads')
-            .select('id')
-            .eq('phone', normalizedPhone)
-            .maybeSingle();
-          if (existing) {
-            skipped++;
-            skipDetails.push(`Skipped existing lead (same phone): ${lead.title}`);
-            continue;
-          }
+        if (placeId && existingPlaceIds.has(placeId)) {
+          skipped++;
+          skipDetails.push(`Skipped, already saved (same Place ID): ${lead.title}`);
+          continue;
         }
+        if (normalizedPhone && existingPhones.has(normalizedPhone)) {
+          skipped++;
+          skipDetails.push(`Skipped, already saved (same phone): ${lead.title}`);
+          continue;
+        }
+
+        // Claim these now so a later row in the same file cannot repeat them.
+        if (placeId) existingPlaceIds.add(placeId);
+        if (normalizedPhone) existingPhones.add(normalizedPhone);
 
         leadsToInsert.push(lead);
       }
@@ -340,11 +374,12 @@ function ImportPageContent() {
       // Batch insert the deduplicated leads
       const { error: insertError } = await supabase.from('leads').insert(leadsToInsert);
       if (insertError) {
+        // One bad row fails the whole batch, so retry them singly to find it.
         for (const lead of leadsToInsert) {
           const { error: singleError } = await supabase.from('leads').insert([lead]);
           if (singleError) {
             skipped++;
-            skipDetails.push(`Skipped (insert error): ${(lead.title as string)}`);
+            skipDetails.push(`Skipped ${lead.title}: ${singleError.message}`);
           } else {
             inserted++;
           }

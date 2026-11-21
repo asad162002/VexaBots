@@ -35,18 +35,88 @@ export const normalizePhoneForDedup = (phone: unknown): string => {
   return digits;
 };
 
+// Column names seen in google-maps-scraper exports, matched exactly. Getting
+// these right matters: the scraper calls the business name plain "name", and the
+// old rule only accepted a column that also said business, company or title, so
+// a straight scraper export auto-mapped nothing but website and phone.
+const EXACT_MAPPINGS: Record<string, string> = {
+  name: 'title',
+  business_name: 'title',
+  business: 'title',
+  company_name: 'title',
+  company: 'title',
+  title: 'title',
+  place_id: 'place_id',
+  website: 'website',
+  domain: 'domain',
+  phone: 'phone',
+  phone_number: 'phone',
+  phone_international: 'phone',
+  mobile: 'phone',
+  address: 'address',
+  formatted_address: 'address',
+  detailed_address: 'detailed_address',
+  city: 'city',
+  town: 'city',
+  postal_code: 'postal_code',
+  zip: 'postal_code',
+  zip_code: 'postal_code',
+  country_code: 'country_code',
+  country: 'country_code',
+  main_category: 'category_name',
+  category: 'category_name',
+  category_name: 'category_name',
+  categories: 'categories',
+  rating: 'total_score',
+  total_score: 'total_score',
+  reviews: 'reviews_count',
+  reviews_count: 'reviews_count',
+  review_count: 'reviews_count',
+  is_spending_on_ads: 'ad_running',
+  ad_running: 'ad_running',
+  query: 'search_string',
+  search_string: 'search_string',
+  link: 'url',
+  url: 'url',
+  google_maps_url: 'url',
+  owner_name: 'owner_name',
+  owner_role: 'owner_role',
+  owner_title: 'owner_role',
+  linkedin_url: 'owner_linkedin_url',
+  company_size: 'company_size_estimate',
+  company_size_estimate: 'company_size_estimate',
+  notes: 'notes',
+  note: 'notes',
+  comments: 'notes',
+};
+
 export const guessMapping = (col: string): string | null => {
-  const lower = col.toLowerCase().trim();
-  if (lower.includes('name') && (lower.includes('business') || lower.includes('company') || lower.includes('title'))) return 'title';
-  if (lower.includes('website') || lower.includes('url') || lower.includes('site')) return 'website';
-  if (lower.includes('phone') || lower.includes('mobile')) return 'phone';
-  if (lower.includes('city')) return 'city';
-  if (lower.includes('country')) return 'country_code';
-  if (lower.includes('owner') && lower.includes('name')) return 'owner_name';
-  if (lower.includes('owner') && lower.includes('role')) return 'owner_role';
-  if (lower.includes('linkedin')) return 'owner_linkedin_url';
-  if (lower.includes('size') || lower.includes('employees')) return 'company_size_estimate';
-  if (lower.includes('note') || lower.includes('comment')) return 'notes';
+  const key = col.toLowerCase().trim().replace(/[\s-]+/g, '_');
+  if (EXACT_MAPPINGS[key]) return EXACT_MAPPINGS[key];
+
+  // Scraper columns that hold JSON blobs or aggregates rather than the single
+  // value the lead field expects. Left unmapped so the mapper does not offer the
+  // same field three times, and so nothing writes a blob into a number column.
+  if (/(keyword|featured|per_rating|images?|photos?|posts?|times|hours|menu|updates|competitors|on_site|about|reviews_link)/.test(key)) {
+    return null;
+  }
+
+  // Fuzzy fallbacks, most specific first. linkedin is checked before the generic
+  // url rule, which used to swallow a linkedin_url column as the website.
+  if (key.includes('linkedin')) return 'owner_linkedin_url';
+  if (key.includes('phone') || key.includes('mobile')) return 'phone';
+  if (key.includes('owner') && key.includes('name')) return 'owner_name';
+  if (key.includes('owner') && key.includes('role')) return 'owner_role';
+  if (key.includes('name') && (key.includes('business') || key.includes('company') || key.includes('title'))) return 'title';
+  if (key.includes('postal') || key.includes('zip')) return 'postal_code';
+  if (key.includes('country')) return 'country_code';
+  if (key.includes('city') || key.includes('town')) return 'city';
+  if (key.includes('address')) return 'address';
+  if (key.includes('size') || key.includes('employees')) return 'company_size_estimate';
+  if (key.includes('note') || key.includes('comment')) return 'notes';
+  if (key.includes('rating') || key.includes('score')) return 'total_score';
+  if (key.includes('review') && !key.includes('link')) return 'reviews_count';
+  if (key.includes('website') || key.includes('url')) return 'website';
   return null;
 };
 
@@ -130,4 +200,125 @@ export const parseJsonPreview = (text: string): { headers: string[]; rows: Recor
     return row;
   });
   return { headers: Object.keys(rows[0] || {}), rows };
+};
+
+// CSV values arrive as text, and a scraper export writes "-" for anything it did
+// not find. Sending that straight into a boolean or numeric column fails the
+// insert, so mapped values are converted here first and dropped when they do not
+// convert.
+export type CsvFieldType = 'text' | 'number' | 'integer' | 'boolean' | 'company_size';
+
+export const CSV_FIELD_TYPES: Record<string, CsvFieldType> = {
+  total_score: 'number',
+  reviews_count: 'integer',
+  ad_running: 'boolean',
+  is_advertisement: 'boolean',
+  company_size_estimate: 'company_size',
+};
+
+export interface CoercedValue {
+  ok: boolean;
+  value?: unknown;
+}
+
+export const coerceCsvValue = (field: string, raw: string): CoercedValue => {
+  const value = raw.trim();
+
+  switch (CSV_FIELD_TYPES[field]) {
+    case 'number': {
+      const n = Number(value.replace(/,/g, ''));
+      return Number.isFinite(n) ? { ok: true, value: n } : { ok: false };
+    }
+    case 'integer': {
+      const n = parseInt(value.replace(/,/g, ''), 10);
+      return Number.isNaN(n) ? { ok: false } : { ok: true, value: n };
+    }
+    case 'boolean': {
+      const v = value.toLowerCase();
+      if (['true', 'yes', 'y', '1'].includes(v)) return { ok: true, value: true };
+      if (['false', 'no', 'n', '0', '-', ''].includes(v)) return { ok: true, value: false };
+      return { ok: false };
+    }
+    case 'company_size': {
+      const v = value.toLowerCase();
+      return ['solo', 'small', 'medium', 'large'].includes(v)
+        ? { ok: true, value: v }
+        : { ok: false };
+    }
+    default:
+      return { ok: true, value };
+  }
+};
+
+export interface CsvLeadOptions {
+  source: string;
+  category: string;
+}
+
+export interface CsvLeadResult {
+  lead?: Record<string, unknown>;
+  /** Why this row could not become a lead. */
+  error?: string;
+  /** Something worth telling the user about a value that was dropped. */
+  note?: string;
+}
+
+// Turns one CSV row into a leads row. It lives here rather than in the page so it
+// can be read and exercised on its own, and because the page only needs to know
+// whether the row became a lead.
+export const buildCsvLead = (
+  row: Record<string, string>,
+  fieldMap: Record<string, string>,
+  options: CsvLeadOptions,
+): CsvLeadResult => {
+  const lead: Record<string, unknown> = {
+    source: options.source,
+    status: 'new',
+    category_name: options.category || null,
+  };
+  let note: string | undefined;
+
+  for (const [csvCol, leadField] of Object.entries(fieldMap)) {
+    const raw = row[csvCol];
+    if (!raw || !raw.trim()) continue;
+
+    // The scraper's detailed_address column is JSON holding the city, postal code
+    // and country that the flat columns do not carry.
+    if (leadField === 'detailed_address') {
+      try {
+        const parsed = JSON.parse(raw) as Record<string, string>;
+        if (parsed.city) lead.city = parsed.city;
+        if (parsed.postal_code) lead.postal_code = parsed.postal_code;
+        if (parsed.country_code) lead.country_code = parsed.country_code;
+      } catch {
+        note = 'detailed address is not valid JSON, city and zip left empty';
+      }
+      continue;
+    }
+
+    const coerced = coerceCsvValue(leadField, raw);
+    if (coerced.ok) lead[leadField] = coerced.value;
+  }
+
+  // Business Name is the one required field. Without it there is nothing to show
+  // in any list, so the row is refused with a reason instead of being dropped.
+  if (!lead.title) {
+    return { error: 'the column mapped to Business Name is empty' };
+  }
+
+  // The scraper has no domain column, so take it from the website.
+  if (lead.website && !lead.domain) {
+    try {
+      lead.domain = new URL(lead.website as string).hostname;
+    } catch {
+      // A malformed website is not worth failing the row over.
+    }
+  }
+
+  // The scraper's ad flag feeds both columns, as the JSON import does.
+  if (typeof lead.ad_running === 'boolean') {
+    lead.is_advertisement = lead.ad_running;
+  }
+
+  return { lead, note };
 };
