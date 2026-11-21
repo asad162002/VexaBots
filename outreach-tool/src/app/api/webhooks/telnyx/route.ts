@@ -157,16 +157,22 @@ export async function POST(request: NextRequest) {
       if ((durationSec ?? 0) > 0) {
         const { data: callLog } = await supabaseAdmin
           .from('call_logs')
-          .select('lead_id, caller_id, to_number')
+          .select('lead_id, linkedin_lead_id, caller_id, to_number')
           .eq('telnyx_call_control_id', callControlId)
           .single();
 
-        if (callLog?.lead_id) {
+        // A call to a LinkedIn contact hangs off linkedin_lead_id, and lead_table is
+        // set so the feed and the queues can tell the two kinds apart. Reading only
+        // lead_id meant an answered call to a contact left no trace anywhere.
+        const calledLeadId = callLog?.lead_id ?? callLog?.linkedin_lead_id ?? null;
+
+        if (callLog && calledLeadId) {
           await supabaseAdmin.from('lead_activities').insert({
-            lead_id: callLog.lead_id,
+            lead_id: calledLeadId,
             profile_id: callLog.caller_id,
             activity_type: 'call',
             content: `Cold call to ${callLog.to_number} (${durationSec}s)`,
+            lead_table: callLog.linkedin_lead_id ? 'linkedin_leads' : 'leads',
             created_at: new Date().toISOString(),
           });
         }

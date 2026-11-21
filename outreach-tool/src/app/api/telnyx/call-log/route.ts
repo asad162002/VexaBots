@@ -6,9 +6,10 @@ import { createClient } from '@supabase/supabase-js';
 // The actual call is made via the useTelnyxCall hook using the @telnyx/webrtc SDK.
 // The caller is derived from the verified session.
 //
-// Required body: { to_number: string, lead_id: string }
+// Required body: { to_number: string, lead_id: string, lead_table?: 'leads' | 'linkedin_leads' }
 // The from_number is taken from the caller's profile caller_id_number (their assigned Telnyx number).
-// lead_id is REQUIRED because the call_logs.lead_id column is NOT NULL.
+// lead_id is the id of a business in leads or of a contact in linkedin_leads, and
+// lead_table says which, because the two ids live in different columns.
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -32,17 +33,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid session.' }, { status: 401 });
   }
 
-  const { to_number, lead_id } = await request.json();
+  const { to_number, lead_id, lead_table } = await request.json();
 
   if (!to_number) {
     return NextResponse.json({ error: 'to_number is required' }, { status: 400 });
   }
 
-  // lead_id is NOT NULL on the call_logs table — enforce it here
-  // so the error is a clean 400 instead of a 500 from the DB
+  // The log has to name the lead it belongs to, so a clean 400 here beats a
+  // database error later.
   if (!lead_id) {
     return NextResponse.json({ error: 'lead_id is required' }, { status: 400 });
   }
+
+  // A LinkedIn contact id is not a leads id. call_logs.lead_id is a foreign key to
+  // leads, so writing a contact id there was refused by the database and every call
+  // to a LinkedIn lead came back as a 500. Each table has its own column.
+  const isLinkedInContact = lead_table === 'linkedin_leads';
 
   // Derive caller's assigned Telnyx number from the session profile.
   // caller_id_number is the current field (Settings writes it); phone_number is
@@ -72,12 +78,13 @@ export async function POST(request: NextRequest) {
       caller_id: user.id,
       from_number: callerNumber,
       to_number: normalizedTo,
-      lead_id: lead_id,
+      lead_id: isLinkedInContact ? null : lead_id,
+      linkedin_lead_id: isLinkedInContact ? lead_id : null,
       status: 'initiated',
       telnyx_credential_id: profile.telnyx_credential_id,
       created_at: new Date().toISOString(),
     })
-    .select('id, from_number, to_number, caller_id, lead_id, status')
+    .select('id, from_number, to_number, caller_id, lead_id, linkedin_lead_id, status')
     .single();
 
   if (insertError) {

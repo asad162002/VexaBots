@@ -58,29 +58,48 @@ export default function ColdCallerAnalyticsPage() {
   }, []);
 
   const loadLogs = async () => {
+    // leads has title and phone, not name and company: asking for columns that do
+    // not exist made this request fail and the page showed no calls at all. A call
+    // to a LinkedIn contact hangs off linkedin_leads instead, through its own key.
     const { data, error } = await supabase
       .from('call_logs')
-      .select('*, leads(name, phone, company)')
+      .select('*, leads(title, phone), linkedin_leads(lead_name, title, phone)')
       .order('created_at', { ascending: false });
 
     if (!error && data) {
-      const formattedLogs: Log[] = data.map(log => ({
-        id: log.id,
-        caller_id: log.caller_id,
-        from_number: log.from_number,
-        to_number: log.to_number,
-        direction: log.direction,
-        status: log.status,
-        recording_url: log.recording_url,
-        duration_seconds: log.duration_seconds,
-        created_at: log.created_at,
-        lead: log.leads ? {
-          id: '',
-          name: log.leads.name || '',
-          phone: log.leads.phone || '',
-          company: log.leads.company || '',
-        } : null,
-      }));
+      const formattedLogs: Log[] = data.map(log => {
+        const business = log.leads as { title: string | null; phone: string | null } | null;
+        const contact = log.linkedin_leads as { lead_name: string | null; title: string | null; phone: string | null } | null;
+
+        return {
+          id: log.id,
+          caller_id: log.caller_id,
+          from_number: log.from_number,
+          to_number: log.to_number,
+          direction: log.direction,
+          status: log.status,
+          recording_url: log.recording_url,
+          duration_seconds: log.duration_seconds,
+          created_at: log.created_at,
+          lead: business
+            ? {
+                id: '',
+                name: business.title || '',
+                phone: business.phone || '',
+                company: '',
+              }
+            : contact
+              ? {
+                  id: '',
+                  name: contact.lead_name || '',
+                  phone: contact.phone || '',
+                  // The second line of the row. A contact is a person, so what sits
+                  // there is their job title rather than a company.
+                  company: contact.title || '',
+                }
+              : null,
+        };
+      });
       setLogs(formattedLogs);
       setFilteredLogs(formattedLogs);
     }

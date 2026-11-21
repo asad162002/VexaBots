@@ -93,7 +93,7 @@ export interface UseTelnyxCallReturn extends TelnyxCallState {
   // Audio level (0-1) from the input analyser
   micLevel: number;
   // Call controls
-  startCall: (leadPhone: string, leadId?: string) => Promise<void>;
+  startCall: (leadPhone: string, leadId?: string, leadTable?: 'leads' | 'linkedin_leads') => Promise<void>;
   endCall: () => void;
   toggleMute: () => void;
   setVolume: (volume: number) => void;
@@ -582,7 +582,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
   }, [cleanup, enumerateDevices]);
 
   // --- startCall ---
-  const startCall = useCallback(async (leadPhone: string, leadId?: string) => {
+  const startCall = useCallback(async (leadPhone: string, leadId?: string, leadTable: 'leads' | 'linkedin_leads' = 'leads') => {
     if (!user) {
       setState(s => ({ ...s, status: 'error', message: 'Authentication required.' }));
       return;
@@ -656,6 +656,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         body: JSON.stringify({
           to_number: toNumber,
           lead_id: leadId || null,
+          lead_table: leadTable,
         }),
       });
 

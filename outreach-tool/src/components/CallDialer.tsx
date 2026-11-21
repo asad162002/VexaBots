@@ -53,7 +53,9 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
   const handleStartCall = () => {
     const phoneNumber = altPhone.trim() || lead.phone;
     if (!phoneNumber) return;
-    startCall(phoneNumber, lead.id);
+    // The log has to know which table the id belongs to, so a contact id is never
+    // written into the leads column.
+    startCall(phoneNumber, lead.id, lead.lead_table ?? 'leads');
   };
 
   const handleEndCall = () => {

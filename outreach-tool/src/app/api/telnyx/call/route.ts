@@ -34,10 +34,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid session.' }, { status: 401 });
   }
 
-  const { leadPhone, leadName, leadId } = await request.json();
+  const { leadPhone, leadName, leadId, leadTable } = await request.json();
   if (!leadPhone) {
     return NextResponse.json({ error: 'leadPhone is required' }, { status: 400 });
   }
+
+  // Same split as /api/telnyx/call-log: a contact id cannot go in the leads column.
+  const isLinkedInContact = leadTable === 'linkedin_leads';
 
   // Normalize the lead phone to E.164
   const normalizedTo = normalizeToE164(leadPhone);
@@ -65,7 +68,8 @@ export async function POST(request: NextRequest) {
       caller_id: user.id,
       from_number: callerNumber,
       to_number: normalizedTo,
-      lead_id: leadId || null,
+      lead_id: isLinkedInContact ? null : leadId || null,
+      linkedin_lead_id: isLinkedInContact ? leadId || null : null,
       status: 'initiated',
       created_at: new Date().toISOString(),
     })

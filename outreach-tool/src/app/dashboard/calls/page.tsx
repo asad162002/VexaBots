@@ -82,7 +82,10 @@ function CallsPage() {
 
       if (leadsData) {
         const leadsWithCalls = (leadsData ?? []).map((lead: any) => {
-          const logs = (logsData ?? []).filter((log: CallLog) => log.lead_id === lead.id);
+          // A call is logged against the leads column, or against the contacts
+          // column when the lead came from LinkedIn.
+          const logs = (logsData ?? []).filter((log: CallLog) =>
+            log.lead_id === lead.id || log.linkedin_lead_id === lead.id);
           return { ...lead, call_logs: logs, last_call: logs.length > 0 ? logs[0] : null };
         });
         setLeads(leadsWithCalls);
@@ -108,6 +111,7 @@ function CallsPage() {
         body: JSON.stringify({
           to_number: lead.phone,
           lead_id: lead.id,
+          lead_table: 'leads',
         }),
       });
       const data = await response.json();
@@ -321,7 +325,8 @@ function CallsPageContent({
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredLogs.map((log) => {
-                  const lead = log.lead_id ? leadMap[log.lead_id] : null;
+                  const leadKey = log.lead_id ?? log.linkedin_lead_id ?? '';
+                  const lead = leadKey ? leadMap[leadKey] : null;
                   const caller = profiles.find(p => p.id === log.caller_id);
                   const mins = Math.floor((log.duration_seconds || 0) / 60);
                   const secs = (log.duration_seconds || 0) % 60;
