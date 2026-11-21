@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Search, Filter, Users, Mail, ExternalLink, Copy, Shield, Trash2 } from 'lucide-react';
+import { Search, Filter, Users, Mail, ExternalLink, Copy, Shield, Trash2, Phone } from 'lucide-react';
 import Spinner from '@/components/ui/spinner';
 import { useAuth } from '@/lib/auth-context';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
@@ -17,6 +17,7 @@ interface LinkedInLead {
   title: string | null;
   email: string | null;
   email_status: string | null;
+  phone: string | null;
   linkedin_url: string | null;
   source: string | null;
   created_at: string;
@@ -44,7 +45,7 @@ export default function LinkedinLeadsPage() {
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [emailFilter, setEmailFilter] = useState<'all' | 'verified' | 'not_found'>('all');
-  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+  const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [profiles, setProfiles] = useState<{ id: string; full_name: string | null; email: string | null; role: string }[]>([]);
   const [assignQuantity, setAssignQuantity] = useState('');
@@ -182,6 +183,7 @@ export default function LinkedinLeadsPage() {
       return (
         lead.lead_name?.toLowerCase().includes(q) ||
         lead.email?.toLowerCase().includes(q) ||
+        lead.phone?.toLowerCase().includes(q) ||
         lead.title?.toLowerCase().includes(q) ||
         lead.linkedin_url?.toLowerCase().includes(q) ||
         lead.source?.toLowerCase().includes(q)
@@ -262,10 +264,10 @@ export default function LinkedinLeadsPage() {
     deselectAll();
   }, [searchQuery, sourceFilter, emailFilter, isAdmin, deselectAll]);
 
-  const copyToClipboard = (email: string) => {
-    navigator.clipboard.writeText(email);
-    setCopiedEmail(email);
-    setTimeout(() => setCopiedEmail(null), 2000);
+  const copyToClipboard = (value: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedValue(value);
+    setTimeout(() => setCopiedValue(null), 2000);
   };
 
   const archiveLead = async (id: string) => {
@@ -636,7 +638,7 @@ export default function LinkedinLeadsPage() {
                           className="text-accent hover:text-accent font-medium flex items-center gap-1 group/inline"
                         >
                           {lead.email}
-                          {copiedEmail === lead.email && (
+                          {copiedValue === lead.email && (
                             <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
@@ -645,6 +647,24 @@ export default function LinkedinLeadsPage() {
                       )}
                       {!lead.email && (
                         <span className="text-muted italic">No email</span>
+                      )}
+                      {lead.phone ? (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(lead.phone!)}
+                          className="text-accent hover:text-accent font-medium flex items-center gap-1"
+                          title="Click to copy phone"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          {lead.phone}
+                          {copiedValue === lead.phone && (
+                            <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-muted italic">No phone</span>
                       )}
                     </div>
 
