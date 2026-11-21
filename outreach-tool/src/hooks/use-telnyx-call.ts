@@ -95,6 +95,8 @@ export interface UseTelnyxCallReturn extends TelnyxCallState {
   // Call controls
   startCall: (leadPhone: string, leadId?: string, leadTable?: 'leads' | 'linkedin_leads') => Promise<void>;
   endCall: () => void;
+  /** Clears a finished call so the next lead in a queue starts clean. */
+  resetCall: () => void;
   toggleMute: () => void;
   setVolume: (volume: number) => void;
   setMicVolume: (volume: number) => void;
@@ -942,6 +944,32 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
   }, [user, callerNumber, state.status, selectedInputDevice, selectedOutputDevice, remoteVolume]);
 
+  // --- resetCall ---
+  // Puts a finished call aside so the next lead starts clean. A queue works through
+  // leads in the same panel, so without this the ended state and the previous call
+  // log id carried over: the call button stayed hidden and a saved outcome could be
+  // attached to the previous lead's call.
+  const resetCall = useCallback(() => {
+    stopDurationTimer();
+    clearMuteWarningTimeout();
+    answeredAtRef.current = null;
+    endedHandledRef.current = false;
+    currentCallLogIdRef.current = null;
+
+    setState(s => ({
+      ...s,
+      status: 'idle',
+      message: '',
+      durationSeconds: 0,
+      isMuted: false,
+      isHeld: false,
+      callLogId: null,
+      fromNumber: null,
+      toNumber: null,
+      remoteMutedForMoreThan10s: false,
+    }));
+  }, [stopDurationTimer, clearMuteWarningTimeout]);
+
   // --- endCall ---
   // Must always work: hangup + force-cleanup with timeout fallback
   const endCall = useCallback(() => {
@@ -1130,6 +1158,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     micLevel,
     startCall,
     endCall,
+    resetCall,
     toggleMute,
     setVolume,
     setMicVolume,

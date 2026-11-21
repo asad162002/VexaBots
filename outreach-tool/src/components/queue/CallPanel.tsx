@@ -33,6 +33,7 @@ export default function CallPanel({ lead, onMeetingBooked, onCallEnd }: CallPane
   return (
     <div className="bg-[#13131a] border border-[#23232e] rounded-xl p-3">
       <CallDialer
+        key={lead.id}
         lead={lead}
         onCallEnd={onCallEnd}
       />

@@ -49,6 +49,10 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
 
   const isCalling = ['connecting', 'ringing', 'in-call', 'held'].includes(status);
   const inCall = status === 'ringing' || status === 'in-call' || status === 'held';
+  // A finished call must not take the button away: the queue dials the next lead
+  // from this same panel, so the button is shown whenever no call is in progress and
+  // this flag only changes the wording.
+  const callFinished = status === 'ended';
 
   const handleStartCall = () => {
     const phoneNumber = altPhone.trim() || lead.phone;
@@ -190,7 +194,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         </div>
 
         {/* Alternate phone number input */}
-        {!inCall && !callEnded && (
+        {!inCall && (
           <div>
             <input
               type="tel"
@@ -203,8 +207,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
           </div>
         )}
 
-        {/* Call button (idle) */}
-        {!inCall && !callEnded && hookCallerNumber && (
+        {/* Call button, shown whenever a call is not in progress */}
+        {!inCall && hookCallerNumber && (
           <button
             onClick={handleStartCall}
             disabled={isCalling}
@@ -218,7 +222,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
             ) : (
               <>
                 <Phone className="w-4 h-4" />
-                <span>Call now</span>
+                <span>{callFinished ? 'Call again' : 'Call now'}</span>
               </>
             )}
           </button>
@@ -325,7 +329,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
         )}
 
         {/* Call ended */}
-        {callEnded && (
+        {callFinished && (
           <div className="flex items-center gap-2 p-3 bg-[#1a1a23] border border-[#2a2a36] rounded-xl">
             <CheckCircle className="w-4 h-4 text-muted" />
             <span className="text-sm text-muted">

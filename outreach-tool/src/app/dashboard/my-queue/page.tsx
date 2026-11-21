@@ -44,8 +44,10 @@ function MyQueueInner() {
     status: callStatus,
     durationSeconds,
     callLogId,
+    callInProgress,
     startCall,
     endCall,
+    resetCall,
     toggleMute,
     setVolume,
     setMicVolume,
@@ -273,6 +275,9 @@ function MyQueueInner() {
       } else {
         setCurrentIndex(currentIndex + 1);
       }
+      // The next lead is dialed from the same panel, so the finished call is cleared
+      // here and its call log id is not carried onto the next outcome.
+      resetCall();
     } catch {
       setSaveError('Failed to save. Try again.');
     } finally {
@@ -376,7 +381,12 @@ function MyQueueInner() {
             calledSet={calledSet}
             outcomeMap={outcomeMap}
             callPhase={callPhase}
-            onSelect={setCurrentIndex}
+            onSelect={(index) => {
+              // Picking another lead by hand clears a finished call too, but never
+              // interrupts one that is still running.
+              if (!callInProgress) resetCall();
+              setCurrentIndex(index);
+            }}
           />
 
           {/* Center: Lead details + CallPanel */}
