@@ -28,11 +28,113 @@ export const parseCSVLine = (line: string): string[] => {
   return result;
 };
 
+// Splits a whole CSV file into records, honouring quoted fields. A
+// google-maps-scraper export writes competitor names, review text and opening hours
+// with real newlines inside quotes, so splitting the file on newlines first turns
+// one record into several broken ones. This is the reader the import and the
+// preview both use.
+export const parseCSVRecords = (text: string): string[][] => {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  const endRecord = () => {
+    record.push(field.trim());
+    field = '';
+    // Blank lines and trailing newlines are not records.
+    if (record.some((value) => value !== '')) records.push(record);
+    record = [];
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (char === ',') {
+      record.push(field.trim());
+      field = '';
+      continue;
+    }
+    if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i + 1] === '\n') i++;
+      endRecord();
+      continue;
+    }
+
+    field += char;
+  }
+
+  endRecord();
+  return records;
+};
+
 export const normalizePhoneForDedup = (phone: unknown): string => {
   if (!phone) return '';
   const digits = String(phone).replace(/\D/g, '');
   if (digits.length === 11 && digits.startsWith('1')) return digits.substring(1);
   return digits;
+};
+
+// Two rows are the same person when they point at the same LinkedIn profile, so
+// the profile slug is the identity. The slug is taken out of any LinkedIn profile
+// URL shape and lowercased, which is what the unique index on linkedin_username
+// expects.
+export const extractLinkedInUsername = (url: unknown): string | null => {
+  if (!url) return null;
+  const match = String(url).match(/linkedin\.com\/(?:in|pub)\/([^/?#]+)/i);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]).trim().toLowerCase() || null;
+  } catch {
+    return match[1].trim().toLowerCase() || null;
+  }
+};
+
+const normalizeHeader = (col: string): string => col.toLowerCase().trim().replace(/[\s-]+/g, '_');
+
+// Targets that describe a person and belong to linkedin_leads rather than leads.
+export const CONTACT_FIELDS = [
+  'lead_name',
+  'person_title',
+  'person_email',
+  'person_email_status',
+  'person_linkedin_url',
+];
+
+export const hasContactFields = (fieldMap: Record<string, string>): boolean =>
+  Object.values(fieldMap).some((field) => CONTACT_FIELDS.includes(field));
+
+// A contact export carries people, not businesses, which changes what the "title"
+// column means: in this shape it is the person's job title, not the company name.
+export const looksLikeContactExport = (headers: string[]): boolean => {
+  const keys = headers.map(normalizeHeader);
+  if (keys.includes('lead_name') || keys.includes('headline') || keys.includes('seniority')) return true;
+  return keys.includes('linkedin_url') && keys.some((k) => k === 'email' || k === 'email_status');
+};
+
+// Apollo's people export carries these; they are what makes the difference between
+// a LinkedIn owner search and an Apollo enrichment when labelling the source.
+export const looksLikeApolloExport = (headers: string[]): boolean => {
+  const keys = headers.map(normalizeHeader);
+  return ['seniority', 'functions', 'departments', 'headline', 'credit_cost', 'enrichment_error'].some((k) => keys.includes(k));
 };
 
 // Column names seen in google-maps-scraper exports, matched exactly. Getting
@@ -83,6 +185,8 @@ const EXACT_MAPPINGS: Record<string, string> = {
   owner_role: 'owner_role',
   owner_title: 'owner_role',
   linkedin_url: 'owner_linkedin_url',
+  lead_name: 'lead_name',
+  contact_name: 'lead_name',
   company_size: 'company_size_estimate',
   company_size_estimate: 'company_size_estimate',
   notes: 'notes',
@@ -94,10 +198,11 @@ export const guessMapping = (col: string): string | null => {
   const key = col.toLowerCase().trim().replace(/[\s-]+/g, '_');
   if (EXACT_MAPPINGS[key]) return EXACT_MAPPINGS[key];
 
-  // Scraper columns that hold JSON blobs or aggregates rather than the single
-  // value the lead field expects. Left unmapped so the mapper does not offer the
-  // same field three times, and so nothing writes a blob into a number column.
-  if (/(keyword|featured|per_rating|images?|photos?|posts?|times|hours|menu|updates|competitors|on_site|about|reviews_link)/.test(key)) {
+  // Scraper columns that hold JSON blobs, aggregates or a second URL rather than
+  // the single value the lead field expects. Left unmapped so the mapper does not
+  // offer the same field three times, and so a social or photo URL cannot overwrite
+  // the real website.
+  if (/(keyword|featured|per_rating|images?|photos?|avatar|posts?|times|hours|menu|updates|competitors|on_site|about|reviews_link|twitter|facebook|github|instagram|youtube|tiktok|pinterest|threads)/.test(key)) {
     return null;
   }
 
@@ -120,20 +225,48 @@ export const guessMapping = (col: string): string | null => {
   return null;
 };
 
-export const buildInitialMappings = (headers: string[]): ColumnMapping[] =>
-  headers.map((col) => ({ csvColumn: col, leadField: guessMapping(col) }));
+// Columns that describe the person rather than the business, used when the file is
+// a contact export. The company column of the same name stays where it is.
+const CONTACT_COLUMN_TARGETS: Record<string, string> = {
+  title: 'person_title',
+  email: 'person_email',
+  email_status: 'person_email_status',
+  linkedin_url: 'person_linkedin_url',
+};
+
+// In a contact export, city, state and country are where the person lives, not
+// where the business is, so they are left unmapped rather than written onto the
+// company as if they were its address.
+const CONTACT_COLUMN_SKIPS = ['city', 'town', 'postal_code', 'zip', 'zip_code', 'country', 'country_code'];
+
+export const buildInitialMappings = (headers: string[]): ColumnMapping[] => {
+  const contactExport = looksLikeContactExport(headers);
+
+  return headers.map((col) => {
+    const key = normalizeHeader(col);
+
+    if (contactExport) {
+      if (CONTACT_COLUMN_TARGETS[key]) return { csvColumn: col, leadField: CONTACT_COLUMN_TARGETS[key] };
+      if (CONTACT_COLUMN_SKIPS.includes(key)) return { csvColumn: col, leadField: null };
+    }
+
+    return { csvColumn: col, leadField: guessMapping(col) };
+  });
+};
 
 export const parseCSVPreview = (text: string): { headers: string[]; rows: Record<string, string>[] } => {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-  if (lines.length < 2) return { headers: [], rows: [] };
-  const headers = parseCSVLine(lines[0]);
+  const records = parseCSVRecords(text);
+  if (records.length < 2) return { headers: [], rows: [] };
+
+  const headers = records[0];
   const rows: Record<string, string>[] = [];
-  for (const line of lines.slice(1, 6)) {
-    const values = parseCSVLine(line);
+
+  for (const values of records.slice(1, 6)) {
     const row: Record<string, string> = {};
     headers.forEach((h, idx) => { row[h] = values[idx] ?? ''; });
     rows.push(row);
   }
+
   return { headers, rows };
 };
 
@@ -184,8 +317,31 @@ export const buildEnrichedRecord = (lead: Record<string, unknown>, owner: Record
   email: owner!.email || null,
   email_status: owner!.email ? 'verified' : 'not_found',
   linkedin_url: owner!.linkedin_url || null,
+  // The profile slug is what a person is deduplicated on, and the company's
+  // number is copied down so the contact can be called from My Queue.
+  linkedin_username: extractLinkedInUsername(owner!.linkedin_url),
+  phone: typeof lead.phone === 'string' ? lead.phone : null,
   source: 'linkedin_owner_search',
 });
+
+// PostgREST sends one INSERT for an array, so every object in a batch has to carry
+// the same keys or the request is refused. Missing values are filled with null
+// rather than left out. Rows are only ever added with ignoreDuplicates, so filling
+// a gap can never overwrite something already stored.
+export const normalizeBatchKeys = (rows: Record<string, unknown>[]): Record<string, unknown>[] => {
+  if (rows.length === 0) return rows;
+
+  const keys = new Set<string>();
+  rows.forEach((row) => Object.keys(row).forEach((key) => keys.add(key)));
+
+  return rows.map((row) => {
+    const filled: Record<string, unknown> = {};
+    keys.forEach((key) => {
+      filled[key] = row[key] === undefined ? null : row[key];
+    });
+    return filled;
+  });
+};
 
 export const parseJsonPreview = (text: string): { headers: string[]; rows: Record<string, string>[] } => {
   const jsonData = JSON.parse(text);
@@ -253,29 +409,38 @@ export const coerceCsvValue = (field: string, raw: string): CoercedValue => {
 export interface CsvLeadOptions {
   source: string;
   category: string;
+  /** Source written on linkedin_leads rows. */
+  contactSource?: string;
 }
 
 export interface CsvLeadResult {
+  /** Row for the leads table, when the row describes a business. */
   lead?: Record<string, unknown>;
+  /** Row for linkedin_leads, when the row describes a person. */
+  contact?: Record<string, unknown>;
   /** Why this row could not become a lead. */
   error?: string;
   /** Something worth telling the user about a value that was dropped. */
   note?: string;
 }
 
-// Turns one CSV row into a leads row. It lives here rather than in the page so it
-// can be read and exercised on its own, and because the page only needs to know
-// whether the row became a lead.
+// Turns one CSV row into the rows it describes. It lives here rather than in the
+// page so it can be read and exercised on its own. A contact export produces one
+// row for the business and one for the person, which is why the two are separate:
+// they go to different tables and are deduplicated on different keys.
 export const buildCsvLead = (
   row: Record<string, string>,
   fieldMap: Record<string, string>,
   options: CsvLeadOptions,
 ): CsvLeadResult => {
+  const contactMode = hasContactFields(fieldMap);
+
   const lead: Record<string, unknown> = {
     source: options.source,
     status: 'new',
     category_name: options.category || null,
   };
+  const person: Record<string, unknown> = {};
   let note: string | undefined;
 
   for (const [csvCol, leadField] of Object.entries(fieldMap)) {
@@ -296,14 +461,30 @@ export const buildCsvLead = (
       continue;
     }
 
+    // Person columns belong to linkedin_leads.
+    if (CONTACT_FIELDS.includes(leadField)) {
+      switch (leadField) {
+        case 'lead_name':
+          person.lead_name = raw.trim();
+          break;
+        case 'person_title':
+          person.title = raw.trim();
+          break;
+        case 'person_email':
+          person.email = raw.trim();
+          break;
+        case 'person_email_status':
+          person.email_status = raw.trim();
+          break;
+        case 'person_linkedin_url':
+          person.linkedin_url = raw.trim();
+          break;
+      }
+      continue;
+    }
+
     const coerced = coerceCsvValue(leadField, raw);
     if (coerced.ok) lead[leadField] = coerced.value;
-  }
-
-  // Business Name is the one required field. Without it there is nothing to show
-  // in any list, so the row is refused with a reason instead of being dropped.
-  if (!lead.title) {
-    return { error: 'the column mapped to Business Name is empty' };
   }
 
   // The scraper has no domain column, so take it from the website.
@@ -318,6 +499,36 @@ export const buildCsvLead = (
   // The scraper's ad flag feeds both columns, as the JSON import does.
   if (typeof lead.ad_running === 'boolean') {
     lead.is_advertisement = lead.ad_running;
+  }
+
+  if (contactMode) {
+    if (!person.lead_name) {
+      return { error: 'the column mapped to Contact Name is empty' };
+    }
+
+    const contact: Record<string, unknown> = {
+      lead_name: person.lead_name,
+      title: person.title ?? null,
+      email: person.email ?? null,
+      email_status: person.email_status ?? (person.email ? 'verified' : 'not_found'),
+      linkedin_url: person.linkedin_url ?? null,
+      linkedin_username: extractLinkedInUsername(person.linkedin_url),
+      // The company the person works at, and its number, so the contact can be
+      // called from My Queue without looking the business up again.
+      place_id: typeof lead.place_id === 'string' ? lead.place_id : null,
+      phone: typeof lead.phone === 'string' ? lead.phone : null,
+      source: options.contactSource ?? 'linkedin_owner_search',
+    };
+
+    // The business row is only worth writing when the file named it.
+    const hasCompany = typeof lead.title === 'string' && lead.title.length > 0;
+    return { lead: hasCompany ? lead : undefined, contact, note };
+  }
+
+  // Business Name is the one required field. Without it there is nothing to show
+  // in any list, so the row is refused with a reason instead of being dropped.
+  if (!lead.title) {
+    return { error: 'the column mapped to Business Name is empty' };
   }
 
   return { lead, note };

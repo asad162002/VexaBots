@@ -90,6 +90,8 @@ export function JsonPreviewNotice() {
 const SOURCE_OPTIONS: { value: LeadSource; label: string }[] = [
   { value: 'csv_import', label: 'CSV Import' },
   { value: 'google_maps', label: 'Google Maps' },
+  { value: 'linkedin_owner_search', label: 'LinkedIn Owner Search' },
+  { value: 'apollo_enrichment', label: 'Apollo Enrichment' },
   { value: 'manual', label: 'Manual' },
   { value: 'apify_n8n', label: 'Apify/n8n' },
   { value: 'linkedin', label: 'LinkedIn' },

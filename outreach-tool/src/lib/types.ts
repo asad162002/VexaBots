@@ -89,6 +89,8 @@ export type LeadSource =
   | 'csv_import'
   | 'apify_n8n'
   | 'linkedin'
+  | 'linkedin_owner_search'
+  | 'apollo_enrichment'
   | 'other';
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {

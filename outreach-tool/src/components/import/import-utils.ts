@@ -18,9 +18,17 @@ const LEAD_FIELDS = [
   { key: 'url', label: 'Google Maps URL', required: false },
   { key: 'owner_name', label: 'Owner Name', required: false },
   { key: 'owner_role', label: 'Owner Role', required: false },
-  { key: 'owner_linkedin_url', label: 'LinkedIn URL', required: false },
+  { key: 'owner_linkedin_url', label: 'Owner LinkedIn URL', required: false },
   { key: 'company_size_estimate', label: 'Company Size', required: false },
   { key: 'notes', label: 'Notes', required: false },
+
+  // Contact columns. These are the person, not the business, and they are written
+  // to LinkedIn Leads, where a person is identified by their LinkedIn profile.
+  { key: 'lead_name', label: 'Contact Name', required: false },
+  { key: 'person_title', label: 'Contact Job Title', required: false },
+  { key: 'person_email', label: 'Contact Email', required: false },
+  { key: 'person_email_status', label: 'Contact Email Status', required: false },
+  { key: 'person_linkedin_url', label: 'Contact LinkedIn Profile', required: false },
 ];
 
 export interface ColumnMapping {

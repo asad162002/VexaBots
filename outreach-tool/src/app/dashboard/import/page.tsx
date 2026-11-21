@@ -11,15 +11,17 @@ import ImportUpload, { CsvColumnMapper, JsonPreviewNotice } from '@/components/i
 import { LEAD_FIELDS, type ColumnMapping } from '@/components/import/import-utils';
 import ImportResult from '@/components/import/ImportResult';
 import {
-  parseCSVLine,
   normalizePhoneForDedup,
   buildInitialMappings,
   parseCSVPreview,
+  parseCSVRecords,
   parseJsonPreview,
   buildGoogleMapsLead,
   buildEnrichedRecord,
-  buildCsvLead,
+  extractLinkedInUsername,
+  hasContactFields,
 } from '@/lib/import-helpers';
+import { importBusinessRows, importContactRows } from '@/lib/csv-import';
 
 type FileType = 'csv' | 'json';
 
@@ -206,12 +208,14 @@ function ImportPageContent() {
       // Upload enriched leads for LinkedIn-sourced imports
       if (owner?.name && lead.source !== 'google_maps') {
         const enriched_record = buildEnrichedRecord(lead, owner);
-        const enriched_rest = {
-        };
 
+        // A person is identified by their LinkedIn profile, so the conflict target
+        // is the profile slug. Targeting place_id here failed every time: the table
+        // has no unique constraint on place_id alone, so Postgres refused the
+        // upsert with 42P10 and the contact was never written.
         const { error: enrichedError } = await supabase
           .from('linkedin_leads')
-          .upsert(enriched_record, { onConflict: 'place_id', ignoreDuplicates: true });
+          .upsert(enriched_record, { onConflict: 'linkedin_username', ignoreDuplicates: true });
         if (!enrichedError) enriched++;
       }
 
@@ -224,12 +228,15 @@ function ImportPageContent() {
             email: (lead_item.email as string) || null,
             email_status: lead_item.email ? 'verified' : 'not_found',
             linkedin_url: (lead_item.linkedin_url as string) || (lead_item.linkedin as string) || null,
+            linkedin_username: extractLinkedInUsername(
+              (lead_item.linkedin_url as string) || (lead_item.linkedin as string) || null,
+            ),
             source: 'apollo_enrichment',
           };
 
           const { error: apolloError } = await supabase
             .from('linkedin_leads')
-            .upsert(record, { onConflict: 'place_id', ignoreDuplicates: true });
+            .upsert(record, { onConflict: 'linkedin_username', ignoreDuplicates: true });
           if (!apolloError) enriched++;
         }
       }
@@ -263,12 +270,18 @@ function ImportPageContent() {
       }
     });
 
-    const titleColumn = Object.keys(fieldMap).find((col) => fieldMap[col] === 'title') ?? null;
+    const targetMapped = (target: string) => Object.values(fieldMap).includes(target);
 
-    // Without a Business Name there is nothing to create and every row would be
-    // dropped one at a time, which is how an import used to report
-    // "0 added, 0 skipped" with no explanation. Refuse up front instead.
-    if (!titleColumn) {
+    // A contact file describes people, so the person's name is the required field
+    // rather than the business name. Either way the import is refused up front
+    // instead of dropping every row and reporting "0 added, 0 skipped".
+    const contactMode = hasContactFields(fieldMap);
+
+    if (contactMode && !targetMapped('lead_name')) {
+      setError('This file has contact columns, so map a column to Contact Name before importing.');
+      return;
+    }
+    if (!contactMode && !targetMapped('title')) {
       setError('Map a column to Business Name before importing. It is the one required field.');
       return;
     }
@@ -278,119 +291,16 @@ function ImportPageContent() {
     setSkippedDetails([]);
 
     const text = await file.text();
-    const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
-    const rows = lines.slice(1);
+    // Read with the quoted-field reader rather than by splitting on newlines: this
+    // export puts real newlines inside quoted values, which turned 3 records into 36.
+    const dataRecords = parseCSVRecords(text).slice(1);
 
-    let inserted = 0;
-    let skipped = 0;
-    const batchSize = 50;
-    const seenKeys = new Set<string>();
-    const skipDetails: string[] = [];
+    const result = contactMode
+      ? await importContactRows({ records: dataRecords, headers, fieldMap, source, category })
+      : await importBusinessRows({ records: dataRecords, headers, fieldMap, source, category });
 
-    // What is already stored, read once instead of one query per row. Two leads
-    // are the same lead when they share a Place ID, or a phone number once the
-    // formatting is stripped, and the phone comparison has to happen here because
-    // SQL cannot compare "+1 415-872-9589" against "4158729589".
-    const existingPlaceIds = new Set<string>();
-    const existingPhones = new Set<string>();
-    for (let from = 0; ; from += 1000) {
-      const { data: page, error: pageError } = await supabase
-        .from('leads')
-        .select('place_id, phone')
-        .range(from, from + 999);
-
-      if (pageError) {
-        skipDetails.push(`Could not read existing leads: ${pageError.message}`);
-        break;
-      }
-      if (!page || page.length === 0) break;
-
-      for (const stored of page as { place_id: string | null; phone: string | null }[]) {
-        if (stored.place_id) existingPlaceIds.add(stored.place_id);
-        const storedPhone = normalizePhoneForDedup(stored.phone);
-        if (storedPhone) existingPhones.add(storedPhone);
-      }
-      if (page.length < 1000) break;
-    }
-
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize);
-      const leadsToInsert: Record<string, unknown>[] = [];
-
-      for (let j = 0; j < batch.length; j++) {
-        const lineNumber = i + j + 2; // +1 for the header, +1 because lines are 1-based
-        const values = parseCSVLine(batch[j]);
-        const row: Record<string, string> = {};
-        headers.forEach((h, idx) => {
-          row[h] = values[idx] ?? '';
-        });
-
-        const built = buildCsvLead(row, fieldMap, { source, category });
-
-        if (built.note) {
-          skipDetails.push(`Line ${lineNumber}: ${built.note}`);
-        }
-        if (!built.lead) {
-          skipped++;
-          skipDetails.push(`Skipped line ${lineNumber}: ${built.error}`);
-          continue;
-        }
-        const lead = built.lead;
-
-        // Deduplicate inside the file first, then against the database.
-        const normalizedPhone = normalizePhoneForDedup(lead.phone);
-        const placeId = typeof lead.place_id === 'string' ? lead.place_id : '';
-        const dedupKey = placeId
-          ? `place:${placeId}`
-          : `phone:${normalizedPhone}|${(lead.title as string).toLowerCase().trim()}`;
-
-        if (seenKeys.has(dedupKey)) {
-          skipped++;
-          skipDetails.push(`Skipped duplicate in file: ${lead.title}`);
-          continue;
-        }
-        seenKeys.add(dedupKey);
-
-        if (placeId && existingPlaceIds.has(placeId)) {
-          skipped++;
-          skipDetails.push(`Skipped, already saved (same Place ID): ${lead.title}`);
-          continue;
-        }
-        if (normalizedPhone && existingPhones.has(normalizedPhone)) {
-          skipped++;
-          skipDetails.push(`Skipped, already saved (same phone): ${lead.title}`);
-          continue;
-        }
-
-        // Claim these now so a later row in the same file cannot repeat them.
-        if (placeId) existingPlaceIds.add(placeId);
-        if (normalizedPhone) existingPhones.add(normalizedPhone);
-
-        leadsToInsert.push(lead);
-      }
-
-      if (leadsToInsert.length === 0) continue;
-
-      // Batch insert the deduplicated leads
-      const { error: insertError } = await supabase.from('leads').insert(leadsToInsert);
-      if (insertError) {
-        // One bad row fails the whole batch, so retry them singly to find it.
-        for (const lead of leadsToInsert) {
-          const { error: singleError } = await supabase.from('leads').insert([lead]);
-          if (singleError) {
-            skipped++;
-            skipDetails.push(`Skipped ${lead.title}: ${singleError.message}`);
-          } else {
-            inserted++;
-          }
-        }
-      } else {
-        inserted += leadsToInsert.length;
-      }
-    }
-
-    setSuccess({ total: rows.length, inserted, skipped });
-    setSkippedDetails(skipDetails);
+    setSuccess({ total: dataRecords.length, inserted: result.inserted, skipped: result.skipped });
+    setSkippedDetails(result.details);
     setImporting(false);
   }, [file, headers, mappings, source, category]);
 
