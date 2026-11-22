@@ -696,8 +696,13 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
   // idle had nothing registered to arrive on. This keeps one registration open whenever
   // no call is up, and drops it the moment one starts, because two registrations would
   // deliver the same invite twice.
+  //
+  // The guard depends on the user id rather than the user object: the auth context hands
+  // out a fresh object on some renders, which would tear the line down and rebuild it,
+  // leaving a window with no registration to receive a call.
   useEffect(() => {
-    if (!user || !callerNumber) return;
+    const userId = user?.id ?? null;
+    if (!userId || !callerNumber) return;
     if (state.status !== 'idle' && state.status !== 'ended' && state.status !== 'error') return;
 
     let cancelled = false;
@@ -803,7 +808,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       }
       if (idleClientRef.current === client) idleClientRef.current = null;
     };
-  }, [user, callerNumber, state.status]);
+  }, [user?.id, callerNumber, state.status]);
 
   // --- startCall ---
   const startCall = useCallback(async (leadPhone: string, leadId?: string, leadTable: 'leads' | 'linkedin_leads' = 'leads') => {
