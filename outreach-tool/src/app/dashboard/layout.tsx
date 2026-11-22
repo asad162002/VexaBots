@@ -1,6 +1,8 @@
 'use client';
 
 import { useAuth } from '@/lib/auth-context';
+import { CallProvider } from '@/components/queue/CallProvider';
+import IncomingCallBanner from '@/components/calls/IncomingCallBanner';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
@@ -73,7 +75,8 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#08090a" }}>
+    <CallProvider>
+      <div className="min-h-screen flex" style={{ background: "#08090a" }}>
       <aside className="w-60 flex flex-col fixed left-0 top-0 h-screen" style={{ background: "#0f1011", borderRight: "1px solid rgba(255,255,255,0.05)" }}>
         <div className="flex items-center gap-2.5 px-5 h-14" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
           <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: "#5e6ad2" }}>
@@ -149,6 +152,11 @@ export default function DashboardLayout({
           {children}
         </div>
       </main>
-    </div>
+
+      {/* One phone line for the whole dashboard, so an inbound call can be answered
+          from any page, and one banner to answer it with. */}
+      <IncomingCallBanner />
+      </div>
+    </CallProvider>
   );
 }

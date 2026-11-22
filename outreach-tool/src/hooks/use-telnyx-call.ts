@@ -66,6 +66,16 @@ export type CallStatus =
   | 'ended'
   | 'error';
 
+export interface IncomingCall {
+  from: string;
+  /** Name of the lead or contact the number belongs to, when it matches one. */
+  leadName: string | null;
+  /** Who owns that lead now. */
+  ownerName: string | null;
+  /** Who last called that number, which is who the callback is really for. */
+  lastCallerName: string | null;
+}
+
 export interface TelnyxCallState {
   status: CallStatus;
   message: string;
@@ -77,6 +87,10 @@ export interface TelnyxCallState {
   toNumber: string | null;
   callerNumber: string | null;
   remoteMutedForMoreThan10s: boolean;
+  /** Set while an inbound call is ringing, before anyone answers it. */
+  incoming: IncomingCall | null;
+  /** True while an answered inbound call is up, so it can be ended from anywhere. */
+  inboundActive: boolean;
 }
 
 export interface UseTelnyxCallReturn extends TelnyxCallState {
@@ -97,6 +111,10 @@ export interface UseTelnyxCallReturn extends TelnyxCallState {
   endCall: () => void;
   /** Clears a finished call so the next lead in a queue starts clean. */
   resetCall: () => void;
+  /** Answer the inbound call that is ringing on this rep's line. */
+  answerIncoming: () => void;
+  /** Refuse it, which also silences it here. */
+  rejectIncoming: () => void;
   toggleMute: () => void;
   setVolume: (volume: number) => void;
   setMicVolume: (volume: number) => void;
@@ -164,6 +182,8 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     toNumber: null,
     callerNumber: callerNumber ?? null,
     remoteMutedForMoreThan10s: false,
+    incoming: null,
+    inboundActive: false,
   });
 
   const [remoteVolume, setRemoteVolumeState] = useState(() => {
@@ -202,6 +222,17 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
   const isCleaningUpRef = useRef(false);
   const callStartedRef = useRef(false);
   const endedHandledRef = useRef(false);
+  // The registration held open while no call is up, so an inbound call has somewhere
+  // to arrive. Separate from clientRef, which belongs to a call being placed.
+  const idleClientRef = useRef<any>(null);
+  // The inbound call that is ringing, or the one that was answered.
+  const inboundCallRef = useRef<any>(null);
+  // Mirrors "a call is up" for callbacks that cannot see fresh state.
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    busyRef.current = ['connecting', 'ringing', 'in-call', 'held'].includes(state.status);
+  }, [state.status]);
 
   // Keep callerNumber in sync from auth context
   useEffect(() => {
@@ -583,6 +614,197 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     };
   }, [cleanup, enumerateDevices]);
 
+  // --- Inbound calls ---
+  // A business calling the shared number back. Everybody registered on the same Telnyx
+  // credentials receives the invite, so the decision of who it belongs to is made by
+  // the server and everyone it does not belong to hangs up, leaving one phone ringing
+  // instead of the whole team's browsers.
+  const handleInboundInvite = useCallback(async (call: any) => {
+    const from = String(call?.remotePartyNumber ?? call?.callerNumber ?? '');
+    const hangUp = () => {
+      try { call?.hangup?.(); } catch { /* the SDK may have ended it already */ }
+    };
+
+    // One line per person: never while a call is up, and never two rings at once.
+    if (busyRef.current || inboundCallRef.current) {
+      hangUp();
+      return;
+    }
+
+    let info: {
+      mine?: boolean;
+      leadName?: string | null;
+      ownerName?: string | null;
+      lastCallerName?: string | null;
+    } | null = null;
+
+    try {
+      const res = await authFetch(`/api/inbound/who?number=${encodeURIComponent(from)}`);
+      if (res.ok) info = await res.json();
+    } catch {
+      // Best effort. If the lookup fails, let it ring here rather than drop a real call.
+    }
+
+    if (info && info.mine === false) {
+      hangUp();
+      return;
+    }
+
+    inboundCallRef.current = call;
+    setState(s => ({
+      ...s,
+      incoming: {
+        from: from || 'unknown number',
+        leadName: info?.leadName ?? null,
+        ownerName: info?.ownerName ?? null,
+        lastCallerName: info?.lastCallerName ?? null,
+      },
+    }));
+  }, []);
+
+  const rejectIncoming = useCallback(() => {
+    const call = inboundCallRef.current;
+    inboundCallRef.current = null;
+    setState(s => ({ ...s, incoming: null }));
+    try { call?.hangup?.(); } catch { /* already ended */ }
+  }, []);
+
+  // The idle line's effect must stay mounted while it waits, so it reaches these
+  // through a ref instead of depending on their identities. attachAndPlayAudio, for
+  // one, changes whenever the call volume does, and depending on it directly would
+  // tear down the line and drop a call that was ringing.
+  const idleHelpersRef = useRef({
+    handleInboundInvite,
+    setupAudioElement,
+    attachAndPlayAudio,
+    startDurationTimer,
+    stopDurationTimer,
+  });
+
+  useEffect(() => {
+    idleHelpersRef.current = {
+      handleInboundInvite,
+      setupAudioElement,
+      attachAndPlayAudio,
+      startDurationTimer,
+      stopDurationTimer,
+    };
+  }, [handleInboundInvite, setupAudioElement, attachAndPlayAudio, startDurationTimer, stopDurationTimer]);
+
+  // --- Idle line for inbound calls ---
+  // The client used to be built only when dialing, so a call arriving while the app sat
+  // idle had nothing registered to arrive on. This keeps one registration open whenever
+  // no call is up, and drops it the moment one starts, because two registrations would
+  // deliver the same invite twice.
+  useEffect(() => {
+    if (!user || !callerNumber) return;
+    if (state.status !== 'idle' && state.status !== 'ended' && state.status !== 'error') return;
+
+    let cancelled = false;
+    let client: any = null;
+
+    const onNotification = (notification: any) => {
+      if (notification?.type !== 'callUpdate' || !notification.call) return;
+      const call = notification.call;
+      // This line never dials, so anything not inbound is not ours.
+      if (call.direction !== 'inbound') return;
+
+      const callState = String(call.state);
+
+      if (callState === 'ringing' || callState === 'requesting') {
+        void idleHelpersRef.current.handleInboundInvite(call);
+        return;
+      }
+
+      if (callState === 'active') {
+        if (!answeredAtRef.current) {
+          answeredAtRef.current = Date.now();
+          // The inbound call takes the line, so the shared controls (mute, hold, end)
+          // work on it through the same paths as an outbound call.
+          callRef.current = call;
+          setState(s => ({
+            ...s,
+            status: 'in-call',
+            message: 'Inbound call',
+            incoming: null,
+            inboundActive: true,
+          }));
+          idleHelpersRef.current.startDurationTimer();
+          idleHelpersRef.current.attachAndPlayAudio('active');
+        }
+        return;
+      }
+
+      if (callState === 'held') {
+        setState(s => ({ ...s, status: 'held' }));
+        return;
+      }
+
+      if (callState === 'hangup' || callState === 'destroy' || callState === 'purge') {
+        if (endedHandledRef.current) return;
+        endedHandledRef.current = true;
+        inboundCallRef.current = null;
+        callRef.current = null;
+        answeredAtRef.current = null;
+        idleHelpersRef.current.stopDurationTimer();
+        setState(s => ({
+          ...s,
+          incoming: null,
+          inboundActive: false,
+          status: 'idle',
+          message: '',
+          durationSeconds: 0,
+          isMuted: false,
+          isHeld: false,
+        }));
+      }
+    };
+
+    (async () => {
+      try {
+        const tokenRes = await authFetch('/api/telnyx/token', { method: 'GET' });
+        if (!tokenRes.ok) return;
+        const tokenData = await tokenRes.json();
+        if (cancelled) return;
+
+        const { TelnyxRTC } = await import('@telnyx/webrtc');
+        if (cancelled) return;
+
+        client = new TelnyxRTC({
+          login_token: tokenData.token,
+          debug: false,
+          hangupOnBeforeUnload: true,
+          mediaPermissionsRecovery: { enabled: true, timeout: 10000 },
+        } as any);
+
+        idleClientRef.current = client;
+
+        idleHelpersRef.current.setupAudioElement();
+        client.remoteElement = 'telnyx-remote-audio';
+
+        client.on('telnyx.notification', onNotification);
+        client.on('telnyx.error', (err: any) => {
+          console.warn('Idle line error:', err?.message || err);
+        });
+
+        client.connect();
+      } catch (err) {
+        console.warn('Could not open the idle line for inbound calls:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try {
+        client?.removeAllListeners?.();
+        client?.disconnect?.();
+      } catch {
+        // Best effort.
+      }
+      if (idleClientRef.current === client) idleClientRef.current = null;
+    };
+  }, [user, callerNumber, state.status]);
+
   // --- startCall ---
   const startCall = useCallback(async (leadPhone: string, leadId?: string, leadTable: 'leads' | 'linkedin_leads' = 'leads') => {
     if (!user) {
@@ -593,6 +815,16 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       // Prevent double-dial
       return;
     }
+
+    // The idle line goes before dialing: with two registrations the same inbound call
+    // would arrive twice and one line would hold two calls.
+    try {
+      idleClientRef.current?.removeAllListeners?.();
+      idleClientRef.current?.disconnect?.();
+    } catch {
+      // Best effort.
+    }
+    idleClientRef.current = null;
 
     const toNumber = normalizeToE164(leadPhone);
     if (!E164_US_REGEX.test(toNumber)) {
@@ -985,6 +1217,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       fromNumber: null,
       toNumber: null,
       remoteMutedForMoreThan10s: false,
+      inboundActive: false,
     }));
   }, [stopDurationTimer, clearMuteWarningTimeout]);
 
@@ -1135,6 +1368,25 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     }
   }, [selectedInputDevice]);
 
+  // Kept here rather than with the rest of the inbound code because it needs the
+  // microphone helper, which is defined above.
+  const answerIncoming = useCallback(async () => {
+    const call = inboundCallRef.current;
+    if (!call) return;
+    // Ask for the microphone before answering so the caller does not sit in silence
+    // while the browser permission prompt is on screen.
+    try {
+      await requestMicrophone();
+    } catch {
+      // The SDK asks again when it answers.
+    }
+    try {
+      call.answer();
+    } catch (err) {
+      console.error('Answering the inbound call failed:', err);
+    }
+  }, [requestMicrophone]);
+
   // --- Keyboard shortcuts ---
   // M toggles mute during a call (not while typing in inputs)
   useEffect(() => {
@@ -1177,6 +1429,8 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     startCall,
     endCall,
     resetCall,
+    answerIncoming,
+    rejectIncoming,
     toggleMute,
     setVolume,
     setMicVolume,

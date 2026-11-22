@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { type Lead, LeadStatus } from '@/lib/types';
 import { Phone, Search, Loader2, Copy, Mail, ExternalLink, MapPin } from 'lucide-react';
-import { useCall, CallProvider } from '@/components/queue/CallProvider';
+import { useCall } from '@/components/queue/CallProvider';
 import CallPanel from '@/components/queue/CallPanel';
 import LeadDetails from '@/components/queue/LeadDetails';
 import QueueList from '@/components/queue/QueueList';
@@ -15,11 +15,9 @@ import { OUTCOMES, type OutcomeOption } from '@/components/queue/outcome-types';
 type CallPhase = 'idle' | 'ringing' | 'in-call' | 'ended';
 
 export default function MyQueuePage() {
-  return (
-    <CallProvider>
-      <MyQueueInner />
-    </CallProvider>
-  );
+  // The call provider lives in the dashboard layout now, so every page shares one
+  // phone line. A second one here would register a second line and ring twice.
+  return <MyQueueInner />;
 }
 
 function MyQueueInner() {
