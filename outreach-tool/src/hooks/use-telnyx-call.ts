@@ -1051,6 +1051,14 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         if (notification.type !== 'callUpdate' || !notification.call) return;
 
         const call = notification.call;
+
+        // A callback arriving while this line is already busy is refused here. Only one
+        // call at a time, and the idle line is not registered while a call is up.
+        if (call.direction === 'inbound') {
+          try { call.hangup(); } catch { /* the SDK may have ended it already */ }
+          return;
+        }
+
         // In v2.28.0, call.state comes as a STRING in notifications (not the numeric enum)
         // Per Telnyx docs: call.state values are 'ringing', 'active', etc.
         const callState = String(call.state);
