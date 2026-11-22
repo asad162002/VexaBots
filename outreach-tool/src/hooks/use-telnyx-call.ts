@@ -621,13 +621,36 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
   // instead of the whole team's browsers.
   const handleInboundInvite = useCallback(async (call: any) => {
     const from = String(call?.remotePartyNumber ?? call?.callerNumber ?? '');
-    const hangUp = () => {
+    const hangUp = (reason: string) => {
+      console.warn('[inbound] refusing the call:', reason);
       try { call?.hangup?.(); } catch { /* the SDK may have ended it already */ }
     };
 
+    console.warn('[inbound] invite received', {
+      from,
+      direction: call?.direction,
+      state: String(call?.state),
+      busy: busyRef.current,
+      alreadyRinging: Boolean(inboundCallRef.current),
+    });
+
+    // A previous invite whose end never arrived would otherwise make every later call be
+    // refused as "already ringing here", which would look exactly like this: the caller
+    // gets declined a fraction of a second after dialing, over and over.
+    const previous = inboundCallRef.current;
+    if (previous) {
+      const previousState = String(previous?.state ?? '');
+      const finished = ['hangup', 'destroy', 'purge', 'ended'].includes(previousState);
+      if (finished || !previousState) {
+        console.warn('[inbound] clearing a stale ringing flag left by an earlier call', { previousState });
+        inboundCallRef.current = null;
+        setState(s => (s.incoming ? { ...s, incoming: null } : s));
+      }
+    }
+
     // One line per person: never while a call is up, and never two rings at once.
     if (busyRef.current || inboundCallRef.current) {
-      hangUp();
+      hangUp(busyRef.current ? 'a call is already up on this line' : 'already ringing here');
       return;
     }
 
@@ -641,15 +664,18 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     try {
       const res = await authFetch(`/api/inbound/who?number=${encodeURIComponent(from)}`);
       if (res.ok) info = await res.json();
-    } catch {
+      console.warn('[inbound] who said', { status: res.status, info });
+    } catch (err) {
       // Best effort. If the lookup fails, let it ring here rather than drop a real call.
+      console.warn('[inbound] who lookup failed, letting it ring here', err);
     }
 
     if (info && info.mine === false) {
-      hangUp();
+      hangUp('it belongs to another rep');
       return;
     }
 
+    console.warn('[inbound] ringing on this line', { from, leadName: info?.leadName ?? null });
     inboundCallRef.current = call;
     setState(s => ({
       ...s,
@@ -691,6 +717,27 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     };
   }, [handleInboundInvite, setupAudioElement, attachAndPlayAudio, startDurationTimer, stopDurationTimer]);
 
+  // Bumped to force the idle line to be torn down and registered again.
+  const [lineGeneration, setLineGeneration] = useState(0);
+
+  // --- Keep the line registered ---
+  // A credentials-based Telnyx connection only accepts an inbound call while an endpoint
+  // is registered. A line that drops quietly is worse than no line at all: the caller is
+  // refused at the SIP layer, before anything reaches a browser, and it looks like the
+  // ring is broken. This notices a dead connection and registers again.
+  useEffect(() => {
+    const check = setInterval(() => {
+      if (!idleClientRef.current) return;
+      const connected = idleClientRef.current?.connection?.connected;
+      if (connected === false) {
+        console.warn('[idle-line] connection is down, registering again');
+        setLineGeneration(g => g + 1);
+      }
+    }, 20000);
+
+    return () => clearInterval(check);
+  }, []);
+
   // --- Idle line for inbound calls ---
   // The client used to be built only when dialing, so a call arriving while the app sat
   // idle had nothing registered to arrive on. This keeps one registration open whenever
@@ -711,8 +758,17 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     const onNotification = (notification: any) => {
       if (notification?.type !== 'callUpdate' || !notification.call) return;
       const call = notification.call;
+
+      console.warn('[idle-line] notification', {
+        state: call ? String(call.state) : null,
+        direction: call?.direction ?? null,
+      });
+
       // This line never dials, so anything not inbound is not ours.
-      if (call.direction !== 'inbound') return;
+      if (call.direction !== 'inbound') {
+        console.warn('[idle-line] ignoring a call that is not inbound', { direction: call?.direction ?? null });
+        return;
+      }
 
       const callState = String(call.state);
 
@@ -788,6 +844,12 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
         client.remoteElement = 'telnyx-remote-audio';
 
         client.on('telnyx.notification', onNotification);
+        client.on('telnyx.ready', () => {
+          console.warn('[idle-line] registered with Telnyx, waiting for calls');
+        });
+        client.on('telnyx.socket.close', () => {
+          console.warn('[idle-line] socket closed, the line is no longer registered');
+        });
         client.on('telnyx.error', (err: any) => {
           console.warn('Idle line error:', err?.message || err);
         });
@@ -808,7 +870,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       }
       if (idleClientRef.current === client) idleClientRef.current = null;
     };
-  }, [user?.id, callerNumber, state.status]);
+  }, [user?.id, callerNumber, state.status, lineGeneration]);
 
   // --- startCall ---
   const startCall = useCallback(async (leadPhone: string, leadId?: string, leadTable: 'leads' | 'linkedin_leads' = 'leads') => {
