@@ -129,6 +129,8 @@ export type CallLog = {
   lead_id: string | null;
   /** Set instead of lead_id when the call was to a contact in linkedin_leads. */
   linkedin_lead_id?: string | null;
+  /** 'inbound' for a call that came in to the shared number. */
+  direction?: 'inbound' | 'outbound' | null;
   caller_id: string;
   from_number: string;
   to_number: string;

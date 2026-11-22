@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import * as crypto from 'crypto';
+import { sendAlert } from '@/lib/notify';
 
 // POST /api/webhooks/telnyx — receive webhook events from Telnyx
 // Verifies Ed25519 signature and timestamp. Uses Telnyx v2 event names.
@@ -20,6 +21,137 @@ const telnyxPublicKey = process.env.TELNYX_PUBLIC_KEY!;
 
 // Timestamp tolerance: 5 minutes (300 seconds) per Telnyx docs
 const TIMESTAMP_TOLERANCE_SECONDS = 300;
+
+// Records a call that came in to the shared number.
+//
+// The app only writes a call_logs row for calls it places, so an inbound call had no
+// row at all: the events below updated nothing and the callback left no trace. This
+// writes the row, works out which lead the caller is, and says so out loud.
+//
+// Every step is best effort. A failure here must never stop the webhook answering
+// Telnyx, and the event can be delivered more than once.
+// Exported so it can be exercised on its own against the database.
+export async function recordInboundCall(
+  db: SupabaseClient,
+  params: {
+    callControlId: string;
+    callSessionId: string | null;
+    fromNumber: string;
+    toNumber: string;
+  }
+): Promise<void> {
+  const { callControlId, callSessionId, fromNumber, toNumber } = params;
+
+  const { data: already } = await db
+    .from('call_logs')
+    .select('id')
+    .eq('telnyx_call_control_id', callControlId)
+    .maybeSingle();
+  if (already) return;
+
+  // Stored numbers are formatted, so the caller is matched on digits.
+  const digits = (fromNumber || '').replace(/\D/g, '');
+  let leadId: string | null = null;
+  let linkedinLeadId: string | null = null;
+  let leadTable: 'leads' | 'linkedin_leads' = 'leads';
+  let matchedName: string | null = null;
+  let ownerId: string | null = null;
+
+  if (digits) {
+    const { data: lead } = await db
+      .from('leads')
+      .select('id, title, assigned_to')
+      .eq('phone_digits', digits)
+      .limit(1)
+      .maybeSingle();
+
+    if (lead) {
+      leadId = lead.id;
+      matchedName = lead.title;
+      ownerId = lead.assigned_to ?? null;
+    } else {
+      const { data: contact } = await db
+        .from('linkedin_leads')
+        .select('id, lead_name, assigned_to')
+        .eq('phone_digits', digits)
+        .is('deleted_at', null)
+        .limit(1)
+        .maybeSingle();
+
+      if (contact) {
+        linkedinLeadId = contact.id;
+        matchedName = contact.lead_name;
+        ownerId = contact.assigned_to ?? null;
+        leadTable = 'linkedin_leads';
+      }
+    }
+  }
+
+  const { error: insertError } = await db.from('call_logs').insert({
+    caller_id: null, // nobody on this side placed the call
+    direction: 'inbound',
+    from_number: fromNumber,
+    to_number: toNumber,
+    status: 'initiated',
+    telnyx_call_control_id: callControlId,
+    telnyx_call_session_id: callSessionId,
+    lead_id: leadId,
+    linkedin_lead_id: linkedinLeadId,
+    created_at: new Date().toISOString(),
+  });
+
+  if (insertError) {
+    console.error('Failed to record inbound call:', insertError);
+    return;
+  }
+
+  // Who called this business before: the last rep to dial the number out. That is the
+  // person the callback really belongs to.
+  let lastCallerId: string | null = null;
+  let lastCallerName: string | null = null;
+  const matchedId = leadId ?? linkedinLeadId;
+
+  if (matchedId) {
+    const { data: lastOutbound } = await db
+      .from('call_logs')
+      .select('caller_id')
+      .eq(leadId ? 'lead_id' : 'linkedin_lead_id', matchedId)
+      .eq('direction', 'outbound')
+      .not('caller_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    lastCallerId = lastOutbound?.caller_id ?? null;
+
+    if (lastCallerId) {
+      const { data: profile } = await db
+        .from('profiles')
+        .select('full_name, email')
+        .eq('id', lastCallerId)
+        .maybeSingle();
+      lastCallerName = profile?.full_name || profile?.email || null;
+    }
+
+    await db.from('lead_activities').insert({
+      lead_id: matchedId,
+      // Written against the lead's owner so the rep who owns it sees it in their own
+      // feed, falling back to whoever last called them, and null when it is nobody's.
+      profile_id: ownerId ?? lastCallerId,
+      activity_type: 'call',
+      content: `Inbound callback from ${fromNumber}`,
+      lead_table: leadTable,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  const alertText = matchedName
+    ? `Inbound callback: ${matchedName} called back on ${fromNumber}.` +
+      (lastCallerName ? ` Last called by ${lastCallerName}.` : '')
+    : `Inbound call from ${fromNumber}. No lead matches that number.`;
+
+  await sendAlert(alertText);
+}
 
 export async function POST(request: NextRequest) {
   // Fail closed: refuse to process if the public key is not configured
@@ -92,8 +224,21 @@ export async function POST(request: NextRequest) {
   switch (eventType) {
     case 'call.initiated':
     case 'call.ringing': {
-      // Match on telnyx_call_control_id for call lifecycle events
       if (!callControlId) break;
+
+      // A call coming in has no row yet, so write one and work out whose it is.
+      // Telnyx reports the direction as 'incoming' or 'outgoing'.
+      if (eventType === 'call.initiated' && eventPayload?.direction === 'incoming') {
+        await recordInboundCall(supabaseAdmin, {
+          callControlId,
+          callSessionId,
+          fromNumber: String(eventPayload?.from ?? ''),
+          toNumber: String(eventPayload?.to ?? ''),
+        });
+        break;
+      }
+
+      // Outbound: the row already exists, written by the app before it dialed.
       await supabaseAdmin
         .from('call_logs')
         .update({
@@ -132,10 +277,11 @@ export async function POST(request: NextRequest) {
         durationSec = Math.round((end - start) / 1000);
       }
 
-      // Fetch the current status to refine
+      // One read of the row: its status decides the final status, and its direction,
+      // lead and caller decide what the activity feed records.
       const { data: existing } = await supabaseAdmin
         .from('call_logs')
-        .select('status')
+        .select('status, direction, lead_id, linkedin_lead_id, caller_id, to_number, from_number')
         .eq('telnyx_call_control_id', callControlId)
         .single();
 
@@ -153,29 +299,36 @@ export async function POST(request: NextRequest) {
         })
         .eq('telnyx_call_control_id', callControlId);
 
+      const leadIdOnLog = existing?.lead_id ?? existing?.linkedin_lead_id ?? null;
+      const leadTableOnLog: 'leads' | 'linkedin_leads' =
+        existing?.linkedin_lead_id ? 'linkedin_leads' : 'leads';
+
       // Log to activity feed (only if the call was answered and has a lead)
-      if ((durationSec ?? 0) > 0) {
-        const { data: callLog } = await supabaseAdmin
-          .from('call_logs')
-          .select('lead_id, linkedin_lead_id, caller_id, to_number')
-          .eq('telnyx_call_control_id', callControlId)
-          .single();
+      if ((durationSec ?? 0) > 0 && existing && leadIdOnLog) {
+        await supabaseAdmin.from('lead_activities').insert({
+          lead_id: leadIdOnLog,
+          profile_id: existing.caller_id,
+          activity_type: 'call',
+          // An inbound call that got answered reads the other way round.
+          content: existing.direction === 'inbound'
+            ? `Inbound call from ${existing.from_number} (${durationSec}s)`
+            : `Cold call to ${existing.to_number} (${durationSec}s)`,
+          lead_table: leadTableOnLog,
+          created_at: new Date().toISOString(),
+        });
+      }
 
-        // A call to a LinkedIn contact hangs off linkedin_lead_id, and lead_table is
-        // set so the feed and the queues can tell the two kinds apart. Reading only
-        // lead_id meant an answered call to a contact left no trace anywhere.
-        const calledLeadId = callLog?.lead_id ?? callLog?.linkedin_lead_id ?? null;
-
-        if (callLog && calledLeadId) {
-          await supabaseAdmin.from('lead_activities').insert({
-            lead_id: calledLeadId,
-            profile_id: callLog.caller_id,
-            activity_type: 'call',
-            content: `Cold call to ${callLog.to_number} (${durationSec}s)`,
-            lead_table: callLog.linkedin_lead_id ? 'linkedin_leads' : 'leads',
-            created_at: new Date().toISOString(),
-          });
-        }
+      // A callback nobody answered is the one most worth knowing about, so an inbound
+      // call that rang out lands in the feed as a missed call rather than vanishing.
+      if (existing?.direction === 'inbound' && finalStatus === 'no_answer' && leadIdOnLog) {
+        await supabaseAdmin.from('lead_activities').insert({
+          lead_id: leadIdOnLog,
+          profile_id: null, // nobody here took the call
+          activity_type: 'call',
+          content: `Missed inbound call from ${existing.from_number ?? 'an unknown number'}`,
+          lead_table: leadTableOnLog,
+          created_at: new Date().toISOString(),
+        });
       }
       break;
     }

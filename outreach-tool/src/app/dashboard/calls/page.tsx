@@ -330,21 +330,27 @@ function CallsPageContent({
                   const caller = profiles.find(p => p.id === log.caller_id);
                   const mins = Math.floor((log.duration_seconds || 0) / 60);
                   const secs = (log.duration_seconds || 0) % 60;
+                  // An inbound call has no rep who placed it and may match no lead, so
+                  // it is identified by the number that called in.
+                  const isInbound = log.direction === 'inbound';
+                  const missed = isInbound && log.status === 'no_answer';
                   return (
                     <tr key={log.id} className="hover:bg-card/50">
                       <td className="px-4 py-2.5 text-sm text-muted">
                         {new Date(log.created_at).toLocaleString()}
                       </td>
                       <td className="px-4 py-2.5 text-sm text-foreground">
-                        {lead || 'Unknown Lead'}
+                        {lead || (isInbound ? log.from_number : 'Unknown Lead')}
                       </td>
                       <td className="px-4 py-2.5 text-sm text-muted">
-                        {caller?.full_name || caller?.email || 'Unknown'}
+                        {isInbound ? 'Inbound' : (caller?.full_name || caller?.email || 'Unknown')}
                       </td>
-                      <td className="px-4 py-2.5 text-sm text-muted">{log.to_number}</td>
+                      <td className="px-4 py-2.5 text-sm text-muted">
+                        {isInbound ? log.from_number : log.to_number}
+                      </td>
                       <td className="px-4 py-2.5">
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${getStatusColor(log.status)}`}>
-                          {getStatusLabel(log.status)}
+                          {missed ? 'Missed inbound' : getStatusLabel(log.status)}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-sm text-muted">
