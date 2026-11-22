@@ -1,13 +1,17 @@
 'use client';
 
 import { type Lead } from '@/lib/types';
-import { Copy, Phone, Mail, ExternalLink, MapPin } from 'lucide-react';
+import { Copy, Phone, Mail, ExternalLink, MapPin, BadgeCheck } from 'lucide-react';
 
 interface LeadDetailsProps {
   lead: Lead;
 }
 
 export default function LeadDetails({ lead }: LeadDetailsProps) {
+  const linkedinHref =
+    lead.linkedin_url ||
+    (lead.linkedin_username ? `https://www.linkedin.com/in/${lead.linkedin_username}` : null);
+
   const hasData =
     lead.icp_score !== null ||
     lead.source ||
@@ -23,6 +27,8 @@ export default function LeadDetails({ lead }: LeadDetailsProps) {
     lead.website ||
     lead.place_id ||
     lead.phone ||
+    lead.email ||
+    linkedinHref ||
     lead.notes;
 
   if (!hasData) {
@@ -88,9 +94,56 @@ export default function LeadDetails({ lead }: LeadDetailsProps) {
             </div>
           </div>
         )}
+        {lead.email && (
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted mb-1">Contact email</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Mail className="w-3 h-3 text-muted" />
+              <a
+                href={`mailto:${lead.email}`}
+                className="text-sm font-medium text-foreground break-all hover:text-accent"
+              >
+                {lead.email}
+              </a>
+              {lead.email_status === 'verified' && (
+                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold bg-green-500/10 text-green-400 border border-green-500/30">
+                  <BadgeCheck className="w-3 h-3" />
+                  verified
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(lead.email!)}
+                className="text-xs text-accent hover:text-accent"
+                title="Copy email"
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )}
+        {linkedinHref && (
+          <div className="sm:col-span-2">
+            <p className="text-xs text-muted mb-1">LinkedIn profile</p>
+            <a
+              href={linkedinHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-accent hover:text-accent break-all flex items-center gap-1"
+            >
+              <ExternalLink className="w-3 h-3" />
+              {linkedinHref}
+            </a>
+            {lead.linkedin_username && (
+              <p className="text-xs text-muted mt-1">Username: {lead.linkedin_username}</p>
+            )}
+          </div>
+        )}
         {lead.owner_name && (
           <div>
-            <p className="text-xs text-muted mb-1">Contact name</p>
+            <p className="text-xs text-muted mb-1">
+              {lead.lead_table === 'linkedin_leads' ? 'Role' : 'Contact name'}
+            </p>
             <p className="text-sm font-medium text-foreground">{lead.owner_name}</p>
           </div>
         )}

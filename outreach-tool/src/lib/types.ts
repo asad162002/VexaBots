@@ -72,6 +72,15 @@ export type Lead = {
   created_at: string;
   updated_at: string;
   lead_table?: 'leads' | 'linkedin_leads';
+  /**
+   * Columns that only exist on `linkedin_leads` (contacts imported or enriched by
+   * Apollo). The main `leads` table has no equivalent, so these stay undefined for
+   * Google Maps, manual and CSV leads.
+   */
+  email?: string | null;
+  email_status?: string | null;
+  linkedin_url?: string | null;
+  linkedin_username?: string | null;
 };
 
 export type LeadStatus =

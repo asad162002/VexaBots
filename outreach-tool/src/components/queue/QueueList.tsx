@@ -35,7 +35,7 @@ export default function QueueList({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search name or phone"
+          placeholder="Search name, phone or email"
           className="w-full bg-secondary border border-border rounded-xl text-muted placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 pl-10 pr-3 text-sm"
           aria-label="Search leads"
         />

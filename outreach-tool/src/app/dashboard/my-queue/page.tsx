@@ -70,7 +70,9 @@ function MyQueueInner() {
     return base.filter(l =>
       (l.title?.toLowerCase() || '').includes(q) ||
       (l.owner_name?.toLowerCase() || '').includes(q) ||
-      (l.phone?.toLowerCase() || '').includes(q)
+      (l.phone?.toLowerCase() || '').includes(q) ||
+      (l.email?.toLowerCase() || '').includes(q) ||
+      (l.linkedin_username?.toLowerCase() || '').includes(q)
     );
   }, [activeLeads, searchQuery, queueFilter]);
 
@@ -174,10 +176,19 @@ function MyQueueInner() {
           created_at: l.created_at as string,
           updated_at: l.updated_at as string,
           lead_table: 'linkedin_leads' as const,
+          // Columns only linkedin_leads carries. Dropping them here is why the
+          // queue's Lead details showed a contact's phone and little else.
+          email: (l.email as string) || null,
+          email_status: (l.email_status as string) || null,
+          linkedin_url: (l.linkedin_url as string) || null,
+          linkedin_username: (l.linkedin_username as string) || null,
         }));
 
       let merged: Lead[] = [...gmapLeads, ...liLeads];
-      if (user) {
+      // Admins get every active lead (the header says "Viewing as admin"); everyone
+      // else gets only what is assigned to them. Merging the two tables dropped the
+      // `!isAdmin` half of this rule, which emptied the admin queue entirely.
+      if (!isAdmin && user) {
         merged = merged.filter((l) => l.assigned_to === user.id);
       }
       setLeads(merged);
@@ -425,16 +436,40 @@ function MyQueueInner() {
                     )}
                   </div>
 
-                  {currentLead.website && (
-                    <a
-                      href={currentLead.website.startsWith('http') ? currentLead.website : `https://${currentLead.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent mt-2"
-                    >
-                      {currentLead.website}
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                  {(currentLead.website || currentLead.email || currentLead.linkedin_url) && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                      {currentLead.website && (
+                        <a
+                          href={currentLead.website.startsWith('http') ? currentLead.website : `https://${currentLead.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent"
+                        >
+                          {currentLead.website}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      {currentLead.email && (
+                        <a
+                          href={`mailto:${currentLead.email}`}
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent break-all"
+                        >
+                          <Mail className="w-3 h-3" />
+                          {currentLead.email}
+                        </a>
+                      )}
+                      {currentLead.linkedin_url && (
+                        <a
+                          href={currentLead.linkedin_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          LinkedIn profile
+                        </a>
+                      )}
+                    </div>
                   )}
                 </div>
 
