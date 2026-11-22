@@ -76,6 +76,13 @@ export interface IncomingCall {
   lastCallerName: string | null;
 }
 
+/**
+ * Whether this rep's line is registered with Telnyx and therefore able to receive a
+ * callback. A credentials-based connection refuses an inbound call at the SIP layer
+ * when nothing is registered, so this is worth showing rather than guessing at.
+ */
+export type LineStatus = 'offline' | 'connecting' | 'ready';
+
 export interface TelnyxCallState {
   status: CallStatus;
   message: string;
@@ -91,6 +98,8 @@ export interface TelnyxCallState {
   incoming: IncomingCall | null;
   /** True while an answered inbound call is up, so it can be ended from anywhere. */
   inboundActive: boolean;
+  /** Whether the line is registered and can take a callback right now. */
+  lineStatus: LineStatus;
 }
 
 export interface UseTelnyxCallReturn extends TelnyxCallState {
@@ -115,6 +124,8 @@ export interface UseTelnyxCallReturn extends TelnyxCallState {
   answerIncoming: () => void;
   /** Refuse it, which also silences it here. */
   rejectIncoming: () => void;
+  /** Tear the idle registration down and open it again, for a line that went quiet. */
+  reconnectLine: () => void;
   toggleMute: () => void;
   setVolume: (volume: number) => void;
   setMicVolume: (volume: number) => void;
@@ -184,6 +195,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     remoteMutedForMoreThan10s: false,
     incoming: null,
     inboundActive: false,
+    lineStatus: 'offline',
   });
 
   const [remoteVolume, setRemoteVolumeState] = useState(() => {
@@ -229,6 +241,12 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
   const inboundCallRef = useRef<any>(null);
   // Mirrors "a call is up" for callbacks that cannot see fresh state.
   const busyRef = useRef(false);
+  // Whether that idle registration is up right now, taken from the SDK's own events
+  // rather than guessed from its internals.
+  const idleReadyRef = useRef(false);
+  // When the last registration attempt was started, so the keep-alive backs off instead
+  // of tearing a connecting line down over and over.
+  const lineAttemptAtRef = useRef(0);
 
   useEffect(() => {
     busyRef.current = ['connecting', 'ringing', 'in-call', 'held'].includes(state.status);
@@ -720,20 +738,25 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
   // Bumped to force the idle line to be torn down and registered again.
   const [lineGeneration, setLineGeneration] = useState(0);
 
+  const reconnectLine = useCallback(() => {
+    setState(s => ({ ...s, lineStatus: 'connecting' }));
+    setLineGeneration(g => g + 1);
+  }, []);
+
   // --- Keep the line registered ---
   // A credentials-based Telnyx connection only accepts an inbound call while an endpoint
   // is registered. A line that drops quietly is worse than no line at all: the caller is
-  // refused at the SIP layer, before anything reaches a browser, and it looks like the
-  // ring is broken. This notices a dead connection and registers again.
+  // refused at the SIP layer (SIP 480, before anything reaches a browser) and it looks
+  // like the ring is broken. This watches for that and opens the line again, backing off
+  // so a line that is mid-handshake is not torn down repeatedly.
   useEffect(() => {
     const check = setInterval(() => {
-      if (!idleClientRef.current) return;
-      const connected = idleClientRef.current?.connection?.connected;
-      if (connected === false) {
-        console.warn('[idle-line] connection is down, registering again');
-        setLineGeneration(g => g + 1);
-      }
-    }, 20000);
+      if (busyRef.current) return;
+      if (idleReadyRef.current && idleClientRef.current) return;
+      if (Date.now() - lineAttemptAtRef.current < 15000) return;
+      console.warn('[idle-line] not registered, opening the line again');
+      setLineGeneration(g => g + 1);
+    }, 10000);
 
     return () => clearInterval(check);
   }, []);
@@ -752,6 +775,19 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     if (!userId || !callerNumber) return;
     if (state.status !== 'idle' && state.status !== 'ended' && state.status !== 'error') return;
 
+    // A line kept alive through an answered inbound call is disconnected here on the way
+    // out, before the fresh one below takes over, so the connection does not double up.
+    const previous = idleClientRef.current;
+    if (previous) {
+      try {
+        previous.removeAllListeners?.();
+        previous.disconnect?.();
+      } catch {
+        // Already gone.
+      }
+      idleClientRef.current = null;
+    }
+
     let cancelled = false;
     let client: any = null;
 
@@ -759,14 +795,8 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       if (notification?.type !== 'callUpdate' || !notification.call) return;
       const call = notification.call;
 
-      console.warn('[idle-line] notification', {
-        state: call ? String(call.state) : null,
-        direction: call?.direction ?? null,
-      });
-
       // This line never dials, so anything not inbound is not ours.
       if (call.direction !== 'inbound') {
-        console.warn('[idle-line] ignoring a call that is not inbound', { direction: call?.direction ?? null });
         return;
       }
 
@@ -824,7 +854,12 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     (async () => {
       try {
         const tokenRes = await authFetch('/api/telnyx/token', { method: 'GET' });
-        if (!tokenRes.ok) return;
+        if (!tokenRes.ok) {
+          lineAttemptAtRef.current = Date.now();
+          setState(s => ({ ...s, lineStatus: 'offline' }));
+          console.warn('[idle-line] no login token, the line stays closed', { status: tokenRes.status });
+          return;
+        }
         const tokenData = await tokenRes.json();
         if (cancelled) return;
 
@@ -845,23 +880,35 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
 
         client.on('telnyx.notification', onNotification);
         client.on('telnyx.ready', () => {
+          idleReadyRef.current = true;
+          setState(s => ({ ...s, lineStatus: 'ready' }));
           console.warn('[idle-line] registered with Telnyx, waiting for calls');
         });
         client.on('telnyx.socket.close', () => {
+          idleReadyRef.current = false;
+          setState(s => ({ ...s, lineStatus: 'offline' }));
           console.warn('[idle-line] socket closed, the line is no longer registered');
         });
         client.on('telnyx.error', (err: any) => {
-          console.warn('Idle line error:', err?.message || err);
+          console.warn('[idle-line] error from the line:', err?.message || err);
         });
 
+        lineAttemptAtRef.current = Date.now();
+        setState(s => ({ ...s, lineStatus: 'connecting' }));
         client.connect();
       } catch (err) {
+        lineAttemptAtRef.current = Date.now();
+        setState(s => ({ ...s, lineStatus: 'offline' }));
         console.warn('Could not open the idle line for inbound calls:', err);
       }
     })();
 
     return () => {
       cancelled = true;
+      // An answered inbound call lives on this client. Disconnecting here would drop the
+      // call the rep is on, so it is handed over to the next effect run instead.
+      if (inboundCallRef.current) return;
+      idleReadyRef.current = false;
       try {
         client?.removeAllListeners?.();
         client?.disconnect?.();
@@ -1517,6 +1564,7 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     requestMicrophone,
     testMicrophone,
     stopTestMicrophone,
+    reconnectLine,
     callInProgress: ['connecting', 'ringing', 'in-call', 'held'].includes(state.status),
   };
 }

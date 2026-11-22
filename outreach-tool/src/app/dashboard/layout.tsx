@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth-context';
 import { CallProvider } from '@/components/queue/CallProvider';
 import IncomingCallBanner from '@/components/calls/IncomingCallBanner';
+import LineStatusChip from '@/components/calls/LineStatusChip';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
@@ -124,7 +125,11 @@ export default function DashboardLayout({
           })}
         </nav>
 
-        <div className="px-3 py-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+        <div className="px-3 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          {/* Whether a callback can reach this browser at all, on any dashboard page. */}
+          <div className="px-0">
+            <LineStatusChip />
+          </div>
           <div className="flex items-center gap-2.5 px-2 py-1.5">
             <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-medium" style={{ background: "rgba(94,106,210,0.2)", color: "#7170ff" }}>
               {user.email?.charAt(0).toUpperCase() ?? '?'}
