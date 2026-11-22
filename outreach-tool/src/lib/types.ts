@@ -121,7 +121,8 @@ export type CallStatus =
   | 'busy'
   | 'voicemail'
   | 'no_answer'
-  | 'disconnected';
+  | 'disconnected'
+  | 'failed';
 
 export type CallLog = {
   id: string;

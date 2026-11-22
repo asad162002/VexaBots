@@ -651,6 +651,11 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
     clearMuteWarningTimeout();
 
     try {
+      // The clock starts before the request, not after: a click made before the
+      // machine slept is answered on wake, and dialing then rings a number nobody
+      // asked for at that moment.
+      const requestedAt = Date.now();
+
       // Create the call log row FIRST
       const callLogRes = await authFetch('/api/telnyx/call-log', {
         method: 'POST',
@@ -668,6 +673,19 @@ export function useTelnyxCall(): UseTelnyxCallReturn {
       }
       const callLogData = await callLogRes.json();
       currentCallLogIdRef.current = callLogData.callLogId ?? null;
+
+      // A request that took this long did not go out when it was asked to. The row
+      // is closed off and no call is placed, rather than ringing a number minutes
+      // after the click.
+      if (Date.now() - requestedAt > 20000) {
+        if (currentCallLogIdRef.current) {
+          updateCallLog(currentCallLogIdRef.current, {
+            status: 'failed',
+            ended_at: new Date().toISOString(),
+          });
+        }
+        throw new Error('Nothing was dialed: the request took too long to go through, which happens if the machine was asleep. Try again.');
+      }
 
       setState(s => ({ ...s, callLogId: callLogData.callLogId ?? null }));
 
