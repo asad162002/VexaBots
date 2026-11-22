@@ -1,16 +1,18 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { type Lead, LeadStatus } from '@/lib/types';
-import { Phone, Search, Loader2, Copy, Mail, ExternalLink, MapPin } from 'lucide-react';
+import { Phone, Search, Loader2, Copy, Mail, ExternalLink, MapPin, CalendarClock, X } from 'lucide-react';
 import { useCall } from '@/components/queue/CallProvider';
 import CallPanel from '@/components/queue/CallPanel';
 import LeadDetails from '@/components/queue/LeadDetails';
 import QueueList from '@/components/queue/QueueList';
 import OutcomePanel from '@/components/queue/OutcomePanel';
 import { OUTCOMES, type OutcomeOption } from '@/components/queue/outcome-types';
+import { followUpLabel, followUpRank, followUpState } from '@/lib/follow-ups';
 
 type CallPhase = 'idle' | 'ringing' | 'in-call' | 'ended';
 
@@ -60,8 +62,29 @@ function MyQueueInner() {
     return leads.filter(l => !['not_interested', 'meeting_booked', 'dead'].includes(l.status));
   }, [leads]);
 
+  /*
+   * The order the caller works in. What is overdue comes first, then what is due today, then
+   * the rest in the order it loaded. `sort` is stable, so nothing else is reordered by this.
+   */
+  const orderedQueue = useMemo(() => {
+    return [...activeLeads].sort(
+      (a, b) => followUpRank(a.next_follow_up_at) - followUpRank(b.next_follow_up_at)
+    );
+  }, [activeLeads]);
+
+  /* Follow-ups that are owed now, soonest first, whatever the filters are. */
+  const dueFollowUps = useMemo(() => {
+    return orderedQueue
+      .filter((l) => followUpRank(l.next_follow_up_at) < 2)
+      .sort(
+        (a, b) =>
+          new Date(a.next_follow_up_at as string).getTime() -
+          new Date(b.next_follow_up_at as string).getTime()
+      );
+  }, [orderedQueue]);
+
   const filteredQueue = useMemo(() => {
-    let base = activeLeads;
+    let base = orderedQueue;
     if (queueFilter === 'google_maps') base = base.filter(l => l.lead_table !== 'linkedin_leads' && l.source !== 'manual');
     else if (queueFilter === 'linkedin') base = base.filter(l => l.lead_table === 'linkedin_leads');
     else if (queueFilter === 'manual') base = base.filter(l => l.lead_table !== 'linkedin_leads' && l.source === 'manual');
@@ -74,7 +97,7 @@ function MyQueueInner() {
       (l.email?.toLowerCase() || '').includes(q) ||
       (l.linkedin_username?.toLowerCase() || '').includes(q)
     );
-  }, [activeLeads, searchQuery, queueFilter]);
+  }, [orderedQueue, searchQuery, queueFilter]);
 
   const currentLead = filteredQueue[currentIndex];
   const [todayCalledIds, setTodayCalledIds] = useState<Set<string>>(new Set());
@@ -169,7 +192,9 @@ function MyQueueInner() {
           meeting_link: null,
           source_details: null,
           last_contacted_at: null,
-          next_follow_up_at: null,
+          // The column exists on both lead tables since 2026-11-22, so a follow-up on a
+          // LinkedIn contact is a real date rather than activity history only.
+          next_follow_up_at: (l.next_follow_up_at as string) || null,
           assigned_to: l.assigned_to as string | null,
           assigned_at: l.assigned_at as string | null,
           assigned_by: l.assigned_by as string | null,
@@ -253,15 +278,22 @@ function MyQueueInner() {
     setSaving(true);
     setSaveError(null);
     const isLinkedIn = currentLead.lead_table === 'linkedin_leads';
+    /*
+     * The date is saved for any outcome, not only "Call back". Before this, a caller who typed
+     * a date and picked "No answer" lost it silently, because the value was only passed when the
+     * outcome itself required a follow-up.
+     *
+     * A null here means "leave the existing date alone": the function uses `coalesce`, so an
+     * outcome saved with no date no longer erases a follow-up that was already scheduled.
+     * Clearing a date is its own button on the lead card.
+     */
+    const followUpIso = followUpDate ? new Date(`${followUpDate}T12:00:00`).toISOString() : null;
     try {
       const { error: fnError } = await supabase.rpc('log_call_outcome', {
         p_lead_id: currentLead.id,
         p_status: isLinkedIn ? null : selectedOutcome.status,
         p_notes: notes || selectedOutcome.label,
-        p_follow_up_at:
-          selectedOutcome.requiresFollowUp && followUpDate
-            ? new Date(`${followUpDate}T12:00:00`).toISOString()
-            : null,
+        p_follow_up_at: followUpIso,
         p_call_log_id: callLogId || null,
         p_duration_seconds: durationSeconds > 0 ? durationSeconds : null,
         p_lead_table: isLinkedIn ? 'linkedin_leads' : 'leads',
@@ -270,6 +302,13 @@ function MyQueueInner() {
         setSaveError(fnError.message || 'Failed to save.');
         setSaving(false);
         return;
+      }
+      // The card and the due strip read off local state, so they follow the save rather than
+      // waiting for a refetch.
+      if (followUpIso) {
+        setLeads((rows) =>
+          rows.map((l) => (l.id === currentLead.id ? { ...l, next_follow_up_at: followUpIso } : l))
+        );
       }
       setCalledSet(s => new Set([...s, currentLead.id]));
       setOutcomeMap(m => ({ ...m, [currentLead.id]: selectedOutcome.label }));
@@ -292,6 +331,40 @@ function MyQueueInner() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /**
+   * Clearing a follow-up is deliberate, and it is its own function rather than a null passed to
+   * the outcome save: the database writes an activity row saying the date came off, so the log
+   * shows a decision rather than a date quietly disappearing.
+   */
+  const handleClearFollowUp = async () => {
+    if (!currentLead) return;
+    const { error: clearError } = await supabase.rpc('clear_lead_follow_up', {
+      p_lead_id: currentLead.id,
+      p_lead_table: currentLead.lead_table === 'linkedin_leads' ? 'linkedin_leads' : 'leads',
+    });
+    if (clearError) {
+      setError(clearError.message || 'Failed to clear the follow-up date.');
+      return;
+    }
+    setLeads((rows) =>
+      rows.map((l) => (l.id === currentLead.id ? { ...l, next_follow_up_at: null } : l))
+    );
+    setToast('Follow-up date cleared');
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  /** Jump from a due follow-up to that lead, whichever filter is on. */
+  const openFollowUp = (lead: Lead) => {
+    const index = orderedQueue.findIndex(
+      (l) => l.id === lead.id && l.lead_table === lead.lead_table
+    );
+    if (index < 0) return;
+    setQueueFilter('all');
+    setSearchQuery('');
+    if (!callInProgress) resetCall();
+    setCurrentIndex(index);
   };
 
   useEffect(() => {
@@ -379,6 +452,53 @@ function MyQueueInner() {
           <div className="mb-4 p-3 bg-green-900/30 border border-green-500/30 rounded-xl text-sm text-green-400">{toast}</div>
         )}
 
+        {/*
+          What is owed, above the queue rather than buried in one lead's history. A caller sees
+          their own; an admin sees the set the queue is already showing them.
+        */}
+        {dueFollowUps.length > 0 && (
+          <div className="mb-4 bg-[#0f1011] border border-yellow-500/30 rounded-xl p-3">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <CalendarClock className="w-4 h-4 text-yellow-400" />
+                <span className="text-sm font-medium text-foreground">
+                  Follow-ups due ({dueFollowUps.length})
+                </span>
+              </div>
+              <Link href="/dashboard/follow-ups" className="text-xs text-accent hover:underline">
+                See all follow-ups
+              </Link>
+            </div>
+            <div className="space-y-1">
+              {dueFollowUps.slice(0, 5).map((lead) => (
+                <button
+                  key={`${lead.lead_table}:${lead.id}`}
+                  onClick={() => openFollowUp(lead)}
+                  className="w-full flex items-center justify-between gap-3 px-2.5 py-1.5 rounded-lg bg-[#191a1b] hover:bg-[#1f1f2b] text-left transition"
+                >
+                  <span className="text-xs text-foreground truncate">
+                    {lead.title || lead.owner_name || 'Untitled'}
+                  </span>
+                  <span
+                    className={`text-[11px] shrink-0 ${
+                      followUpState(lead.next_follow_up_at) === 'overdue'
+                        ? 'text-red-400'
+                        : 'text-yellow-400'
+                    }`}
+                  >
+                    {followUpLabel(lead.next_follow_up_at as string)}
+                  </span>
+                </button>
+              ))}
+              {dueFollowUps.length > 5 && (
+                <p className="text-[11px] text-muted px-2.5 pt-1">
+                  {dueFollowUps.length - 5} more on the follow-ups page.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {/* Left: Queue */}
           <QueueList
@@ -409,7 +529,7 @@ function MyQueueInner() {
                       {currentLead.owner_name && (
                         <p className="text-xs text-muted mt-1">
                           {currentLead.owner_name}
-                          {currentLead.owner_role && ` — ${currentLead.owner_role}`}
+                          {currentLead.owner_role && ` · ${currentLead.owner_role}`}
                         </p>
                       )}
                     </div>
@@ -435,6 +555,31 @@ function MyQueueInner() {
                       </span>
                     )}
                   </div>
+
+                  {currentLead.next_follow_up_at && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border ${
+                          followUpState(currentLead.next_follow_up_at) === 'overdue'
+                            ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                            : followUpState(currentLead.next_follow_up_at) === 'today'
+                              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                              : 'bg-[#191a1b] text-muted border-[rgba(255,255,255,0.06)]'
+                        }`}
+                      >
+                        <CalendarClock className="w-3 h-3" />
+                        {followUpLabel(currentLead.next_follow_up_at)}
+                      </span>
+                      <button
+                        onClick={handleClearFollowUp}
+                        className="inline-flex items-center gap-1 text-[11px] text-muted hover:text-foreground transition"
+                        title="Clear this follow-up date"
+                      >
+                        <X className="w-3 h-3" />
+                        Clear
+                      </button>
+                    </div>
+                  )}
 
                   {(currentLead.website || currentLead.email || currentLead.linkedin_url) && (
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">

@@ -21,12 +21,14 @@ import {
   Search,
   Command,
   Trash2,
+  CalendarClock,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Leads', icon: LayoutDashboard, exact: true, hiddenFromMembers: true },
   { href: '/dashboard/calls', label: 'Call Dialer', icon: Phone, hiddenFromMembers: true },
   { href: '/dashboard/my-queue', label: 'My Queue', icon: Clock },
+  { href: '/dashboard/follow-ups', label: 'Follow-ups', icon: CalendarClock },
   { href: '/dashboard/linkedin-leads', label: 'LinkedIn Leads', icon: Users, hiddenFromMembers: true },
   { href: '/dashboard/deleted-leads', label: 'Deleted Leads', icon: Trash2, hiddenFromMembers: true },
   { href: '/dashboard/assignment-log', label: 'Assignment Log', icon: Clipboard, adminOnly: true },
