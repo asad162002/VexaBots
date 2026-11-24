@@ -15,8 +15,10 @@ import {
   PhoneOff,
   Play,
   Pause,
+  Keyboard,
 } from 'lucide-react';
 import { useCall } from '@/components/queue/CallProvider';
+import DialPad from '@/components/call/DialPad';
 
 interface CallDialerProps {
   lead: Lead;
@@ -28,6 +30,8 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
   const { callerNumber: hookCallerNumber, user } = useAuth();
   const [callEnded, setCallEnded] = useState(false);
   const [altPhone, setAltPhone] = useState('');
+  const [showKeypad, setShowKeypad] = useState(false);
+  const [lastDigit, setLastDigit] = useState<string | null>(null);
 
   const {
     status,
@@ -45,6 +49,7 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
     toggleHold,
     setVolume,
     setMicVolume,
+    sendDTMF,
   } = useCall();
 
   const isCalling = ['connecting', 'ringing', 'in-call', 'held'].includes(status);
@@ -96,6 +101,38 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
       setCallEnded(false);
     }
   }, [status]);
+
+  // A pad left open would carry into the next lead in the queue.
+  useEffect(() => {
+    if (status !== 'in-call' && status !== 'held') {
+      setShowKeypad(false);
+      setLastDigit(null);
+    }
+  }, [status]);
+
+  // Numpad digits while the call is live. Scoped to in-call/held on purpose: the far
+  // end cannot hear digits while ringing, and once the call has ended the 1-7 keys
+  // belong to the My Queue outcome shortcuts.
+  useEffect(() => {
+    if (status !== 'in-call' && status !== 'held') return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      if (
+        el &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.hasAttribute('contenteditable'))
+      ) {
+        return;
+      }
+      if (!e.code.startsWith('Numpad')) return;
+      const digit = e.key;
+      if (!/^[0-9*#]$/.test(digit)) return;
+      e.preventDefault();
+      sendDTMF(digit);
+      setLastDigit(digit);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [status, sendDTMF]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -256,19 +293,29 @@ export default function CallDialer({ lead, onCallEnd }: CallDialerProps) {
             </button>
 
             <button
-              className="p-2 rounded-xl text-xs transition bg-secondary border border-border text-muted hover:bg-[#1f1f2b] hover:text-foreground"
-              title="Drop voicemail"
+              onClick={() => setShowKeypad((v) => !v)}
+              className={`p-2 rounded-xl text-xs transition flex items-center justify-center ${
+                showKeypad
+                  ? 'bg-primary text-foreground'
+                  : 'bg-secondary border border-border text-muted hover:bg-[#1f1f2b] hover:text-foreground'
+              }`}
+              title={showKeypad ? 'Hide dial pad' : 'Dial pad (send digits)'}
+              aria-label="Toggle dial pad"
             >
-              <Mic className="w-4 h-4" />
-            </button>
-
-            <button
-              className="p-2 rounded-xl text-xs transition bg-secondary border border-border text-muted hover:bg-[#1f1f2b] hover:text-foreground"
-              title="Skip lead"
-            >
-              <Play className="w-4 h-4 rotate-90" />
+              <Keyboard className="w-4 h-4" />
             </button>
           </div>
+        )}
+
+        {/* Digit pad for auto-attendants: "press 1 for sales" */}
+        {callInProgress && showKeypad && (
+          <DialPad
+            onDigit={(digit) => {
+              sendDTMF(digit);
+              setLastDigit(digit);
+            }}
+            lastDigit={lastDigit}
+          />
         )}
 
         {/* Volume sliders (mic + speaker) */}
