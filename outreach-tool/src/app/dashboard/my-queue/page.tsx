@@ -43,6 +43,12 @@ function MyQueueInner() {
   const [calledFilter, setCalledFilter] = useState<'all' | 'called' | 'not_called'>('all');
   // id -> display name for the assignee label. Admins only; a member sees only their own leads.
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
+  /*
+   * Whose queue is on screen. '' keeps the existing admin behaviour (every active lead);
+   * picking a caller narrows the queue, the called state and the progress counter to that
+   * caller. Members never see this control and always get their own leads.
+   */
+  const [viewUserId, setViewUserId] = useState('');
 
   const {
     status: callStatus,
@@ -62,9 +68,18 @@ function MyQueueInner() {
     callStatus === 'in-call' || callStatus === 'held' ? 'in-call' :
     callStatus === 'ended' ? 'ended' : 'idle';
 
+  /*
+   * Whose leads the queue is built from. The assignee switch narrows the source set first,
+   * so every filter, count and index below it keeps behaving exactly as it does today.
+   */
+  const scopedLeads = useMemo(() => {
+    if (!isAdmin || !viewUserId) return leads;
+    return leads.filter((l) => l.assigned_to === viewUserId);
+  }, [leads, isAdmin, viewUserId]);
+
   const activeLeads = useMemo(() => {
-    return leads.filter(l => !['not_interested', 'meeting_booked', 'dead'].includes(l.status));
-  }, [leads]);
+    return scopedLeads.filter(l => !['not_interested', 'meeting_booked', 'dead'].includes(l.status));
+  }, [scopedLeads]);
 
   /*
    * The order the caller works in. What is overdue comes first, then what is due today, then
@@ -118,15 +133,19 @@ function MyQueueInner() {
   const currentLead = filteredQueue[currentIndex];
   const [todayCalledIds, setTodayCalledIds] = useState<Set<string>>(new Set());
 
+  /* Whose call history the called axis and the progress bar are built from: the caller
+   * being viewed, otherwise the signed-in user. */
+  const historyProfileId = viewUserId || user?.id || null;
+
   const loadTodayProgress = async () => {
-    if (!user) return;
+    if (!historyProfileId) return;
     try {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const { data, error } = await supabase
         .from('lead_activities')
         .select('lead_id')
-        .eq('profile_id', user.id)
+        .eq('profile_id', historyProfileId)
         .gte('created_at', startOfDay.toISOString());
       if (error) throw error;
       setTodayCalledIds(new Set((data ?? []).map((d: { lead_id: string }) => d.lead_id)));
@@ -147,12 +166,12 @@ function MyQueueInner() {
    * counts as a call. Newest row per lead also restores the outcome label in the list.
    */
   const loadCallHistory = async () => {
-    if (!user) return;
+    if (!historyProfileId) return;
     try {
       const { data, error } = await supabase
         .from('lead_activities')
         .select('lead_id, content, created_at')
-        .eq('profile_id', user.id)
+        .eq('profile_id', historyProfileId)
         .eq('activity_type', 'call')
         .order('created_at', { ascending: true });
       if (error) throw error;
@@ -274,10 +293,14 @@ function MyQueueInner() {
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!historyProfileId) return;
+    // Switching caller must not leave the previous caller's numbers on screen.
+    setTodayCalledIds(new Set());
+    setCalledSet(new Set());
+    setOutcomeMap({});
     loadTodayProgress();
     loadCallHistory();
-  }, [user]);
+  }, [historyProfileId]);
 
   /*
    * Whose lead is this. An admin's queue is every active lead in the database, so
@@ -303,6 +326,14 @@ function MyQueueInner() {
   /** Full name of the assignee, or a plain word for nobody. */
   const assigneeName = (id: string | null) =>
     id ? assigneeNames[id] || 'Unknown member' : 'Unassigned';
+
+  /* The assignee switch, in a stable order. Built from the same profile fetch as the
+   * assignee labels, so it only exists for an admin. */
+  const viewableUsers = useMemo(() => {
+    return Object.entries(assigneeNames)
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [assigneeNames]);
 
   const callEnded = callStatus === 'ended';
   const canSelectOutcome = callEnded || !!meetingMap[currentLead?.id || ''];
@@ -503,7 +534,7 @@ function MyQueueInner() {
               <h1 className="text-2xl font-bold text-foreground">My Queue</h1>
               {isAdmin && (
                 <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-medium text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-full">
-                  Viewing as admin
+                  {viewUserId ? `Viewing ${assigneeName(viewUserId)}'s queue` : 'Viewing as admin'}
                 </span>
               )}
             </div>
@@ -515,6 +546,19 @@ function MyQueueInner() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <select
+                value={viewUserId}
+                onChange={(e) => { setViewUserId(e.target.value); setCurrentIndex(0); }}
+                aria-label="Whose queue to show"
+                className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
+              >
+                <option value="">All leads</option>
+                {viewableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>{u.label}</option>
+                ))}
+              </select>
+            )}
             <div className="flex items-center bg-card border border-border rounded-lg p-0.5">
               {([
                 { key: 'all', label: 'All', count: visibleQueue.length },
