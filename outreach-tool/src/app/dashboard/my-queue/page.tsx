@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { type Lead, LeadStatus } from '@/lib/types';
-import { Phone, Search, Loader2, Copy, Mail, ExternalLink, MapPin, CalendarClock, X } from 'lucide-react';
+import { Phone, Search, Loader2, Copy, Mail, ExternalLink, MapPin, CalendarClock, X, User } from 'lucide-react';
 import { useCall } from '@/components/queue/CallProvider';
 import CallPanel from '@/components/queue/CallPanel';
 import LeadDetails from '@/components/queue/LeadDetails';
@@ -39,6 +39,10 @@ function MyQueueInner() {
   const [outcomeMap, setOutcomeMap] = useState<Record<string, string>>({});
   const [meetingMap, setMeetingMap] = useState<Record<string, { when: string; link?: string }>>({});
   const [queueFilter, setQueueFilter] = useState<'all' | 'google_maps' | 'linkedin' | 'manual'>('all');
+  // A second axis on top of the source filter: has this caller saved an outcome yet.
+  const [calledFilter, setCalledFilter] = useState<'all' | 'called' | 'not_called'>('all');
+  // id -> display name for the assignee label. Admins only; a member sees only their own leads.
+  const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
 
   const {
     status: callStatus,
@@ -83,7 +87,8 @@ function MyQueueInner() {
       );
   }, [orderedQueue]);
 
-  const filteredQueue = useMemo(() => {
+  /* Source and search first: the called / not-called counts read off what is on screen. */
+  const visibleQueue = useMemo(() => {
     let base = orderedQueue;
     if (queueFilter === 'google_maps') base = base.filter(l => l.lead_table !== 'linkedin_leads' && l.source !== 'manual');
     else if (queueFilter === 'linkedin') base = base.filter(l => l.lead_table === 'linkedin_leads');
@@ -98,6 +103,17 @@ function MyQueueInner() {
       (l.linkedin_username?.toLowerCase() || '').includes(q)
     );
   }, [orderedQueue, searchQuery, queueFilter]);
+
+  const calledCount = useMemo(
+    () => visibleQueue.filter((l) => calledSet.has(l.id)).length,
+    [visibleQueue, calledSet]
+  );
+
+  const filteredQueue = useMemo(() => {
+    if (calledFilter === 'called') return visibleQueue.filter((l) => calledSet.has(l.id));
+    if (calledFilter === 'not_called') return visibleQueue.filter((l) => !calledSet.has(l.id));
+    return visibleQueue;
+  }, [visibleQueue, calledFilter, calledSet]);
 
   const currentLead = filteredQueue[currentIndex];
   const [todayCalledIds, setTodayCalledIds] = useState<Set<string>>(new Set());
@@ -120,6 +136,38 @@ function MyQueueInner() {
   };
 
   const progress = todayCalledIds.size;
+
+  /*
+   * What this caller has already worked, read from the database instead of from this
+   * tab's memory: the called state used to live only in `calledSet`, so a reload made
+   * every saved lead look uncalled and re-dialable.
+   *
+   * lead_activities is NOT a call log. The assignment flow writes rows here too (the
+   * cold caller has 16 of them, all "Assigned to Jay"), so only activity_type = 'call'
+   * counts as a call. Newest row per lead also restores the outcome label in the list.
+   */
+  const loadCallHistory = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('lead_activities')
+        .select('lead_id, content, created_at')
+        .eq('profile_id', user.id)
+        .eq('activity_type', 'call')
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      const ids = new Set<string>();
+      const labels: Record<string, string> = {};
+      for (const row of (data ?? []) as Array<{ lead_id: string; content: string | null }>) {
+        ids.add(row.lead_id);
+        if (row.content) labels[row.lead_id] = row.content;
+      }
+      setCalledSet(ids);
+      setOutcomeMap(labels);
+    } catch {
+      // The queue keeps working off this session's saves rather than failing to load.
+    }
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -228,7 +276,33 @@ function MyQueueInner() {
   useEffect(() => {
     if (!user) return;
     loadTodayProgress();
+    loadCallHistory();
   }, [user]);
+
+  /*
+   * Whose lead is this. An admin's queue is every active lead in the database, so
+   * without a name on the card there is no way to tell which leads are the admin's own
+   * and which belong to a caller. Members only ever see their own leads, so this is
+   * fetched for admins only.
+   */
+  const loadAssigneeNames = async () => {
+    if (!isAdmin) return;
+    const { data, error } = await supabase.from('profiles').select('id, full_name, email');
+    if (error) return;
+    const map: Record<string, string> = {};
+    for (const p of (data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>) {
+      map[p.id] = p.full_name || p.email || 'Unknown member';
+    }
+    setAssigneeNames(map);
+  };
+
+  useEffect(() => {
+    loadAssigneeNames();
+  }, [isAdmin]);
+
+  /** Full name of the assignee, or a plain word for nobody. */
+  const assigneeName = (id: string | null) =>
+    id ? assigneeNames[id] || 'Unknown member' : 'Unassigned';
 
   const callEnded = callStatus === 'ended';
   const canSelectOutcome = callEnded || !!meetingMap[currentLead?.id || ''];
@@ -317,11 +391,19 @@ function MyQueueInner() {
       setSelectedOutcome(null);
       setNotes('');
       setFollowUpDate('');
-      const remaining = filteredQueue.slice(currentIndex + 1);
-      if (remaining.length === 0) {
-        setCurrentIndex(filteredQueue.length);
+      /*
+       * With "Not called" on, the lead just saved leaves this list, so the lead after
+       * it slides into the same index. Advancing there would skip one.
+       */
+      if (calledFilter === 'not_called') {
+        setCurrentIndex(Math.max(0, Math.min(currentIndex, filteredQueue.length - 2)));
       } else {
-        setCurrentIndex(currentIndex + 1);
+        const remaining = filteredQueue.slice(currentIndex + 1);
+        if (remaining.length === 0) {
+          setCurrentIndex(filteredQueue.length);
+        } else {
+          setCurrentIndex(currentIndex + 1);
+        }
       }
       // The next lead is dialed from the same panel, so the finished call is cleared
       // here and its call log id is not carried onto the next outcome.
@@ -432,16 +514,39 @@ function MyQueueInner() {
               <p className="text-sm text-muted">{progress} of {activeLeads.length} called today</p>
             </div>
           </div>
-          <select
-            value={queueFilter}
-            onChange={(e) => { setQueueFilter(e.target.value as typeof queueFilter); setCurrentIndex(0); }}
-            className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
-          >
-            <option value="all">All Leads</option>
-            <option value="google_maps">Google Maps</option>
-            <option value="linkedin">LinkedIn</option>
-            <option value="manual">Manual</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-card border border-border rounded-lg p-0.5">
+              {([
+                { key: 'all', label: 'All', count: visibleQueue.length },
+                { key: 'not_called', label: 'Not called', count: visibleQueue.length - calledCount },
+                { key: 'called', label: 'Called', count: calledCount },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => { setCalledFilter(opt.key); setCurrentIndex(0); }}
+                  aria-pressed={calledFilter === opt.key}
+                  className={`px-3 py-1.5 rounded-md text-sm transition ${
+                    calledFilter === opt.key
+                      ? 'bg-primary text-foreground font-medium'
+                      : 'text-muted hover:text-foreground'
+                  }`}
+                >
+                  {opt.label} ({opt.count})
+                </button>
+              ))}
+            </div>
+            <select
+              value={queueFilter}
+              onChange={(e) => { setQueueFilter(e.target.value as typeof queueFilter); setCurrentIndex(0); }}
+              className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&>option]:bg-secondary [&>option]:text-foreground"
+            >
+              <option value="all">All Leads</option>
+              <option value="google_maps">Google Maps</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="manual">Manual</option>
+            </select>
+          </div>
           </div>
 
         {error && (
@@ -509,6 +614,8 @@ function MyQueueInner() {
             currentIndex={currentIndex}
             calledSet={calledSet}
             outcomeMap={outcomeMap}
+            showAssignee={isAdmin}
+            assigneeNames={assigneeNames}
             callPhase={callPhase}
             onSelect={(index) => {
               // Picking another lead by hand clears a finished call too, but never
@@ -539,6 +646,21 @@ function MyQueueInner() {
                   </div>
 
                   <div className="flex flex-wrap gap-2 mt-3">
+                    {isAdmin && (
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#191a1b] border border-[rgba(255,255,255,0.06)] ${
+                          currentLead.assigned_to ? 'text-accent' : 'text-yellow-400'
+                        }`}
+                        title="This queue shows every lead because you are an admin"
+                      >
+                        <User className="w-3 h-3" />
+                        {currentLead.assigned_to
+                          ? currentLead.assigned_to === user?.id
+                            ? 'Assigned to you'
+                            : `Assigned to ${assigneeName(currentLead.assigned_to)}`
+                          : 'Unassigned'}
+                      </span>
+                    )}
                     {currentLead.city && (
                       <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-[#191a1b] text-muted border border-[rgba(255,255,255,0.06)]">
                         📍 {currentLead.city}

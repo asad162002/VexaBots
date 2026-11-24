@@ -11,6 +11,9 @@ interface QueueListProps {
   currentIndex: number;
   calledSet: Set<string>;
   outcomeMap: Record<string, string>;
+  /** Admins see every lead, so the row has to say whose lead it is. */
+  showAssignee: boolean;
+  assigneeNames: Record<string, string>;
   callPhase: string;
   onSelect: (index: number) => void;
 }
@@ -23,6 +26,8 @@ export default function QueueList({
   currentIndex,
   calledSet,
   outcomeMap,
+  showAssignee,
+  assigneeNames,
   callPhase,
   onSelect,
 }: QueueListProps) {
@@ -45,6 +50,11 @@ export default function QueueList({
           const originalIndex = activeLeads.findIndex(a => a.id === l.id);
           const isDone = calledSet.has(l.id);
           const outcomeLabel = outcomeMap[l.id];
+          const assigneeLabel = !showAssignee
+            ? null
+            : l.assigned_to
+              ? (assigneeNames[l.assigned_to] || 'Unknown member').split(' ')[0].split('@')[0]
+              : 'Unassigned';
           const initials = (l.owner_name || l.title || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
           return (
             <button
@@ -70,8 +80,17 @@ export default function QueueList({
                 <div className="font-medium text-foreground text-sm truncate">{l.title || 'Untitled'}</div>
                 <div className="text-xs text-muted truncate">{l.owner_name || ''} · {l.phone || ''}</div>
               </div>
-              {isDone && outcomeLabel && (
-                <span className="text-xs text-green-400">{outcomeLabel}</span>
+              {(assigneeLabel || (isDone && outcomeLabel)) && (
+                <div className="flex flex-col items-end gap-0.5 shrink-0">
+                  {assigneeLabel && (
+                    <span className={`text-[10px] ${l.assigned_to ? 'text-accent' : 'text-yellow-400'}`}>
+                      {assigneeLabel}
+                    </span>
+                  )}
+                  {isDone && outcomeLabel && (
+                    <span className="text-xs text-green-400">{outcomeLabel}</span>
+                  )}
+                </div>
               )}
             </button>
           );
